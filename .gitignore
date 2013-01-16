@@ -5,3 +5,4 @@ references
 mozart2-bootcompiler/
 .*
 *.swp
+draft.oz

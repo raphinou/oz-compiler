@@ -29,5 +29,12 @@ Mozart Compiler 2.0.0-alpha.0+build.7.92e4df7 (Jan 15 2013 17:33:59) playing Oz 
     for ((formal, index) <- abstraction.formals.zipWithIndex)
       code += OpMove(XReg(index), formal.toReg.asInstanceOf[XOrYReg])
 
-- comment obtenir la valeur d'un argument passé à un script oz?
-   ozengine ParseAndAssemble.ozf Myfile.oz  => comment obtenir "MyFile.oz" dans le script?
+-  ceci fonctionne:
+     case R of l(F1 F2 F3) then
+   mais pas ceci. Correct?
+        case R of MatchedLabel(F1 F2 F3) then
+
+- j'essaie d'utiliser l'inspector, mais ca ne marche pas:
+   Could not load functor at URL: x-oz://system/Inspector.ozf
+
+- {Show AST} affiche certains records avec les fields etant ..., par ex 'fVar'('B' 'pos'(...)). Il y a moyen d'eviter ca?

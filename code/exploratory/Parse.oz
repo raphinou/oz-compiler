@@ -8,6 +8,7 @@ import
    ErrorListener('class')
    Application(getArgs)
    Compiler(parseOzFile)
+   Inspector(inspect)
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
@@ -34,6 +35,7 @@ define
       {System.printInfo {ListenerO getVS($)}}
       {ListenerO reset()}
    else
+      %{Inspector.inspect AST}
       {Show AST}
    end
 
