@@ -1,0 +1,7 @@
+references
+*.ozf
+*.*~
+*.*#
+mozart2-bootcompiler/
+.*
+*.swp

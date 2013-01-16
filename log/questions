@@ -1,0 +1,33 @@
+- eclipse config
+- oz problem:
+
+Mozart Compiler 2.0.0-alpha.0+build.7.92e4df7 (Jan 15 2013 17:33:59) playing Oz 3
+
+\insert '/home/rb/etudes/memoire/ParseAndAssemble.oz'
+
+%************************* expansion error **********************
+%**
+%** illegal use of nesting marker
+%**
+%** in file "/home/rb/etudes/memoire/ParseAndAssemble.oz", line 1, column 7
+%** ------------------ rejected (1 error)
+
+- Que fait ce code dans OpCode.scala? 
+  def code = {
+    (name /: arguments) {
+      (prev, arg) => prev + ", " + arg.code
+    }
+  }
+
+- les parametres formels sont-ils dans des X ou des Y? Quelle est mon erreur ci-dessous?
+  Dans le code qu'on a discuté, ils se trouvent dans des Y:
+  {Foo A B C }
+  move( y(0) x(0) )   <= copy first argument in X register 0 to make it available to call
+
+  Par contre d'apres le code dans CodeGen.scala (method applyToAbstraction), ils sont initialement disponibles dans des X:
+    // Save formals in local variables
+    for ((formal, index) <- abstraction.formals.zipWithIndex)
+      code += OpMove(XReg(index), formal.toReg.asInstanceOf[XOrYReg])
+
+- comment obtenir la valeur d'un argument passé à un script oz?
+   ozengine ParseAndAssemble.ozf Myfile.oz  => comment obtenir "MyFile.oz" dans le script?

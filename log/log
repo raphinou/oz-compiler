@@ -1,0 +1,52 @@
+############
+#2013-01-16#
+############
+
+ozc and ozengine work well, but oz gives me an error:
+
+Mozart Compiler 2.0.0-alpha.0+build.7.92e4df7 (Jan 15 2013 17:33:59) playing Oz 3
+
+\insert '/home/rb/etudes/memoire/ParseAndAssemble.oz'
+
+%************************* expansion error **********************
+%**
+%** illegal use of nesting marker
+%**
+%** in file "/home/rb/etudes/memoire/ParseAndAssemble.oz", line 1, column 7
+%** ------------------ rejected (1 error)
+
+
+
+
+The bytecode I need to generate will consist of a sequence of opcodes with their arguments. I can look at the OpCode.scala file to have a list of such opcodes. 
+Such a sequence of opcodes is for example:
+  move(g(0) x(2))
+  callBuiltin(k(Number.'+') [x(2) x(0) x(3)])
+  unify(x(3) x(1))
+  return
+
+Global registers (g) are for values which are not local to the current abstraction. Note that for a nested procedure, a global can be a local of the nesting procedure. It represents the contextual environment.
+
+Y registers are locals that stay alive from the start until the end of the procedure. They are allocated once per call of the procedure. 
+
+X registers are "extra local", they are lost when we do a call to another procedure. they are allocated once per thread.
+
+K registers are constants. Note that k(5) means the K registers containing value 5, and not the 5th K register! All other registers consider their argument as an index, but not K!
+
+A builtin is a base operation provided by the virtual machine, for example Number.'+'.
+
+Example of bytecode:
+--------------------
+{Foo A B C }
+
+move( y(0) x(0) )   <= copy first argument in X register 0
+move( y(1) x(1) )   <=      second argument
+move( y(2) x(2) )
+call( y(5) 3 )      <= call abstraction with 3 arguments (X registers) and place result in 5th Y register
+
+
+Scala code
+----------
+- Customer operators := and === are defined in scala as shortcuts for OpMove and OpUnify respectively.
+- CodeArea contains a list of OpCode instances in an array. These are put there by CodeGen.
+
