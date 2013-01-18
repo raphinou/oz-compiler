@@ -1,0 +1,63 @@
+--------------------------------------------------------------------------------
+- oz problem:
+
+Mozart Compiler 2.0.0-alpha.0+build.7.92e4df7 (Jan 15 2013 17:33:59) playing Oz 3
+
+\insert '/home/rb/etudes/memoire/ParseAndAssemble.oz'
+
+%************************* expansion error **********************
+%**
+%** illegal use of nesting marker
+%**
+%** in file "/home/rb/etudes/memoire/ParseAndAssemble.oz", line 1, column 7
+%** ------------------ rejected (1 error)
+
+
+A: C'est normal, en fait. Le feed buffer attend un Statement, alors que tu lui donnes une Expression.
+
+Si tu veux "feeder un functor", fais ceci :
+local
+   F =
+   \insert '/home/rb/etudes/memoire/ParseAndAssemble.oz'
+   [M] = {Module.apply [F]}
+in
+   {Wait M}
+end
+
+--------------------------------------------------------------------------------
+
+- les parametres formels sont-ils dans des X ou des Y? Quelle est mon erreur ci-dessous?
+  Dans le code qu'on a discuté, ils se trouvent dans des Y:
+  {Foo A B C }
+  move( y(0) x(0) )   <= copy first argument in X register 0 to make it available to call
+
+  Par contre d'apres le code dans CodeGen.scala (method applyToAbstraction), ils sont initialement disponibles dans des X:
+    // Save formals in local variables
+    for ((formal, index) <- abstraction.formals.zipWithIndex)
+      code += OpMove(XReg(index), formal.toReg.asInstanceOf[XOrYReg])
+
+A: Initialement, ils sont en effet dans les X de 0 à N-1, où N est le nombre de paramètres de la procédure. CodeGen.scala commence par les recopier dans des Y pour qu'ils soient conservés tout au long de la procédure.
+
+--------------------------------------------------------------------------------
+-  ceci fonctionne:
+     case R of l(F1 F2 F3) then
+   mais pas ceci. Correct?
+        case R of MatchedLabel(F1 F2 F3) then
+A: Correct
+
+--------------------------------------------------------------------------------
+- j'essaie d'utiliser l'inspector, mais ca ne marche pas:
+   Could not load functor at URL: x-oz://system/Inspector.ozf
+A: not yet in Mozart2
+
+--------------------------------------------------------------------------------
+- {Show AST} affiche certains records avec les fields etant ..., par ex 'fVar'('B' 'pos'(...)). Il y a moyen d'eviter ca?
+A: Use DumpAST
+
+--------------------------------------------------------------------------------
+- ou est definie StatAndExpression ? 
+A: Dans ast/Expressions.scala . C'est une case class, qui permet du pattern matching. http://www.scala-lang.org/node/107
+
+--------------------------------------------------------------------------------
+- ou est definie la classe Product? 
+A: c'est une class de la stdlib, représentant un produit cartesien.

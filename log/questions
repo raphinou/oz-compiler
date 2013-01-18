@@ -1,17 +1,3 @@
-- eclipse config
-- oz problem:
-
-Mozart Compiler 2.0.0-alpha.0+build.7.92e4df7 (Jan 15 2013 17:33:59) playing Oz 3
-
-\insert '/home/rb/etudes/memoire/ParseAndAssemble.oz'
-
-%************************* expansion error **********************
-%**
-%** illegal use of nesting marker
-%**
-%** in file "/home/rb/etudes/memoire/ParseAndAssemble.oz", line 1, column 7
-%** ------------------ rejected (1 error)
-
 - Que fait ce code dans OpCode.scala? 
   def code = {
     (name /: arguments) {
@@ -19,22 +5,18 @@ Mozart Compiler 2.0.0-alpha.0+build.7.92e4df7 (Jan 15 2013 17:33:59) playing Oz 
     }
   }
 
-- les parametres formels sont-ils dans des X ou des Y? Quelle est mon erreur ci-dessous?
-  Dans le code qu'on a discuté, ils se trouvent dans des Y:
-  {Foo A B C }
-  move( y(0) x(0) )   <= copy first argument in X register 0 to make it available to call
+- eclipse config
 
-  Par contre d'apres le code dans CodeGen.scala (method applyToAbstraction), ils sont initialement disponibles dans des X:
-    // Save formals in local variables
-    for ((formal, index) <- abstraction.formals.zipWithIndex)
-      code += OpMove(XReg(index), formal.toReg.asInstanceOf[XOrYReg])
+- Dans le functor DumpAST.oz j'ai mis un skip. Quelle est la bonne facon de faire?
 
--  ceci fonctionne:
-     case R of l(F1 F2 F3) then
-   mais pas ceci. Correct?
-        case R of MatchedLabel(F1 F2 F3) then
+- Pourquoi DumpAST utilisé dans Parse.oz ajoute |( et ) autour de l'ast?
 
-- j'essaie d'utiliser l'inspector, mais ca ne marche pas:
-   Could not load functor at URL: x-oz://system/Inspector.ozf
+- comment utiliser le parser dans un programme interactif oz (eg avec declare). Pour le moment j'ai pris le dump, rajouté les '' où il fallait pour avoir l'AST dans mon script.
 
-- {Show AST} affiche certains records avec les fields etant ..., par ex 'fVar'('B' 'pos'(...)). Il y a moyen d'eviter ca?
+-http://www.mozart-oz.org/documentation/notation/node6.html#label22 je comprends pas le X=E et ensuite  proc {X ...}.
+
+- pourquoi Node extends Product?
+
+- ou est le contstructeur de Node (et de StatOrExpr, ProcFunExpression, ....) ?
+
+- Dans CommonStatExpr, qu'est LocalCommon ?

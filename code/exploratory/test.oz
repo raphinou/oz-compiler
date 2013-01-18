@@ -1,6 +1,8 @@
 local 
-A = 5 
+A
+B=6
 in 
 
-{ Show A}
+A = 5 
+{ Show A B}
 end

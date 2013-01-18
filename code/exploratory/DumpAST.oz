@@ -1,4 +1,9 @@
-local
+functor 
+export 
+   dumpAST:DumpAST
+import
+   System
+define
    fun {IsCoord V}
       case V
       of pos(_ _ _) then true
@@ -67,8 +72,9 @@ local
       {DumpASTEx AST ''}
    end
 in
-   {DumpAST fAnd(fRecord(fVar('Hello' pos(1 2 3))
-                         fInt(5 pos(4 5 6))
-                         pos('Hello' 42 3))
-                 fAtom(unit))}
+%   {DumpAST fAnd(fRecord(fVar('Hello' pos(1 2 3))
+%                         fInt(5 pos(4 5 6))
+%                         pos('Hello' 42 3))
+%                 fAtom(unit))}
+    skip
 end

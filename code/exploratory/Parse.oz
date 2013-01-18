@@ -12,6 +12,7 @@ import
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
+   DumpAST at './DumpAST.ozf'
 define 
    PrivateNarratorO
    AST
@@ -35,8 +36,8 @@ define
       {System.printInfo {ListenerO getVS($)}}
       {ListenerO reset()}
    else
-      %{Inspector.inspect AST}
       {Show AST}
+      {DumpAST.dumpAST AST}
    end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
