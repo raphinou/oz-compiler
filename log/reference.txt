@@ -1,0 +1,45 @@
+
+************************
+Scala classes hierarchy:
+************************
+
+Program
+-------
+Represents the complete program, including the top implicit abstraction.
+
+Abstraction
+-----------
+Includes information of the abstraction, including:
+  - formals
+  - locals
+  - globals
+  - AST (which is a Statement)
+  - CodeArea
+Also has methods to
+  - acquire a symbol (eg to acquire a symbole declared in local ... in)
+
+CodeArea
+--------
+This includes the info to generate the bytecode, including the list of opcodes, the registers, etc...
+
+Statement/Expression
+--------------------
+These classes should be merge in one class, eg Instruction. It appears that separating the two is requiring a lot of complexity and code addition.
+
+################################################################################
+
+************************
+AST received from parser
+************************
+
+sequences of instructions are place in fAnd() records.
+local ... in ... end are place in fLocal() records. 
+unifications are place in fEq() records
+variables are placed in fVar records
+integers are placed in fInt records
+calls are place in fApply() records. The first feature is the proc/fun to call, usually under a var record. The second feature is the list of arguments passed, each in its own record (fVar, fInt...)
+
+The last feature of all these records are the position in the code, a record of
+the form pos(file startline startcol file endline endcol).
+
+The top record is usually a fLocal(), which has then to be implicitely put under an abstraction (function).

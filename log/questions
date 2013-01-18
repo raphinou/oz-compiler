@@ -20,3 +20,6 @@
 - ou est le contstructeur de Node (et de StatOrExpr, ProcFunExpression, ....) ?
 
 - Dans CommonStatExpr, qu'est LocalCommon ?
+A: C'est ce qui est hérité par RawLocalStatement, LocalStatement, RawLocalExpression et LocalExpression 
+
+- Dans LocalStatement (et Raw/Expression), les déclarations sont abandonnées?

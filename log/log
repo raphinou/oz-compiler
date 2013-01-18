@@ -50,3 +50,8 @@ Scala code
 - Customer operators := and === are defined in scala as shortcuts for OpMove and OpUnify respectively.
 - CodeArea contains a list of OpCode instances in an array. These are put there by CodeGen.
 
+############
+#2013-01-18#
+############
+
+wrote about the scala classes hierarchy.
