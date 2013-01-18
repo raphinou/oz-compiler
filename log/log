@@ -55,3 +55,6 @@ Scala code
 ############
 
 wrote about the scala classes hierarchy.
+
+started the Compile.oz. From the AST record received from the parser, it builds an object hierarchy.
+Still need to set the link between child and parent and vice versa!!

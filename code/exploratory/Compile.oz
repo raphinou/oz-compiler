@@ -54,7 +54,7 @@ define
       ast:=AST
       locals:=nil
     end
-    % FIXME : find a better way to do this
+    % FIXME : find a better way to do this? See also Apply add argument
     meth addLocal(C)
       NewList
     in
@@ -81,6 +81,12 @@ define
     meth init()
       skip
     end
+    meth set(X V)
+      X:=V
+    end
+    meth get(X ?V)
+      V=@X
+    end
   end
   
   class LocalInstr from Instruction
@@ -92,28 +98,56 @@ define
       decls:=nil
       body:=nil
     end
-    meth set(X V)
-      X:=V
-    end
-    meth get(X ?V)
-      V=@X
-    end
   end
 
   class UnificationInstr from Instruction
     attr
       lhs
       rhs
-    meth init(Parent Lhs Rhs)
+    meth init(Parent)
       parent:=Parent
-      lhs:=Lhs
-      rhs:=Rhs
+      lhs:=nil
+      rhs:=nil
     end
   end
 
   class SkipStatement from Instruction
     meth init()
       skip 
+    end
+  end
+
+  % FIXME: not clean to inherit from Instruction, is it?
+  class Variable from Instruction 
+    attr
+      name
+    meth init(Name)
+      name:=Name
+    end
+  end
+
+  class Integer from Instruction 
+    attr
+      value
+    meth init(Value)
+      value:=Value
+    end
+  end
+
+  class ApplyInstr from Instruction
+    attr
+      command
+      args
+    meth init(P)
+      parent:=P
+      args := nil
+    end
+    %FIXME: better way? See also program add local
+    meth addArgument(A)
+      NewList
+    in
+      {List.append @args [A] NewList}
+      args:=NewList
     end
   end
 
@@ -140,40 +174,76 @@ define
 
   fun {Record2ObjectsAST AST Parent}
     fun {HandleLocal AST P}
-      L 
+      I 
     in
       {D 'Handle local statement'}
       % the first feature is the declarations
       % the second feature is the code
-      L = {New LocalInstr init(Parent)}
+      I = {New LocalInstr init(Parent)}
       % Handle the declarations
       {D 'Declarations of Local'}
-      { L set(decls {Record2ObjectsAST AST.1 L}) }
+      {I set(decls {Record2ObjectsAST AST.1 I}) }
       %% Handle the body
       {D 'Body of Local'}
-      L.body:={Record2ObjectsAST AST.2 L}
-      L
+      {I set(body {Record2ObjectsAST AST.2 I})}
+      I
     end
     fun {HandleUnification AST P}
-      {D 'Handle Unification'}
+      I 
+    in
       % the first feature is lhs
       % second is rhs
-      nil
+      {D 'Handle Unification'}
+      I = {New UnificationInstr init(P)}
+      % Handle the rhs
+      {D 'LHS of Unification'}
+      {I set(lhs {Record2ObjectsAST AST.1 I}) }
+      %% Handle the body
+      {D 'RHS of Unification'}
+      {I set(rhs {Record2ObjectsAST AST.2 I}) }
+      I
+    end
+    fun {HandleVar AST P}
+      I
+    in
+      % first feature is its name
+      I = {New Variable init(AST.1)}
+    end
+    fun {HandleInt AST P}
+      I
+    in
+      % first feature is its value
+      I = {New Integer init(AST.1)}
+    end
+    fun {HandleApply AST P}
+      I
+    in
+      % first feature is the command to apply
+      % second feature is a list of arguments
+      I = {New ApplyInstr init(P)}
+      % first the command
+      % CONTINUE HERE
+      {I set({Record2ObjectsAST AST.1 I})}
+      % then each argument
     end
   in
     if {List.is AST} then
       {Show 'WE GOT A LIST'}
     elseif {Record.is AST} then
-      {Show 'WE GOT A RECORD'}
+      {Show 'WE GOT A RECORD'#{Label AST}}
     end
 
     case {Label AST}
     of fLocal then
       {HandleLocal AST Parent}
     [] fVar then
-      {System.showInfo 'Variable'}
+      {HandleVar AST Parent}
+    [] fInt then
+      {HandleInt AST Parent}
     [] fEq then
       {HandleUnification AST Parent}
+    [] fApply then
+      {HandleApply AST Parent}
     [] unit then 
       nil
     [] pos then
@@ -184,11 +254,6 @@ define
       nil
     end
   end
-
-  P = {New Program init(AST)} 
-  ThisLocal = {Record2ObjectsAST AST.1 P}
-  {P addLocal(ThisLocal)}
-
 
 
 
@@ -205,4 +270,15 @@ define
   else
      {DumpAST.dumpAST AST}
   end
+
+
+  P = {New Program init(AST)} 
+  ThisLocal = {Record2ObjectsAST AST.1 P}
+  {P addLocal(ThisLocal)}
+
+
+
+
+
+
 end
