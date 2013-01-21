@@ -54,7 +54,10 @@ define
     meth init(AST)
       ast:=AST
       locals:=nil
-      topLevelAbstraction:={New Abstraction init()}
+      topLevelAbstraction:={New Abstraction init(AST)}
+    end
+    meth tla(?R)
+      R=@topLevelAbstraction
     end
     % FIXME : find a better way to do this? See also Apply add argument
     meth addLocal(C)
@@ -70,10 +73,13 @@ define
       formals
       locals
       globals
-      ast
+      body
       codeArea
-    meth init()
-      skip
+    meth init(AST)
+      body:=AST
+    end
+    meth setBody(Body)
+      body:=Body
     end
   end
 
@@ -281,8 +287,9 @@ define
 
 
   P = {New Program init(AST)} 
-  ThisLocal = {Record2ObjectsAST AST.1 P}
-  {P addLocal(ThisLocal)}
+  ThisLocal = {Record2ObjectsAST AST.1 {P tla($)}}
+  {{P tla($)} setBody(ThisLocal)}
+  %{P addLocal(ThisLocal)}
 
 
 
