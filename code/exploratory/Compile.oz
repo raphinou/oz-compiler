@@ -50,9 +50,11 @@ define
     attr 
       ast
       locals % Can it only have locals???
+      topLevelAbstraction
     meth init(AST)
       ast:=AST
       locals:=nil
+      topLevelAbstraction:={New Abstraction init()}
     end
     % FIXME : find a better way to do this? See also Apply add argument
     meth addLocal(C)
@@ -220,11 +222,17 @@ define
     in
       % first feature is the command to apply
       % second feature is a list of arguments
+      
       I = {New ApplyInstr init(P)}
       % first the command
-      % CONTINUE HERE
-      {I set({Record2ObjectsAST AST.1 I})}
+      {D 'Command'}
+      {I set( command {Record2ObjectsAST AST.1 I})}
       % then each argument
+      {D 'Args'}
+      for A in AST.2 do
+        {I addArgument({Record2ObjectsAST A I})}
+      end
+      I
     end
   in
     if {List.is AST} then

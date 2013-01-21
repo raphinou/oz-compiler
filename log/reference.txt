@@ -38,8 +38,13 @@ unifications are place in fEq() records
 variables are placed in fVar records
 integers are placed in fInt records
 calls are place in fApply() records. The first feature is the proc/fun to call, usually under a var record. The second feature is the list of arguments passed, each in its own record (fVar, fInt...)
+function declarations are in fFun records, 
+  the first feature is the list of formal parameters, 
+  the second feature is a fLocal whose 
+    first feature is the declarations (in a fAnd if multiple declarations)
+    second feature is the code (in a fAnd if multiple instructions)
 
 The last feature of all these records are the position in the code, a record of
 the form pos(file startline startcol file endline endcol).
 
-The top record is usually a fLocal(), which has then to be implicitely put under an abstraction (function).
+The top record is usually a fLocal(), which has then to be implicitely put under an abstraction (function). See symtab/Program.scala line 38. Also see symtab/Abstraction.scala
