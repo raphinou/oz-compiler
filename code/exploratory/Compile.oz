@@ -120,6 +120,13 @@ define
     meth get(X ?V)
       V=@X
     end
+    meth append(Attr V)
+      % FIXME if Attr not list raise exception
+      NewList
+    in
+      {List.append @Attr [V] NewList}
+      Attr:=NewList
+    end
   end
   
   class LocalInstr from Instruction
@@ -137,17 +144,26 @@ define
     meth print(Indent)
       {System.showInfo Indent#'*Local'}
       {System.showInfo Indent#'Local declarations'}
-      {@decls print('  '#Indent)}
+      for Decl in @decls do 
+        {Decl print('  '#Indent)}
+      end
       {System.showInfo Indent#'Local body'}
-      {@body print('  '#Indent)}
+      for Instr in @body do 
+        {Instr print('  '#Indent)}
+      end
     end
     meth visit(F P)
       NewNode
     in
       NewNode = {F {self label($)} self P}
-      {@decls visit(F NewNode)}
-      {@body visit(F NewNode)}
+      for Decl in @decls do 
+        {Decl visit(F NewNode)}
+      end
+      for Instr in @decls do 
+        {Instr visit(F NewNode)}
+      end
     end
+
   end
 
   class UnificationInstr from Instruction
@@ -295,10 +311,10 @@ define
       I = {New LocalInstr init(Parent L)}
       % Handle the declarations
       {D 'Declarations of Local'}
-      {I set(decls {Record2ObjectsAST AST.1 I}) }
+      {I append(decls {Record2ObjectsAST AST.1 I}) }
       %% Handle the body
       {D 'Body of Local'}
-      {I set(body {Record2ObjectsAST AST.2 I})}
+      {I append(body {Record2ObjectsAST AST.2 I})}
       I
     end
     fun {HandleUnification AST P L}
@@ -406,19 +422,27 @@ define
   end
 
   % Visitor that moves unifications from declaration to body of 'local'
-%  fun{F Type Node Parent}
-%    case Type of
-%      fLocal then
-%        for D in Node.get(decl $) do
-%
-%        end
-%      else
-%        Node
-%      end
-%    Node
-%  end
+  fun{Namer Label Node Parent}
+    case Label of
+    fLocal then
+         {Show fLocal}
+        for C in {Node get(decls $)} do
+          case {C label($)} of 
+            fVar then
+              {Show 'Variable declared:'#{C get(name $)}}
+          []fEq then
+              {Show unification}
+              {C print('')}
+%              put unification in body
+          end
+        end
+    else
+        skip
+    end
+    Node
+  end
 
-  {P visit(F)}
+  {P visit(Namer)}
   {System.showInfo '################################################################################'}
   {P print('')}
 
