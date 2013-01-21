@@ -442,22 +442,23 @@ define
     Node
   end
 
-  fun{GetCollector TheList}
+  fun{GetCollector Pred ?TheList}
+    TheList = {NewCell nil}
     fun{$ Label Node Parent}
       NewEnd
     in
-      if Label== fVar then
+      if {Pred Label} then
         TheList:={List.append @TheList [Node]}
       end
       Node
     end
   end
-  Cell = {NewCell nil}
-  Collector = {GetCollector Cell}
+  Vars
+  Collector = {GetCollector fun {$ V}  {Label V}==fVar end Vars }
 
   {P visit(Collector)}
   {System.showInfo '################################################################################'}
-  for N in @Cell do 
+  for N in @Vars do 
     {N print('')}
   end
   {System.showInfo '################################################################################'}
