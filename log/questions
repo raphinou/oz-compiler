@@ -20,3 +20,17 @@
 - ou est le contstructeur de Node (et de StatOrExpr, ProcFunExpression, ....) ?
 
 - Dans LocalStatement (et Raw/Expression), les déclarations sont abandonnées?
+
+- Dans le namer on a
+    case local @ RawLocalStatement(declarations, body) =>
+      val (decls, stats) = extractDecls(declarations)
+      val stat = statsAndStatToStat(stats, body)
+
+      withEnvironmentFromDecls(decls) {
+        if (decls.isEmpty) transformStat(stat)
+        else treeCopy.LocalStatement(local, decls, transformStat(stat))
+      }
+   ? syntaxe local @ RawLocalStatement
+   ? premier argument passé à treeCopy.LocalStatement = ?
+
+- Pourquoi treecopier crée de nouveaux noeuds meme quand rien n'a changé?
