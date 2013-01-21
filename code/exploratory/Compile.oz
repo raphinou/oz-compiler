@@ -27,7 +27,7 @@ define
   %--------------------------------------------------------------------------------
   % The code we work on
   %--------------------------------------------------------------------------------
-  %Code = 'local A = 5 B = 3 in {Show A + B} end'
+  %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
   Code = 'local A = 5 in {Show A} end'
 
   AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
@@ -67,9 +67,9 @@ define
       locals:=NewList
     end
 
-    meth print()
-      {Show 'Program tla'}
-      {@topLevelAbstraction print()}
+    meth print(Indent)
+      {System.showInfo Indent#'*Program tla'}
+      {@topLevelAbstraction print('  '#Indent)}
     end
   end
 
@@ -86,10 +86,10 @@ define
     meth setBody(Body)
       body:=Body
     end
-    meth print()
-      {Show 'Abstraction'}
-      {Show 'Abstraction body'}
-      {@body print()}
+    meth print(Indent)
+      {System.showInfo Indent#'*Abstraction'}
+      {System.showInfo Indent#'Abstraction body'}
+      {@body print('  '#Indent)}
     end
   end
 
@@ -116,12 +116,12 @@ define
       decls:=nil
       body:=nil
     end
-    meth print()
-      {Show 'Local'}
-      {Show 'Local declarations'}
-      {@decls print()}
-      {Show 'Local body'}
-      {@body print()}
+    meth print(Indent)
+      {System.showInfo Indent#'*Local'}
+      {System.showInfo Indent#'Local declarations'}
+      {@decls print('  '#Indent)}
+      {System.showInfo Indent#'Local body'}
+      {@body print('  '#Indent)}
     end
   end
 
@@ -134,12 +134,12 @@ define
       lhs:=nil
       rhs:=nil
     end
-    meth print()
-      {Show 'Unification'}
-      {Show 'Unification LHS'}
-      {@lhs print()}
-      {Show 'Unification RHS'}
-      {@rhs print()}
+    meth print(Indent)
+      {System.showInfo Indent#'*Unification'}
+      {System.showInfo Indent#'Unification LHS'}
+      {@lhs print('  '#Indent)}
+      {System.showInfo Indent#'Unification RHS'}
+      {@rhs print('  '#Indent)}
     end
   end
 
@@ -147,8 +147,8 @@ define
     meth init()
       skip 
     end
-    meth print()
-      {Show 'Skip statement'}
+    meth print(Indent)
+      {System.showInfo Indent#'*Skip statement'}
     end
   end
 
@@ -159,8 +159,8 @@ define
     meth init(Name)
       name:=Name
     end
-    meth print()
-      {Show 'Variable'#@name}
+    meth print(Indent)
+      {System.showInfo Indent#'*Variable '#@name}
     end
   end
 
@@ -170,8 +170,8 @@ define
     meth init(Value)
       value:=Value
     end
-    meth print()
-      {Show 'Integer'#@value}
+    meth print(Indent)
+      {System.showInfo Indent#'*Integer '#@value}
     end
   end
 
@@ -190,13 +190,13 @@ define
       {List.append @args [A] NewList}
       args:=NewList
     end
-    meth print()
-      {Show 'Apply'}
-      {Show 'Apply command'}
-      {@command print()}
-      {Show 'Apply args'}
+    meth print(Indent)
+      {System.showInfo Indent#'*Apply'}
+      {System.showInfo Indent#'Apply command'}
+      {@command print('  '#Indent)}
+      {System.showInfo Indent#'Apply args'}
       for A in @args do
-        {A print()}
+        {A print('  '#Indent)}
       end
     end
   end
@@ -215,7 +215,7 @@ define
 
   % Debug output
   proc {D S}
-    {Show S}
+    {System.showInfo S}
   end
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -284,9 +284,9 @@ define
     end
   in
     if {List.is AST} then
-      {Show 'WE GOT A LIST'}
+      {System.showInfo 'WE GOT A LIST'}
     elseif {Record.is AST} then
-      {Show 'WE GOT A RECORD'#{Label AST}}
+      {System.showInfo 'WE GOT A RECORD'#{Label AST}}
     end
 
     case {Label AST}
@@ -305,8 +305,8 @@ define
     [] pos then
       nil
     else
-      {Show 'unknown'}
-      {Show AST}
+      {System.showInfo 'unknown'}
+      {System.showInfo AST}
       nil
     end
   end
@@ -333,7 +333,7 @@ define
   {{P tla($)} setBody(ThisLocal)}
   %{P addLocal(ThisLocal)}
 
-  {P print()}
+  {P print('')}
 
 
 
