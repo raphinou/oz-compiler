@@ -71,7 +71,7 @@ define
     meth init(AST)
       ast:=AST
       locals:=nil
-      topLevelAbstraction:={New Abstraction init(AST tla)}
+      topLevelAbstraction:={New Abstraction init(self AST tla)}
     end
     meth tla(?R)
       R=@topLevelAbstraction
@@ -101,9 +101,10 @@ define
       globals
       body
       codeArea
-    meth init(AST L)
+    meth init(Parent AST L)
       body:=AST
       label:=L
+      parent:=Parent
     end
     meth setBody(Body)
       body:=Body
@@ -226,7 +227,8 @@ define
   class Variable from Instruction 
     attr
       name
-    meth init(Name L)
+    meth init(Parent Name L)
+      parent:=Parent
       name:=Name
       label:=L
     end
@@ -243,7 +245,8 @@ define
   class Integer from Instruction 
     attr
       value
-    meth init(Value L)
+    meth init(Parent Value L)
+      parent:=Parent
       value:=Value
       label:=L
     end
@@ -349,13 +352,13 @@ define
       I
     in
       % first feature is its name
-      I = {New Variable init(AST.1 L)}
+      I = {New Variable init(P AST.1 L)}
     end
     fun {HandleInt AST P L}
       I
     in
       % first feature is its value
-      I = {New Integer init(AST.1 L)}
+      I = {New Integer init(P AST.1 L)}
     end
     fun {HandleApply AST P L}
       I
