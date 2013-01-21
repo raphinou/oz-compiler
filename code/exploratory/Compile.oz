@@ -66,6 +66,11 @@ define
       {List.append @locals [C] NewList}
       locals:=NewList
     end
+
+    meth print()
+      {Show 'Program tla'}
+      {@topLevelAbstraction print()}
+    end
   end
 
   class Abstraction from Node
@@ -80,6 +85,11 @@ define
     end
     meth setBody(Body)
       body:=Body
+    end
+    meth print()
+      {Show 'Abstraction'}
+      {Show 'Abstraction body'}
+      {@body print()}
     end
   end
 
@@ -106,6 +116,13 @@ define
       decls:=nil
       body:=nil
     end
+    meth print()
+      {Show 'Local'}
+      {Show 'Local declarations'}
+      {@decls print()}
+      {Show 'Local body'}
+      {@body print()}
+    end
   end
 
   class UnificationInstr from Instruction
@@ -117,11 +134,21 @@ define
       lhs:=nil
       rhs:=nil
     end
+    meth print()
+      {Show 'Unification'}
+      {Show 'Unification LHS'}
+      {@lhs print()}
+      {Show 'Unification RHS'}
+      {@rhs print()}
+    end
   end
 
   class SkipStatement from Instruction
     meth init()
       skip 
+    end
+    meth print()
+      {Show 'Skip statement'}
     end
   end
 
@@ -132,6 +159,9 @@ define
     meth init(Name)
       name:=Name
     end
+    meth print()
+      {Show 'Variable'#@name}
+    end
   end
 
   class Integer from Instruction 
@@ -139,6 +169,9 @@ define
       value
     meth init(Value)
       value:=Value
+    end
+    meth print()
+      {Show 'Integer'#@value}
     end
   end
 
@@ -156,6 +189,15 @@ define
     in
       {List.append @args [A] NewList}
       args:=NewList
+    end
+    meth print()
+      {Show 'Apply'}
+      {Show 'Apply command'}
+      {@command print()}
+      {Show 'Apply args'}
+      for A in @args do
+        {A print()}
+      end
     end
   end
 
@@ -290,6 +332,8 @@ define
   ThisLocal = {Record2ObjectsAST AST.1 {P tla($)}}
   {{P tla($)} setBody(ThisLocal)}
   %{P addLocal(ThisLocal)}
+
+  {P print()}
 
 
 
