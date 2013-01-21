@@ -9,7 +9,7 @@
 
 - Dans le functor DumpAST.oz j'ai mis un skip. Quelle est la bonne facon de faire?
 
-- Pourquoi DumpAST utilisé dans Parse.oz ajoute |( et ) autour de l'ast?
+- Pourquoi DumpAST utilisé dans Parse.oz donne une liste? Plusieurs locals sont placés dans fAnd()
 
 - comment utiliser le parser dans un programme interactif oz (eg avec declare). Pour le moment j'ai pris le dump, rajouté les '' où il fallait pour avoir l'AST dans mon script.
 
@@ -18,8 +18,5 @@
 - pourquoi Node extends Product?
 
 - ou est le contstructeur de Node (et de StatOrExpr, ProcFunExpression, ....) ?
-
-- Dans CommonStatExpr, qu'est LocalCommon ?
-A: C'est ce qui est hérité par RawLocalStatement, LocalStatement, RawLocalExpression et LocalExpression 
 
 - Dans LocalStatement (et Raw/Expression), les déclarations sont abandonnées?

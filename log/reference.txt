@@ -2,6 +2,10 @@
 ************************
 Scala classes hierarchy:
 ************************
+Node
+----
+Each node keeps the position of its instruction in the source code in the attributes. 
+The method copyAttrs simply copies this from the argument to 'this'.
 
 Program
 -------
@@ -26,6 +30,9 @@ Statement/Expression
 --------------------
 These classes should be merge in one class, eg Instruction. It appears that separating the two is requiring a lot of complexity and code addition.
 
+TreeCopier
+----------
+Just creates a new node with same attributes
 ################################################################################
 
 ************************
@@ -48,3 +55,5 @@ The last feature of all these records are the position in the code, a record of
 the form pos(file startline startcol file endline endcol).
 
 The top record is usually a fLocal(), which has then to be implicitely put under an abstraction (function). See symtab/Program.scala line 38. Also see symtab/Abstraction.scala
+
+

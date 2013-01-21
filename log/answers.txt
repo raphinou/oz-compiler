@@ -60,4 +60,10 @@ A: Dans ast/Expressions.scala . C'est une case class, qui permet du pattern matc
 
 --------------------------------------------------------------------------------
 - ou est definie la classe Product? 
-A: c'est une class de la stdlib, représentant un produit cartesien.
+A : c'est une class de la stdlib, représentant un produit cartesien.
+
+--------------------------------------------------------------------------------
+- Dans CommonStatExpr, qu'est LocalCommon ?
+A: C'est ce qui est hérité par RawLocalStatement, LocalStatement, RawLocalExpression et LocalExpression 
+
+
