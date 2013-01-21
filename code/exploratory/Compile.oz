@@ -28,7 +28,7 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-  Code = 'local A = 5 in {Show A} end'
+  Code = 'local  A = 5 in {Show A} end'
 
   AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
          GetSwitch EnvDictionary}
@@ -47,6 +47,19 @@ define
     end
     meth label(?L)
       L=@label
+    end
+
+    meth collect(Pred ?Res)
+      Collector
+    in
+      Res = {NewCell nil}
+      fun{Collector Label Node Parent}
+        if {Pred Label} then
+          Res:={List.append @Res [Node]}
+        end
+        Node
+      end
+      {self visit(Collector self)}
     end
   end
 
@@ -423,44 +436,51 @@ define
 
   % Visitor that moves unifications from declaration to body of 'local'
   fun{Namer Label Node Parent}
+    Vars
+  in 
     case Label of
     fLocal then
-         {Show fLocal}
-        for C in {Node get(decls $)} do
-          case {C label($)} of 
-            fVar then
-              {Show 'Variable declared:'#{C get(name $)}}
-          []fEq then
-              {Show unification}
-              {C print('')}
-%              put unification in body
-          end
-        end
+      {Show fLocal}
+      for C in {Node get(decls $)} do
+        {C collect(fun {$ V} {Record.label V}==fVar end Vars)}
+      end
+      {Show beforefor}
+      for Var in @Vars do 
+        {Show 'Got Variable '#{Var get(name $)}}
+      end
+      {Show afterfor}
     else
         skip
     end
+    % Leaving this code here makes the program exit without error. Why? What happens?
+    %  for C in {Node get(decls $)} do
+    %    {C collect(fun {$ V} {Record.label V}==fVar end Vars)}
+    %  end
     Node
   end
 
-  fun{GetCollector Pred ?TheList}
-    TheList = {NewCell nil}
-    fun{$ Label Node Parent}
-      NewEnd
-    in
-      if {Pred Label} then
-        TheList:={List.append @TheList [Node]}
-      end
-      Node
-    end
-  end
-  Vars
-  Collector = {GetCollector fun {$ V}  {Label V}==fVar end Vars }
+  %fun{GetCollector Pred ?TheList}
+  %  TheList = {NewCell nil}
+  %  fun{$ Label Node Parent}
+  %    NewEnd
+  %  in
+  %    if {Pred Label} then
+  %      TheList:={List.append @TheList [Node]}
+  %    end
+  %    Node
+  %  end
+  %end
+  %Vars
+  %Collector = {GetCollector fun {$ V}  {Label V}==fVar end Vars }
 
-  {P visit(Collector)}
-  {System.showInfo '################################################################################'}
-  for N in @Vars do 
-    {N print('')}
-  end
+
+  {System.showInfo '--------------------------------------------------------------------------------'}
+  {P visit(Namer)}
+  {System.showInfo '--------------------------------------------------------------------------------'}
+  %{System.showInfo '################################################################################'}
+  %for N in @Vars do 
+  %  {N print('')}
+  %end
   {System.showInfo '################################################################################'}
 
   {P print('')}
