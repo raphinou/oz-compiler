@@ -28,7 +28,7 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-  Code = 'local  A = 5 in {Show A} end'
+  Code = 'local  A = 5 B=3 C=4 in {Show A} end'
 
   AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
          GetSwitch EnvDictionary}
@@ -49,12 +49,12 @@ define
       L=@label
     end
 
+    % collect does not define the cell, as the caller might want to collect results of multiple calls in one list
     meth collect(Pred ?Res)
       Collector
     in
-      Res = {NewCell nil}
       fun{Collector Label Node Parent}
-        if {Pred Label} then
+        if {Pred Node} then
           Res:={List.append @Res [Node]}
         end
         Node
@@ -137,8 +137,14 @@ define
     meth append(Attr V)
       % FIXME if Attr not list raise exception
       NewList
+      AddedList
     in
-      {List.append @Attr [V] NewList}
+      if {IsList V} then
+        AddedList = V
+      else
+        AddedList = [V]
+      end
+      {List.append @Attr AddedList NewList}
       Attr:=NewList
     end
   end
@@ -158,7 +164,9 @@ define
     meth print(Indent)
       {System.showInfo Indent#'*Local'}
       {System.showInfo Indent#'Local declarations'}
-      for Decl in @decls do 
+      {Show @decls}
+      % FIXME: why is a flatten needed here?? Only needed when we have 3 ore more declarations
+      for Decl in {Flatten @decls} do 
         {Decl print('  '#Indent)}
       end
       {System.showInfo Indent#'Local body'}
@@ -170,10 +178,10 @@ define
       NewNode
     in
       NewNode = {F {self label($)} self P}
-      for Decl in @decls do 
+      for Decl in {Flatten @decls} do 
         {Decl visit(F NewNode)}
       end
-      for Instr in @decls do 
+      for Instr in {Flatten @decls} do 
         {Instr visit(F NewNode)}
       end
     end
@@ -377,6 +385,14 @@ define
       end
       I
     end
+    fun {HandleSequence AST P L}
+      List
+    in
+      %{Show 'in HandleSequence'}
+      %{Show {Record.toList AST}}
+      %{Show {Map {Record.toList AST} fun {$ Feat} Feat end }}
+      {Map {Record.toList AST} fun {$ Feat} {Record2ObjectsAST Feat P} end }
+    end
     L
   in
     if {List.is AST} then
@@ -396,6 +412,9 @@ define
       {HandleUnification AST Parent L}
     [] fApply then
       {HandleApply AST Parent L}
+    [] fAnd then
+      {Show 'Handling fAnd'}
+      {HandleSequence AST Parent L}
     [] unit then 
       nil
     [] pos then
@@ -437,15 +456,19 @@ define
     Node
   end
 
-  % Visitor that moves unifications from declaration to body of 'local'
+  % Visitor that moves collects all variables
   fun{Namer Label Node Parent}
-    Vars
+    Vars={NewCell nil}
   in 
     case Label of
     fLocal then
       {Show fLocal}
-      for C in {Node get(decls $)} do
-        {C collect(fun {$ V} {Record.label V}==fVar end Vars)}
+      {Show {Node get(decls $)}}
+      for C in {Flatten {Node get(decls $)}} do
+        {Show {C get(label $)}}
+      end
+      for C in {Flatten {Node get(decls $)}} do
+        {C collect(fun {$ N} {N get(label $)}==fVar end Vars)}
       end
       {Show beforefor}
       for Var in @Vars do 
