@@ -17,7 +17,8 @@ define
       {IsInt V} orelse
       {IsLiteral V} orelse
       {IsFloat V} orelse
-      {IsCoord V}
+      {IsCoord V} orelse
+      {IsObject V}
    end
 
    fun {IsOneLiner AST}
@@ -39,6 +40,8 @@ define
       [] 'false' then "'false'"
       elseif {IsAtom V} then
          {AtomToString V}
+      elseif {IsObject V} then
+         {V toVS($)}
       else
          V
       end
