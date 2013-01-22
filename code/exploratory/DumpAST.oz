@@ -71,10 +71,10 @@ define
    proc {DumpAST AST}
       {DumpASTEx AST ''}
    end
-in
+%% in
 %   {DumpAST fAnd(fRecord(fVar('Hello' pos(1 2 3))
 %                         fInt(5 pos(4 5 6))
 %                         pos('Hello' 42 3))
 %                 fAtom(unit))}
-    skip
+%%    skip
 end
