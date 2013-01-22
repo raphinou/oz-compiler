@@ -66,4 +66,71 @@ A : c'est une class de la stdlib, représentant un produit cartesien.
 - Dans CommonStatExpr, qu'est LocalCommon ?
 A: C'est ce qui est hérité par RawLocalStatement, LocalStatement, RawLocalExpression et LocalExpression 
 
+--------------------------------------------------------------------------------
+- Que fait ce code dans OpCode.scala? 
+  def code = {
+    (name /: arguments) {
+      (prev, arg) => prev + ", " + arg.code
+    }
+  }
+A: foldleft.
 
+- eclipse config
+ok
+
+- Dans le functor DumpAST.oz j'ai mis un skip. Quelle est la bonne facon de faire?
+A: ne pas mettre le in
+
+- Pourquoi DumpAST utilisé dans Parse.oz donne une liste? Plusieurs locals sont placés dans fAnd()
+A: le parser renvoie une liste de compilation unit. Pour le moment, considerer 1 element (phrase) voir compiler node 7
+
+- comment utiliser le parser dans un programme interactif oz (eg avec declare). Pour le moment j'ai pris le dump, rajouté les '' où il fallait pour avoir l'AST dans mon script.
+A: prendre le premier element de la liste
+
+-http://www.mozart-oz.org/documentation/notation/node6.html#label22 je comprends pas le X=E et ensuite  proc {X ...}.
+A: E peut en pratique etre une variable ou le $. 
+
+- Implémenter Proc pour implémenter fun.
+
+- pourquoi Node extends Product?
+A: scala, pas important
+
+- ou est le contstructeur de Node (et de StatOrExpr, ProcFunExpression, ....) ?
+A: implicite, arguments dans la declaration, et code est le corps de la classe.
+
+- Dans LocalStatement (et Raw/Expression), les déclarations sont abandonnées?
+A:  dans une case class, tous les parametres sont directement un champs de la classe
+
+- Dans le namer on a
+    case local @ RawLocalStatement(declarations, body) =>
+      val (decls, stats) = extractDecls(declarations)
+      val stat = statsAndStatToStat(stats, body)
+
+      withEnvironmentFromDecls(decls) {
+        if (decls.isEmpty) transformStat(stat)
+        else treeCopy.LocalStatement(local, decls, transformStat(stat))
+      }
+   ? syntaxe local @ RawLocalStatement : reference à l'entiereté de l'argument, typé
+   ? premier argument passé à treeCopy.LocalStatement = ?
+
+
+- Pourquoi treecopier crée de nouveaux noeuds meme quand rien n'a changé?
+A: parce qu'il est bete
+- Une feature ne peut etre initialisée dans init()? Si, faire self.feature!
+declare
+class A
+   feat
+      f
+   meth init()
+      self.f=test
+   end
+end
+
+V={New A init}
+{Show V.f} 
+
+- J'ai du faire un flatten de list. Une idée de piste? append prend 2 list et retourne la concaténation des deux. Je fais un test isList et ne crée une liste que si j'ai un element isolé....
+
+- namer remplace les noms des vars par un symbole, et fait un mapping dans le local ou l'abstraction?
+
+- flattener fait... ?
