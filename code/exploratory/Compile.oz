@@ -106,7 +106,7 @@ define
 %      case AST 
 %      of fLocal(Decl Body Pos) then
 %        {Show fLocal}
-%        flocal(
+%        fLocal(
 %          {PassInt Decl Env true}
 %          {PassInt Body Env false}
 %          Pos
@@ -161,7 +161,7 @@ define
     fun {NamerInt AST Params}
       case AST 
       of fLocal(Decl Body Pos) then
-        flocal(
+        fLocal(
           {NamerInt Decl {Record.adjoin Params params(indecls:true)}}
           {NamerInt Body {Record.adjoin Params params(indecls:false)}}
           Pos
@@ -187,7 +187,7 @@ define
     Index = {NewCell 1}
     fun {YAssignerInt AST Params}
       case AST
-      of fVar(Sym Pos) then
+      of fVar(Sym _) then
         %only when we see a variable with no y assigned, assign it
         if {Sym get(yindex $)}==nil then
           { Sym set(yindex @Index)}
@@ -202,31 +202,37 @@ define
     {YAssignerInt AST unit}
   end
 
-%  fun {CodeGen AST}
-%    Prefix={NewCell nil}
-%    Code = {NewCell nil}
-%    Postfix={NewCell nil}
-%
-%    fun {CodeGenInt AST Params}
-%      case AST 
-%      of fLocal(Decls Body)
-%        {CodeGenInt Decls {Record.adjoin Params params(indecls: true)}}
-%        {CodeGenInt Body Params}
-%      [] fVar(Sym _)
-%        if Params.indecls then
-%          Prefix:={List.append Prefix ['createVar(y('#{Sym get(yindex $)}#'))']}
-%        else
-%          'y('#{Sym get(yindex $)}#')'
-%        end
-%
-%    end
-%  in
-%    {CodeGenInt AST params(indecls:false)}
-%  end
+  fun {CodeGen AST}
+
+    fun {CodeGenInt AST Params}
+      case AST 
+      of fLocal(Decls Body _) then
+        {CodeGenInt Decls {Record.adjoin Params params(indecls: true)}}#' '#{CodeGenInt Body Params}
+      [] fVar(Sym _) then
+        if Params.indecls then
+          'createVar(y('#{Sym get(yindex $)}#'))\n'
+        else
+          'y('#{Sym get(yindex $)}#')'
+        end
+      [] fAnd(First Second ) then
+        {CodeGenInt First Params}#'\n'#{CodeGenInt Second Params}
+      [] fEq(LHS RHS _) then
+        'unify('#{CodeGenInt LHS Params}#' '#{CodeGenInt RHS Params}#')\n'
+      [] fInt(Value _) then
+        'k('#Value#')'
+      else 
+        {Show 'missing clause for '#{Label AST}}
+        nil
+      end
+    end
+  in
+    {CodeGenInt AST params(indecls:false)}
+  end
         
   {System.showInfo '################################################################################'}
   {DumpAST.dumpAST AST}
   {System.showInfo '--------------------------------------------------------------------------------'}
   {DumpAST.dumpAST {YAssigner {Namer AST.1}}}
   {System.showInfo '################################################################################'}
+  {System.showInfo {CodeGen {YAssigner {Namer AST.1}}} }
 end
