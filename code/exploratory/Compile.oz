@@ -133,6 +133,7 @@ define
       L
    in
       if {Record.is AST} andthen {List.member L={Label AST} {Record.arity FsR}} then
+         {Show 'calling specifi function for '#L}
          {FsR.L  AST Params Pass}
       elseif {Record.is AST} then
          {Show 'in elseif'}
@@ -143,6 +144,13 @@ define
       end
    end
 
+   % The namer replaces variable names with a Symbol instance, all identical
+   % variable instances referencing the same symbol.
+   % The environment is a dictionary, the keys being variable names, the value being their respective symbol instance
+   % AST = the record
+   % Params is a record with 2 features:
+   %   env = mapping of var names to symbols built in parents
+   %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
    NamerRecord=fs(fLocal:  fun {$ AST=fLocal(Decl Body Pos) Params F}
                               Res
                            in
@@ -167,45 +175,20 @@ define
                         end
                   )
 
-  NamerParams =  params(env:{New Environment init()} indecls:false)
+   NamerParams =  params(env:{New Environment init()} indecls:false)
 
-  % The namer replaces variable names with a Symbol instance, all identical
-  % variable instances referencing the same symbol.
-   fun {Namer AST}
-    % The environment is a dictionary, the keys being variable names, the value being their respective symbol instance
-    % AST = the record
-    % Params is a record with 2 features:
-    %   env = mapping of var names to symbols built in parents
-    %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
-      fun {NamerInt AST Params}
-         case AST
-         of fLocal(Decl Body Pos) then
-            Res
-         in
-            {Params.env backup()}
-            Res=fLocal(
-               {NamerInt Decl {Record.adjoin Params params(indecls:true)}}
-               {NamerInt Body {Record.adjoin Params params(indecls:false)}}
-               Pos
-               )
-            {Params.env restore()}
-            Res
-         [] fVar(Name Pos) then Sym in
-            if Params.indecls then
-               Sym={Params.env setSymbol(Name Pos $)}
-            else
-               Sym={Params.env getSymbol(Name $)}
-            end
-            fVar( Sym Pos)
-         else
-            {DefaultPass NamerInt AST Params}
-         end
-      end
-   in
-      {NamerInt AST params(env:{New Environment init()} indecls:false)}
-   end
+   YAssignerRecord = fs( fVar : fun {$ AST=fVar(Sym Pos) Params F}
+                                    {Show 'Current index = '#@(Params.currentIndex)}
+                                    if {Sym get(yindex $)}==nil then
+                                       {Sym set(yindex @(Params.currentIndex))}
+                                       (Params.currentIndex):=@(Params.currentIndex)+1
+                                    end
+                                    AST
+                                 end
+                        )
+   YAssignerParams = params(currentIndex:{NewCell 0})
 
-  % traverses the tree and assigns Y registers to variables with no Y index yet
+   % traverses the tree and assigns Y registers to variables with no Y index yet
    fun {YAssigner AST}
     % initialise index value to 1
       Index = {NewCell 1}
@@ -259,5 +242,5 @@ define
    %{DumpAST.dumpAST {YAssigner {Namer AST.1}}}
    {DumpAST.dumpAST {Pass AST.1 NamerRecord NamerParams}}
    {System.showInfo '################################################################################'}
-   {System.showInfo {CodeGen {YAssigner {Pass AST.1 NamerRecord NamerParams}}} }
+   {System.showInfo {CodeGen {Pass {Pass AST.1 NamerRecord NamerParams} YAssignerRecord YAssignerParams }}}
 end
