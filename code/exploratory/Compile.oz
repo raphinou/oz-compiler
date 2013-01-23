@@ -28,68 +28,68 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-   Code = 'local  A in A=3 {Show A}  local A in A=6 end end'
+   Code = 'local  A in A=3   local A in A=6 end  A=7 end'
 
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
-	  GetSwitch EnvDictionary}
+          GetSwitch EnvDictionary}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Support classes
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
    class Accessors
       meth set(Attr Value)
-	 Attr:=Value
+         Attr:=Value
       end
       meth get(Attr ?R)
-	 R=@Attr
+         R=@Attr
       end
    end
 
 
    class Symbol from Accessors
       attr
-	 name
-	 pos
-	 yindex
+         name
+         pos
+         yindex
       meth init(Name Pos)
-	 name:=Name
-	 pos:=Pos
-	 yindex:=nil
+         name:=Name
+         pos:=Pos
+         yindex:=nil
       end
       meth toVS(?R)
-	 pos(File Line Col _ _ _)=@pos
+         pos(File Line Col _ _ _)=@pos
       in
-	 R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#"'"
+         R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#"'"
       end
       meth hasYIndex(?B)
-	 B=(@yindex\=nil)
+         B=(@yindex\=nil)
       end
    end
 
    class Environment
       attr
-	 dict
+         dict
       meth init()
-	 dict:={NewDictionary}
+         dict:={NewDictionary}
       end
 
       meth addOrGetSymbol(Name Pos ?Res)
-	 if {Dictionary.member @dict Name} then
-	    Res={Dictionary.get @dict Name}
-	 else
-	    NewSymbol={New Symbol init(Name Pos)}
-	 in
-	    {Dictionary.put @dict Name NewSymbol}
-	    Res=NewSymbol
-	 end
+         if {Dictionary.member @dict Name} then
+            Res={Dictionary.get @dict Name}
+         else
+            NewSymbol={New Symbol init(Name Pos)}
+         in
+            {Dictionary.put @dict Name NewSymbol}
+            Res=NewSymbol
+         end
       end
       meth getSymbol(Name ?R)
-	 R={Dictionary.get @dict Name}
+         R={Dictionary.get @dict Name}
       end
       meth setSymbol(Name Pos ?NewSymbol)
-	 NewSymbol = { New Symbol init(Name Pos)}
-	 {Dictionary.put @dict Name NewSymbol}
+         NewSymbol = { New Symbol init(Name Pos)}
+         {Dictionary.put @dict Name NewSymbol}
       end
    end
 
@@ -144,9 +144,9 @@ define
   % is easily done with this function.
    fun {DefaultPass F AST Params}
       if {Record.is AST} then
-	 {Record.map AST fun {$ I} {F I Params} end}
+         {Record.map AST fun {$ I} {F I Params} end}
       else
-	 AST
+         AST
       end
    end
 
@@ -159,23 +159,23 @@ define
     %   env = mapping of var names to symbols built in parents
     %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
       fun {NamerInt AST Params}
-	 case AST
-	 of fLocal(Decl Body Pos) then
-	    fLocal(
-	       {NamerInt Decl {Record.adjoin Params params(indecls:true)}}
-	       {NamerInt Body {Record.adjoin Params params(indecls:false)}}
-	       Pos
-	       )
-	 [] fVar(Name Pos) then Sym in
-	    if Params.indecls then
-	       Sym={Params.env setSymbol(Name Pos $)}
-	    else
-	       Sym={Params.env getSymbol(Name $)}
-	    end
-	    fVar( Sym Pos)
-	 else
-	    {DefaultPass NamerInt AST Params}
-	 end
+         case AST
+         of fLocal(Decl Body Pos) then
+            fLocal(
+               {NamerInt Decl {Record.adjoin Params params(indecls:true)}}
+               {NamerInt Body {Record.adjoin Params params(indecls:false)}}
+               Pos
+               )
+         [] fVar(Name Pos) then Sym in
+            if Params.indecls then
+               Sym={Params.env setSymbol(Name Pos $)}
+            else
+               Sym={Params.env getSymbol(Name $)}
+            end
+            fVar( Sym Pos)
+         else
+            {DefaultPass NamerInt AST Params}
+         end
       end
    in
       {NamerInt AST params(env:{New Environment init()} indecls:false)}
@@ -186,17 +186,17 @@ define
     % initialise index value to 1
       Index = {NewCell 1}
       fun {YAssignerInt AST Params}
-	 case AST
-	 of fVar(Sym _) then
+         case AST
+         of fVar(Sym _) then
         %only when we see a variable with no y assigned, assign it
-	    if {Sym get(yindex $)}==nil then
-	       { Sym set(yindex @Index)}
-	       Index:=@Index+1
-	    end
-	    AST
-	 else
-	    {DefaultPass YAssignerInt AST Params}
-	 end
+            if {Sym get(yindex $)}==nil then
+               { Sym set(yindex @Index)}
+               Index:=@Index+1
+            end
+            AST
+         else
+            {DefaultPass YAssignerInt AST Params}
+         end
       end
    in
       {YAssignerInt AST unit}
@@ -205,25 +205,25 @@ define
    fun {CodeGen AST}
 
       fun {CodeGenInt AST Params}
-	 case AST
-	 of fLocal(Decls Body _) then
-	    {CodeGenInt Decls {Record.adjoin Params params(indecls: true)}}#' '#{CodeGenInt Body Params}
-	 [] fVar(Sym _) then
-	    if Params.indecls then
-	       'createVar(y('#{Sym get(yindex $)}#'))\n'
-	    else
-	       'y('#{Sym get(yindex $)}#')'
-	    end
-	 [] fAnd(First Second ) then
-	    {CodeGenInt First Params}#'\n'#{CodeGenInt Second Params}
-	 [] fEq(LHS RHS _) then
-	    'unify('#{CodeGenInt LHS Params}#' '#{CodeGenInt RHS Params}#')\n'
-	 [] fInt(Value _) then
-	    'k('#Value#')'
-	 else
-	    {Show 'missing clause for '#{Label AST}}
-	    nil
-	 end
+         case AST
+         of fLocal(Decls Body _) then
+            {CodeGenInt Decls {Record.adjoin Params params(indecls: true)}}#' '#{CodeGenInt Body Params}
+         [] fVar(Sym _) then
+            if Params.indecls then
+               'createVar(y('#{Sym get(yindex $)}#'))\n'
+            else
+               'y('#{Sym get(yindex $)}#')'
+            end
+         [] fAnd(First Second ) then
+            {CodeGenInt First Params}#'\n'#{CodeGenInt Second Params}
+         [] fEq(LHS RHS _) then
+            'unify('#{CodeGenInt LHS Params}#' '#{CodeGenInt RHS Params}#')\n'
+         [] fInt(Value _) then
+            'k('#Value#')'
+         else
+            {Show 'missing clause for '#{Label AST}}
+            nil
+         end
       end
    in
       {CodeGenInt AST params(indecls:false)}
