@@ -1,0 +1,2 @@
+- le namer peut-il se contenter de parcourir les declarations pour l'assignation de symbole au variable si ceci se fait apres la 'normalisation' (cad qd "local in" ne contient que des declaration).
+- meme question pour l'assignement des Y registers

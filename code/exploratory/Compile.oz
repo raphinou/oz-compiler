@@ -37,19 +37,33 @@ define
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Support classes
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  class Accessors
+    meth set(Attr Value)
+      Attr:=Value
+    end
+    meth get(Attr ?R)
+      R=@Attr
+    end
+  end
 
-  class Symbol
+
+  class Symbol from Accessors
     attr
       name
       pos
+      yindex
     meth init(Name Pos)
       name:=Name
       pos:=Pos
+      yindex:=nil
     end
     meth toVS(?R)
       pos(File Line Col _ _ _)=@pos
     in
-      R="'Symbol for "#@name#" from "#File#"("#Line#","#Col#")'"
+      R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#"'"
+    end
+    meth hasYIndex(?B)
+      B=(@yindex\=nil)
     end
   end
 
@@ -128,47 +142,91 @@ define
   % for which it has specific code. But for all other labels, it
   % just needs to recursively call itself on all features, which 
   % is easily done with this function.
-  fun {DefaultPass F AST Env InDecl}
+  fun {DefaultPass F AST Params}
     if {Record.is AST} then
-      {Record.map AST fun {$ I} {F I Env InDecl} end}
+      {Record.map AST fun {$ I} {F I Params} end}
     else
       AST
     end
   end
 
-  % The namer replaced variable names with a Symbol instance, all identical
+  % The namer replaces variable names with a Symbol instance, all identical
   % variable instances referencing the same symbol.
   fun {Namer AST}
     % The environment is a dictionary, the keys being variable names, the value being their respective symbol instance
     % AST = the record
-    % Env = mapping of var names to symbols built in parents
-    % InDecl = should new vars be mapped to new symbols, ie are we in declarations?
-    fun {NamerInt AST Env InDecl}
+    % Params is a record with 2 features:
+    %   env = mapping of var names to symbols built in parents
+    %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
+    fun {NamerInt AST Params}
       case AST 
       of fLocal(Decl Body Pos) then
         flocal(
-          {NamerInt Decl Env true}
-          {NamerInt Body Env false}
+          {NamerInt Decl {Record.adjoin Params params(indecls:true)}}
+          {NamerInt Body {Record.adjoin Params params(indecls:false)}}
           Pos
         )
       [] fVar(Name Pos) then Sym in
-        if InDecl then
-          Sym={Env setSymbol(Name Pos $)}
+        if Params.indecls then
+          Sym={Params.env setSymbol(Name Pos $)}
         else
-          Sym={Env getSymbol(Name $)}
+          Sym={Params.env getSymbol(Name $)}
         end
         fVar( Sym Pos)
       else
-        {DefaultPass NamerInt AST Env InDecl}
+        {DefaultPass NamerInt AST Params}
       end
     end
   in
-    {NamerInt AST {New Environment init()} false}
+    {NamerInt AST params(env:{New Environment init()} indecls:false)}
   end
 
+  % traverses the tree and assigns Y registers to variables with no Y index yet
+  fun {YAssigner AST}
+    % initialise index value to 1
+    Index = {NewCell 1}
+    fun {YAssignerInt AST Params}
+      case AST
+      of fVar(Sym Pos) then
+        %only when we see a variable with no y assigned, assign it
+        if {Sym get(yindex $)}==nil then
+          { Sym set(yindex @(Params.index))}
+          (Params.index):=@(Params.index)+1
+        end
+        AST
+      else
+        {DefaultPass YAssignerInt AST Params}
+      end
+    end
+  in
+    {YAssignerInt AST params(index:Index)}
+  end
+
+%  fun {CodeGen AST}
+%    Prefix={NewCell nil}
+%    Code = {NewCell nil}
+%    Postfix={NewCell nil}
+%
+%    fun {CodeGenInt AST Params}
+%      case AST 
+%      of fLocal(Decls Body)
+%        {CodeGenInt Decls {Record.adjoin Params params(indecls: true)}}
+%        {CodeGenInt Body Params}
+%      [] fVar(Sym _)
+%        if Params.indecls then
+%          Prefix:={List.append Prefix ['createVar(y('#{Sym get(yindex $)}#'))']}
+%        else
+%          'y('#{Sym get(yindex $)}#')'
+%        end
+%
+%    end
+%  in
+%    {CodeGenInt AST params(indecls:false)}
+%  end
+        
   {System.showInfo '################################################################################'}
   {DumpAST.dumpAST AST}
   {System.showInfo '--------------------------------------------------------------------------------'}
-  {DumpAST.dumpAST {Namer AST.1}}
+  {DumpAST.dumpAST {YAssigner {Namer AST.1}}}
   {System.showInfo '################################################################################'}
 end
