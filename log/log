@@ -58,3 +58,22 @@ wrote about the scala classes hierarchy.
 
 started the Compile.oz. From the AST record received from the parser, it builds an object hierarchy.
 Still need to set the link between child and parent and vice versa!!
+
+############
+#2013-01-22#
+############
+Sebastien told me it was a bad idea to replace records by classes. Starting from scratch, and he was very much right!
+
+
+############
+#2013-01-23#
+############
+Namer and first codegen.
+Compiler passes are simply functions that take the AST as parameter. 
+This public function uses a private function that takes one more argument, a params(...) record in which the parameters are passed.
+For example the environment for the namer. 
+Putting parameters there lets us define a standard function DefaultPass that just iterates over its AST without modification.
+
+The environment is an instance of the class Environment. The mapping from variable to symbol is put in a dictionary. When we enter in a 'local', we clone the current dictionary and backup it, to be able to restore it when we get out of this local. 
+
+Sebastien suggested to change fInt, fFloat and fAtom in fConst

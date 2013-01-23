@@ -8,7 +8,11 @@ import
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
    DumpAST at './DumpAST.ozf'
+   Debug at 'x-oz://boot/Debug'
 define
+   {Debug.setRaiseOnBlock {Thread.this} true}
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Boilerplate code for the parser
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -70,9 +74,10 @@ define
    class Environment
       attr
          dict
-         backup
+         backups
       meth init()
          dict:={NewDictionary}
+         backups:=nil
       end
 
       meth addOrGetSymbol(Name Pos ?Res)
@@ -93,61 +98,17 @@ define
          {Dictionary.put @dict Name NewSymbol}
       end
       meth backup()
-        backups:={List.append @backup [{Dictionary.clone @dict}]}
+         backups:={Dictionary.clone @dict}|@backups
       end
       meth restore()
-        NewDict
-        NewBackup
-      in
-        {List.takeDrop @backups 1 ?NewDict ?NewBackup}
-        backup:=NewBackup
-        dict:=NewDict
+         dict:=@backups.1
+         backups:=@backups.2
       end
    end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Actual work happening
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%  fun {Pass AST}
-%    % The environment is a dictionary, the keys being variable names, the value being their respective symbol instance
-%    % AST = the record
-%    % Env = mapping of var names to symbols built in parents
-%    % InDecl = should new vars be mapped to new symbols, ie are we in declarations?
-%    fun {PassInt AST Env InDecl}
-%      case AST
-%      of fLocal(Decl Body Pos) then
-%        {Show fLocal}
-%        fLocal(
-%          {PassInt Decl Env true}
-%          {PassInt Body Env false}
-%          Pos
-%        )
-%      [] fVar(Name Pos) then Sym in
-%        {Show 'fVar declaration or use'}
-%        if InDecl then
-%          Sym={Env setSymbol(Name Pos $)}
-%        else
-%          Sym={Env getSymbol(Name $)}
-%        end
-%        fVar( Sym Pos)
-%      [] fEq(LHS RHS Pos) then
-%        {Show 'Unification'}
-%        feq(
-%          {PassInt LHS Env InDecl}
-%          {PassInt RHS Env InDecl}
-%          Pos
-%        )
-%      [] fInt(Value _) then
-%        {Show 'Integer '#Value}
-%        AST
-%      [] fAnd(First Second) then
-%        fAnd({PassInt First Env InDecl} {PassInt Second Env InDecl})
-%      end
-%    end
-%  in
-%    {PassInt AST {New Environment init()} false}
-%  end
 
   % This is the function to use for default handling of an AST.
   % Eg, the namer only has to do specific work on fLocal and fVar,
@@ -161,6 +122,52 @@ define
          AST
       end
    end
+
+   % Will apply the function F under the feature {Label AST} in FsR. FsR has label fs.
+   % This function F should take as arguments:
+   %  - the record it will work on (AST)
+   %  - a parameters record
+   %  - a function, which will be Pass itself. The goal is that Pass is called on the features of AST by F.
+   % FsR also has a feature params, which is the initial parameters to use
+   fun {Pass AST FsR Params}
+      L
+   in
+      if {Record.is AST} andthen {List.member L={Label AST} {Record.arity FsR}} then
+         {FsR.L  AST Params Pass}
+      elseif {Record.is AST} then
+         {Show 'in elseif'}
+         {Show AST}
+         {Record.map AST fun {$ I} {Pass I FsR Params} end}
+      else
+         AST
+      end
+   end
+
+   NamerRecord=fs(fLocal:  fun {$ AST=fLocal(Decl Body Pos) Params F}
+                              Res
+                           in
+                              {Params.env backup()}
+                              Res=fLocal(
+                                 {F Decl NamerRecord {Record.adjoin Params params(indecls:true)}}
+                                 {F Body NamerRecord {Record.adjoin Params params(indecls:false)}}
+                                 Pos
+                                 )
+                              {Params.env restore()}
+                              Res
+                           end
+                  fVar: fun {$ AST=fVar(Name Pos) Params F}
+                           Sym
+                        in
+                           if Params.indecls then
+                              Sym={Params.env setSymbol(Name Pos $)}
+                           else
+                              Sym={Params.env getSymbol(Name $)}
+                           end
+                           fVar( Sym Pos)
+                        end
+                  )
+
+  NamerParams =  params(env:{New Environment init()} indecls:false)
 
   % The namer replaces variable names with a Symbol instance, all identical
   % variable instances referencing the same symbol.
@@ -181,7 +188,7 @@ define
                {NamerInt Body {Record.adjoin Params params(indecls:false)}}
                Pos
                )
-            %{Params.env restore()}
+            {Params.env restore()}
             Res
          [] fVar(Name Pos) then Sym in
             if Params.indecls then
@@ -219,8 +226,8 @@ define
       {YAssignerInt AST unit}
    end
 
+   %% generates code to send to assembler
    fun {CodeGen AST}
-
       fun {CodeGenInt AST Params}
          case AST
          of fLocal(Decls Body _) then
@@ -249,7 +256,8 @@ define
    {System.showInfo '################################################################################'}
    {DumpAST.dumpAST AST}
    {System.showInfo '--------------------------------------------------------------------------------'}
-   {DumpAST.dumpAST {YAssigner {Namer AST.1}}}
+   %{DumpAST.dumpAST {YAssigner {Namer AST.1}}}
+   {DumpAST.dumpAST {Pass AST.1 NamerRecord NamerParams}}
    {System.showInfo '################################################################################'}
-   {System.showInfo {CodeGen {YAssigner {Namer AST.1}}} }
+   {System.showInfo {CodeGen {YAssigner {Pass AST.1 NamerRecord NamerParams}}} }
 end
