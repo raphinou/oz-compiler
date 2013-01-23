@@ -190,8 +190,8 @@ define
       of fVar(Sym Pos) then
         %only when we see a variable with no y assigned, assign it
         if {Sym get(yindex $)}==nil then
-          { Sym set(yindex @(Params.index))}
-          (Params.index):=@(Params.index)+1
+          { Sym set(yindex @Index)}
+          Index:=@Index+1
         end
         AST
       else
@@ -199,7 +199,7 @@ define
       end
     end
   in
-    {YAssignerInt AST params(index:Index)}
+    {YAssignerInt AST unit}
   end
 
 %  fun {CodeGen AST}
