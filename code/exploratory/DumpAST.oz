@@ -29,17 +29,11 @@ define
    fun {TrivialToVS V}
       case V
       of pos(A B C) then
-         'pos('#A#' '#B#' '#C#')'
+         'pos("'#A#'" '#B#' '#C#')'
       [] pos(A B C D E F) then
-         'pos('#A#' '#B#' '#C#' '#D#' '#E#' '#F#')'
-      [] unit then "unit"
-      [] true then "true"
-      [] false then "false"
-      [] 'unit' then "'unit'"
-      [] 'true' then "'true'"
-      [] 'false' then "'false'"
-      elseif {IsAtom V} then
-         {AtomToString V}
+         'pos("'#A#'" '#B#' '#C#' "'#D#'" '#E#' '#F#')'
+      elseif {IsLiteral V} then
+         {Value.toVirtualString V 1 1}
       elseif {IsObject V} then
          {V toVS($)}
       else
