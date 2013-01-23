@@ -1,6 +1,6 @@
-functor 
+functor
 
-import 
+import
    Narrator('class')
    ErrorListener('class')
    Compiler(parseOzVirtualString)
@@ -8,7 +8,7 @@ import
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
    DumpAST at './DumpAST.ozf'
-define 
+define
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Boilerplate code for the parser
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -23,12 +23,12 @@ define
 
   EnvDictionary = {NewDictionary}
   {Dictionary.put EnvDictionary 'Show' Show}
- 
+
   %--------------------------------------------------------------------------------
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-  Code = 'local  A in A=3  local A in A=6 end end'
+  Code = 'local  A in A=3 {Show A}  local A in A=6 end end'
 
 
   AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
@@ -92,7 +92,7 @@ define
       {Dictionary.put @dict Name NewSymbol}
     end
   end
-  
+
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Actual work happening
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -103,7 +103,7 @@ define
 %    % Env = mapping of var names to symbols built in parents
 %    % InDecl = should new vars be mapped to new symbols, ie are we in declarations?
 %    fun {PassInt AST Env InDecl}
-%      case AST 
+%      case AST
 %      of fLocal(Decl Body Pos) then
 %        {Show fLocal}
 %        fLocal(
@@ -140,7 +140,7 @@ define
   % This is the function to use for default handling of an AST.
   % Eg, the namer only has to do specific work on fLocal and fVar,
   % for which it has specific code. But for all other labels, it
-  % just needs to recursively call itself on all features, which 
+  % just needs to recursively call itself on all features, which
   % is easily done with this function.
   fun {DefaultPass F AST Params}
     if {Record.is AST} then
@@ -159,7 +159,7 @@ define
     %   env = mapping of var names to symbols built in parents
     %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
     fun {NamerInt AST Params}
-      case AST 
+      case AST
       of fLocal(Decl Body Pos) then
         fLocal(
           {NamerInt Decl {Record.adjoin Params params(indecls:true)}}
@@ -205,7 +205,7 @@ define
   fun {CodeGen AST}
 
     fun {CodeGenInt AST Params}
-      case AST 
+      case AST
       of fLocal(Decls Body _) then
         {CodeGenInt Decls {Record.adjoin Params params(indecls: true)}}#' '#{CodeGenInt Body Params}
       [] fVar(Sym _) then
@@ -220,7 +220,7 @@ define
         'unify('#{CodeGenInt LHS Params}#' '#{CodeGenInt RHS Params}#')\n'
       [] fInt(Value _) then
         'k('#Value#')'
-      else 
+      else
         {Show 'missing clause for '#{Label AST}}
         nil
       end
@@ -228,7 +228,7 @@ define
   in
     {CodeGenInt AST params(indecls:false)}
   end
-        
+
   {System.showInfo '################################################################################'}
   {DumpAST.dumpAST AST}
   {System.showInfo '--------------------------------------------------------------------------------'}
