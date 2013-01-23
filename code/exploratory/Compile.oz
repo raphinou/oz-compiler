@@ -70,6 +70,7 @@ define
    class Environment
       attr
          dict
+         backup
       meth init()
          dict:={NewDictionary}
       end
@@ -90,6 +91,17 @@ define
       meth setSymbol(Name Pos ?NewSymbol)
          NewSymbol = { New Symbol init(Name Pos)}
          {Dictionary.put @dict Name NewSymbol}
+      end
+      meth backup()
+        backups:={List.append @backup [{Dictionary.clone @dict}]}
+      end
+      meth restore()
+        NewDict
+        NewBackup
+      in
+        {List.takeDrop @backups 1 ?NewDict ?NewBackup}
+        backup:=NewBackup
+        dict:=NewDict
       end
    end
 
@@ -161,11 +173,16 @@ define
       fun {NamerInt AST Params}
          case AST
          of fLocal(Decl Body Pos) then
-            fLocal(
+            Res
+         in
+            {Params.env backup()}
+            Res=fLocal(
                {NamerInt Decl {Record.adjoin Params params(indecls:true)}}
                {NamerInt Body {Record.adjoin Params params(indecls:false)}}
                Pos
                )
+            %{Params.env restore()}
+            Res
          [] fVar(Name Pos) then Sym in
             if Params.indecls then
                Sym={Params.env setSymbol(Name Pos $)}
