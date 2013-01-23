@@ -83,58 +83,92 @@ define
   % Actual work happening
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  fun {Pass AST}
+%  fun {Pass AST}
+%    % The environment is a dictionary, the keys being variable names, the value being their respective symbol instance
+%    % AST = the record
+%    % Env = mapping of var names to symbols built in parents
+%    % InDecl = should new vars be mapped to new symbols, ie are we in declarations?
+%    fun {PassInt AST Env InDecl}
+%      case AST 
+%      of fLocal(Decl Body Pos) then
+%        {Show fLocal}
+%        flocal(
+%          {PassInt Decl Env true}
+%          {PassInt Body Env false}
+%          Pos
+%        )
+%      [] fVar(Name Pos) then Sym in
+%        {Show 'fVar declaration or use'}
+%        if InDecl then
+%          Sym={Env setSymbol(Name Pos $)}
+%        else
+%          Sym={Env getSymbol(Name $)}
+%        end
+%        fVar( Sym Pos)
+%      [] fEq(LHS RHS Pos) then
+%        {Show 'Unification'}
+%        feq(
+%          {PassInt LHS Env InDecl}
+%          {PassInt RHS Env InDecl}
+%          Pos
+%        )
+%      [] fInt(Value _) then
+%        {Show 'Integer '#Value}
+%        AST
+%      [] fAnd(First Second) then
+%        fAnd({PassInt First Env InDecl} {PassInt Second Env InDecl})
+%      end
+%    end
+%  in
+%    {PassInt AST {New Environment init()} false}
+%  end
+
+  % This is the function to use for default handling of an AST.
+  % Eg, the namer only has to do specific work on fLocal and fVar,
+  % for which it has specific code. But for all other labels, it
+  % just needs to recursively call itself on all features, which 
+  % is easily done with this function.
+  fun {DefaultPass F AST Env InDecl}
+    if {Record.is AST} then
+      {Record.map AST fun {$ I} {F I Env InDecl} end}
+    else
+      AST
+    end
+  end
+
+  % The namer replaced variable names with a Symbol instance, all identical
+  % variable instances referencing the same symbol.
+  fun {Namer AST}
     % The environment is a dictionary, the keys being variable names, the value being their respective symbol instance
     % AST = the record
     % Env = mapping of var names to symbols built in parents
     % InDecl = should new vars be mapped to new symbols, ie are we in declarations?
-    fun {PassInt AST Env InDecl}
+    fun {NamerInt AST Env InDecl}
       case AST 
       of fLocal(Decl Body Pos) then
-        {Show fLocal}
         flocal(
-          {PassInt Decl Env true}
-          {PassInt Body Env false}
+          {NamerInt Decl Env true}
+          {NamerInt Body Env false}
           Pos
         )
       [] fVar(Name Pos) then Sym in
-        {Show 'fVar declaration or use'}
         if InDecl then
           Sym={Env setSymbol(Name Pos $)}
         else
           Sym={Env getSymbol(Name $)}
         end
         fVar( Sym Pos)
-      [] fEq(LHS RHS Pos) then
-        {Show 'Unification'}
-        feq(
-          {PassInt LHS Env InDecl}
-          {PassInt RHS Env InDecl}
-          Pos
-        )
-      [] fInt(Value _) then
-        {Show 'Integer '#Value}
-        AST
-      [] fAnd(First Second) then
-        fAnd({PassInt First Env InDecl} {PassInt Second Env InDecl})
+      else
+        {DefaultPass NamerInt AST Env InDecl}
       end
     end
   in
-    {PassInt AST {New Environment init()} false}
+    {NamerInt AST {New Environment init()} false}
   end
-
-
 
   {System.showInfo '################################################################################'}
   {DumpAST.dumpAST AST}
   {System.showInfo '--------------------------------------------------------------------------------'}
-  {DumpAST.dumpAST {Pass AST.1}}
+  {DumpAST.dumpAST {Namer AST.1}}
   {System.showInfo '################################################################################'}
-
-
-
-
-
-
-
 end
