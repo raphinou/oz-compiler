@@ -133,11 +133,8 @@ define
       L
    in
       if {Record.is AST} andthen {List.member L={Label AST} {Record.arity FsR}} then
-         {Show 'calling specifi function for '#L}
          {FsR.L  AST Params Pass}
       elseif {Record.is AST} then
-         {Show 'in elseif'}
-         {Show AST}
          {Record.map AST fun {$ I} {Pass I FsR Params} end}
       else
          AST
@@ -177,8 +174,8 @@ define
 
    NamerParams =  params(env:{New Environment init()} indecls:false)
 
+   % traverses the tree and assigns Y registers to variables with no Y index yet
    YAssignerRecord = fs( fVar : fun {$ AST=fVar(Sym Pos) Params F}
-                                    {Show 'Current index = '#@(Params.currentIndex)}
                                     if {Sym get(yindex $)}==nil then
                                        {Sym set(yindex @(Params.currentIndex))}
                                        (Params.currentIndex):=@(Params.currentIndex)+1
@@ -188,59 +185,35 @@ define
                         )
    YAssignerParams = params(currentIndex:{NewCell 0})
 
-   % traverses the tree and assigns Y registers to variables with no Y index yet
-   fun {YAssigner AST}
-    % initialise index value to 1
-      Index = {NewCell 1}
-      fun {YAssignerInt AST Params}
-         case AST
-         of fVar(Sym _) then
-        %only when we see a variable with no y assigned, assign it
-            if {Sym get(yindex $)}==nil then
-               { Sym set(yindex @Index)}
-               Index:=@Index+1
-            end
-            AST
-         else
-            {DefaultPass YAssignerInt AST Params}
-         end
-      end
-   in
-      {YAssignerInt AST unit}
-   end
-
-   %% generates code to send to assembler
-   fun {CodeGen AST}
-      fun {CodeGenInt AST Params}
-         case AST
-         of fLocal(Decls Body _) then
-            {CodeGenInt Decls {Record.adjoin Params params(indecls: true)}}#' '#{CodeGenInt Body Params}
-         [] fVar(Sym _) then
-            if Params.indecls then
-               'createVar(y('#{Sym get(yindex $)}#'))\n'
-            else
-               'y('#{Sym get(yindex $)}#')'
-            end
-         [] fAnd(First Second ) then
-            {CodeGenInt First Params}#'\n'#{CodeGenInt Second Params}
-         [] fEq(LHS RHS _) then
-            'unify('#{CodeGenInt LHS Params}#' '#{CodeGenInt RHS Params}#')\n'
-         [] fInt(Value _) then
-            'k('#Value#')'
-         else
-            {Show 'missing clause for '#{Label AST}}
-            nil
-         end
-      end
-   in
-      {CodeGenInt AST params(indecls:false)}
-   end
+   GenCodeRecord = fs(  fLocal:  fun {$ AST=fLocal(Decls Body Pos) Params F}
+                                    {F Decls GenCodeRecord {Record.adjoin Params params(indecls: true)}}#' '#{F Body GenCodeRecord Params}
+                                 end
+                        fVar:    fun {$ AST=fVar(Sym Pos) Params F}
+                                    if Params.indecls then
+                                       'createVar(y('#{Sym get(yindex $)}#'))\n'
+                                    else
+                                       'y('#{Sym get(yindex $)}#')'
+                                    end
+                                 end
+                        fAnd:    fun {$ AST=fAnd(First Second) Params F}
+                                    {F First GenCodeRecord Params}#'\n'#{F Second GenCodeRecord Params}
+                                 end
+                        fEq:     fun {$ AST=fEq(LHS RHS _) Params F}
+                                    'unify('#{F LHS GenCodeRecord Params}#' '#{F RHS GenCodeRecord Params}#')\n'
+                                 end
+                        fInt:    fun {$ AST=fInt(Value _) Params F}
+                                    'k('#Value#')'
+                                 end
+                     )
+   GenCodeParams = params(indecls:false)
 
    {System.showInfo '################################################################################'}
    {DumpAST.dumpAST AST}
    {System.showInfo '--------------------------------------------------------------------------------'}
    %{DumpAST.dumpAST {YAssigner {Namer AST.1}}}
    {DumpAST.dumpAST {Pass AST.1 NamerRecord NamerParams}}
+   {System.showInfo '--------------------------------------------------------------------------------'}
+   {System.showInfo {Pass {Pass {Pass AST.1 NamerRecord NamerParams} YAssignerRecord YAssignerParams } GenCodeRecord GenCodeParams}}
    {System.showInfo '################################################################################'}
-   {System.showInfo {CodeGen {Pass {Pass AST.1 NamerRecord NamerParams} YAssignerRecord YAssignerParams }}}
+
 end
