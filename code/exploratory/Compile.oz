@@ -32,7 +32,7 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-   Code = 'local  A in A=3.2   local A in A=6 end  A=7 end'
+   Code = 'local  A B=C in A=3.2   local A in A=6 end  A=7 end'
 
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
@@ -140,6 +140,24 @@ define
          AST
       end
    end
+
+   fun {PV AST}
+      case AST
+      of fLocal(Decls Body _) then
+         % {PV Body} - {PV Decls}
+         {Record.substractList{PV Body}  {Record.arity {PV Decls}}}
+      [] fVar(Name _) then
+         pv(Name:unit)
+      [] fAnd(First Second _) then
+         %{PV First} + {PV Second}
+         {Record.adjoin {PV First}  {PV Second}}
+      [] fEq(LHS RHS _) then
+         {PV LHS}
+      else
+         pv()
+      end
+   end
+
 
    % The namer replaces variable names with a Symbol instance, all identical
    % variable instances referencing the same symbol.
