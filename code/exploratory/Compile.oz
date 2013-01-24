@@ -32,7 +32,7 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-   Code = 'local  A in A=3   local A in A=6 end  A=7 end'
+   Code = 'local  A C=D in A=3.2   local A in A=6 end  A=7 end'
 
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
@@ -148,6 +148,9 @@ define
    % Params is a record with 2 features:
    %   env = mapping of var names to symbols built in parents
    %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
+
+   % Declare function to change fInt, fFloat, fAtom to fConst
+   ToConst
    NamerRecord=fs(fLocal:  fun {$ AST=fLocal(Decl Body Pos) Params F}
                               Res
                            in
@@ -160,6 +163,22 @@ define
                               {Params.env restore()}
                               Res
                            end
+                  fEq:  fun {$ AST=fEq(LHS RHS Pos) Params F}
+                           if Params.indecls then
+                              % in declarations, only decend in the LHS because only the LHS variables are declared
+                              fEq(
+                                 {F LHS NamerRecord Params}
+                                 RHS
+                                 Pos
+                              )
+                           else
+                              fEq(
+                                 {F LHS NamerRecord Params}
+                                 {F RHS NamerRecord Params}
+                                 Pos
+                              )
+                           end
+                        end
                   fVar: fun {$ AST=fVar(Name Pos) Params F}
                            Sym
                         in
@@ -168,14 +187,22 @@ define
                            else
                               Sym={Params.env getSymbol(Name $)}
                            end
-                           fVar( Sym Pos)
+                           fSym( Sym Pos)
                         end
+                  fInt: ToConst=fun {$ AST Params F}
+                           % no pattern matching in formal argument to be able to reuse this function with multiple record labels
+                           fConst(AST.1 AST.2)
+                        end
+                  fFloat: ToConst
+                  fAtom:  ToConst
+
                   )
 
    NamerParams =  params(env:{New Environment init()} indecls:false)
 
    % traverses the tree and assigns Y registers to variables with no Y index yet
-   YAssignerRecord = fs( fVar : fun {$ AST=fVar(Sym Pos) Params F}
+   YAssignerRecord = fs(
+                           fSym : fun {$ AST=fSym(Sym Pos) Params F}
                                     if {Sym get(yindex $)}==nil then
                                        {Sym set(yindex @(Params.currentIndex))}
                                        (Params.currentIndex):=@(Params.currentIndex)+1
@@ -188,12 +215,16 @@ define
    GenCodeRecord = fs(  fLocal:  fun {$ AST=fLocal(Decls Body Pos) Params F}
                                     {F Decls GenCodeRecord {Record.adjoin Params params(indecls: true)}}#' '#{F Body GenCodeRecord Params}
                                  end
-                        fVar:    fun {$ AST=fVar(Sym Pos) Params F}
+                        fSym:    fun {$ AST=fSym(Sym Pos) Params F}
                                     if Params.indecls then
                                        'createVar(y('#{Sym get(yindex $)}#'))\n'
                                     else
                                        'y('#{Sym get(yindex $)}#')'
                                     end
+                                 end
+                        fVar:    fun {$ AST=fVar(Name Pos) Params F}
+                                 % all fVar we get here are globals, as the YAssigner should have replaced locals with fSym
+                                    'g(??)'
                                  end
                         fAnd:    fun {$ AST=fAnd(First Second) Params F}
                                     {F First GenCodeRecord Params}#'\n'#{F Second GenCodeRecord Params}
@@ -201,7 +232,7 @@ define
                         fEq:     fun {$ AST=fEq(LHS RHS _) Params F}
                                     'unify('#{F LHS GenCodeRecord Params}#' '#{F RHS GenCodeRecord Params}#')\n'
                                  end
-                        fInt:    fun {$ AST=fInt(Value _) Params F}
+                        fConst:    fun {$ AST=fConst(Value _) Params F}
                                     'k('#Value#')'
                                  end
                      )
