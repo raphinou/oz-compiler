@@ -7,36 +7,15 @@ import
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
-   DumpAST at './DumpAST.ozf'
-   Debug at 'x-oz://boot/Debug'
+export
+   pass:Pass
+   namer: Namer
+   yAssigner: YAssigner
+   genCode: GenCode
+   declsFlattener: DeclsFlattener
+   pv: PV
 define
-   {Debug.setRaiseOnBlock {Thread.this} true}
 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  % Boilerplate code for the parser
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-   PrivateNarratorO
-   NarratorO = {New Narrator.'class' init(?PrivateNarratorO)}
-   ListenerO = {New ErrorListener.'class' init(NarratorO)}
-
-   fun {GetSwitch Switch}
-      false
-   end
-
-   EnvDictionary = {NewDictionary}
-   {Dictionary.put EnvDictionary 'Show' Show}
-
-  %--------------------------------------------------------------------------------
-  % The code we work on
-  %--------------------------------------------------------------------------------
-  %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-   Code = 'local  A B=C in A=3.2   local A in A=6 end  A=7 end'
-
-
-   AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
-          GetSwitch EnvDictionary}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Support classes
@@ -93,6 +72,9 @@ define
       meth getSymbol(Name ?R)
          R={Dictionary.get @dict Name}
       end
+      meth hasSymbol(Name ?R)
+        {Dictionary.member @dict Name R}
+      end
       meth setSymbol(Name Pos ?NewSymbol)
          NewSymbol = { New Symbol init(Name Pos)}
          {Dictionary.put @dict Name NewSymbol}
@@ -109,19 +91,6 @@ define
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Actual work happening
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-  % This is the function to use for default handling of an AST.
-  % Eg, the namer only has to do specific work on fLocal and fVar,
-  % for which it has specific code. But for all other labels, it
-  % just needs to recursively call itself on all features, which
-  % is easily done with this function.
-   fun {DefaultPass F AST Params}
-      if {Record.is AST} then
-         {Record.map AST fun {$ I} {F I Params} end}
-      else
-         AST
-      end
-   end
 
    % Will apply the function F under the feature {Label AST} in FsR. FsR has label fs.
    % This function F should take as arguments:
@@ -141,23 +110,66 @@ define
       end
    end
 
+   % see http://www.mozart-oz.org/documentation/notation/node6.html
    fun {PV AST}
       case AST
       of fLocal(Decls Body _) then
          % {PV Body} - {PV Decls}
-         {Record.substractList{PV Body}  {Record.arity {PV Decls}}}
+         {Show fLocal}
+         {Show 'fLocal returns'#{Record.subtractList{PV Body}  {Record.arity {PV Decls}}}}
+         {Record.subtractList{PV Body}  {Record.arity {PV Decls}}}
       [] fVar(Name _) then
+         {Show fVar#' '#Name}
          pv(Name:unit)
-      [] fAnd(First Second _) then
+      [] fAnd(First Second ) then
          %{PV First} + {PV Second}
+         {Show fAnd}
          {Record.adjoin {PV First}  {PV Second}}
       [] fEq(LHS RHS _) then
-         {PV LHS}
+         {Show fEq}
+         {Record.adjoin {PV LHS}  {PV RHS}}
       else
+         {Show 'else'}
+         {Show AST}
          pv()
       end
    end
 
+
+
+   % Leaves only declarations in the first feature of fLocal and moves all code
+   % to the second feature
+   DeclsFlattenerRecord =  fs(
+                        fLocal:  fun {$ fLocal(Decl Body Pos) Params F}
+                                    Acc=params(acc:{NewCell nil})
+                                    FinalAcc
+                                    NewDecls
+                                    NewBody
+                                    Res
+                                 in
+                                    % this call will collect in Acc.acc all code to add to the body
+                                    NewDecls={F Decl DeclsFlattenerRecord Acc}
+                                    % list from which we'll build the fAnds.
+                                    % The original Body is the last part of the body's code
+                                    FinalAcc=Body|@(Acc.acc)
+                                    % buidl the fAnd records
+                                    NewBody={List.foldL FinalAcc.2 fun {$ Acc I} fAnd(I Acc) end FinalAcc.1}
+                                    % Put all transformed parts in the new fLocal
+                                    Res = fLocal(
+                                       NewDecls
+                                       NewBody
+                                       Pos
+                                    )
+                                 end
+                        fEq:     fun {$ AST=fEq(LHS RHS Pos) Params F}
+                                    (Params.acc):= AST|@(Params.acc)
+                                    {F LHS DeclsFlattenerRecord Params}
+                                 end
+                     )
+   DeclsFlattenerParams = nil
+   fun {DeclsFlattener AST}
+      {Pass AST DeclsFlattenerRecord DeclsFlattenerParams}
+   end
 
    % The namer replaces variable names with a Symbol instance, all identical
    % variable instances referencing the same symbol.
@@ -169,7 +181,8 @@ define
 
    % Declare function to change fInt, fFloat, fAtom to fConst
    ToConst
-   NamerRecord=fs(fLocal:  fun {$ AST=fLocal(Decl Body Pos) Params F}
+   NamerRecord=fs(
+                  fLocal:  fun {$ fLocal(Decl Body Pos) Params F}
                               Res
                            in
                               {Params.env backup()}
@@ -181,7 +194,7 @@ define
                               {Params.env restore()}
                               Res
                            end
-                  fEq:  fun {$ AST=fEq(LHS RHS Pos) Params F}
+                  fEq:  fun {$ fEq(LHS RHS Pos) Params F}
                            if Params.indecls then
                               % in declarations, only decend in the LHS because only the LHS variables are declared
                               fEq(
@@ -201,11 +214,18 @@ define
                            Sym
                         in
                            if Params.indecls then
+                              % assign symbol in declarations
                               Sym={Params.env setSymbol(Name Pos $)}
-                           else
+                              fSym( Sym Pos)
+                           elseif {Params.env hasSymbol(Name $)} then
+                              % if a symbol exists for this variable, use it as
+                              % is it a local variable
                               Sym={Params.env getSymbol(Name $)}
+                              fSym( Sym Pos)
+                           else
+                              % this variable has no symbol associated, it must be a global
+                              AST
                            end
-                           fSym( Sym Pos)
                         end
                   fInt: ToConst=fun {$ AST Params F}
                            % no pattern matching in formal argument to be able to reuse this function with multiple record labels
@@ -218,9 +238,13 @@ define
 
    NamerParams =  params(env:{New Environment init()} indecls:false)
 
+   fun {Namer AST}
+     {Pass AST NamerRecord NamerParams}
+   end
+
    % traverses the tree and assigns Y registers to variables with no Y index yet
    YAssignerRecord = fs(
-                           fSym : fun {$ AST=fSym(Sym Pos) Params F}
+                           fSym : fun {$ AST=fSym(Sym _) Params F}
                                     if {Sym get(yindex $)}==nil then
                                        {Sym set(yindex @(Params.currentIndex))}
                                        (Params.currentIndex):=@(Params.currentIndex)+1
@@ -230,41 +254,40 @@ define
                         )
    YAssignerParams = params(currentIndex:{NewCell 0})
 
+   fun {YAssigner AST}
+      {Pass AST YAssignerRecord YAssignerParams}
+   end
+
    GenCodeRecord = fs(
-                        fLocal:  fun {$ AST=fLocal(Decls Body Pos) Params F}
+                        fLocal:  fun {$ fLocal(Decls Body _) Params F}
                                     [ {F Decls GenCodeRecord {Record.adjoin Params params(indecls: true)}} {F Body GenCodeRecord Params}]
                                  end
-                        fSym:    fun {$ AST=fSym(Sym Pos) Params F}
+                        fSym:    fun {$ fSym(Sym _) Params F}
                                     if Params.indecls then
                                        createVar(y({Sym get(yindex $)}))
                                     else
                                        y({Sym get(yindex $)})
                                     end
                                  end
-                        fVar:    fun {$ AST=fVar(Name Pos) Params F}
+                        fVar:    fun {$ fVar(Name _) Params F}
                                  % all fVar we get here are globals, as the YAssigner should have replaced locals with fSym
                                     g(unknown)
                                  end
-                        fAnd:    fun {$ AST=fAnd(First Second) Params F}
+                        fAnd:    fun {$ fAnd(First Second) Params F}
                                     [{F First GenCodeRecord Params} {F Second GenCodeRecord Params}]
                                  end
-                        fEq:     fun {$ AST=fEq(LHS RHS _) Params F}
+                        fEq:     fun {$ fEq(LHS RHS _) Params F}
                                     unify({F LHS GenCodeRecord Params} {F RHS GenCodeRecord Params})
                                  end
-                        fConst:    fun {$ AST=fConst(Value _) Params F}
+                        fConst:    fun {$ fConst(Value _) Params F}
                                     k(Value)
                                  end
                      )
    GenCodeParams = params(indecls:false opCodes:{NewCell nil})
 
-   {System.showInfo '################################################################################'}
-   {DumpAST.dumpAST AST}
-   {System.showInfo '--------------------------------------------------------------------------------'}
-   %{DumpAST.dumpAST {YAssigner {Namer AST.1}}}
-   {DumpAST.dumpAST {Pass AST.1 NamerRecord NamerParams}}
-   {System.showInfo '--------------------------------------------------------------------------------'}
-   OpCodes = {List.flatten {Pass {Pass {Pass AST.1 NamerRecord NamerParams} YAssignerRecord YAssignerParams } GenCodeRecord GenCodeParams}}
-   {ForAll OpCodes Show}
-   {System.showInfo '################################################################################'}
+   fun {GenCode AST}
+      {List.flatten {Pass AST GenCodeRecord GenCodeParams}}
+   end
+
 
 end

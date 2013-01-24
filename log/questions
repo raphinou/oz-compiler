@@ -4,3 +4,18 @@
 - discussion sur les listes. Cf gencode qui a besoin d'un flatten
    {Append [1 2] 3|4 }    => 1|2|3|4     ==?
    {Append [1 2] 3|4|nil} => 1|2|3|4|nil
+
+- http://www.mozart-oz.org/documentation/notation/node6.html : 
+  PV: difference entre expression et statement? 
+  E = ... -> PV(E)
+  E1=E2 => PV1 + PV2
+
+  est-ce que PV est à utiliser dans des cas comme 
+   local
+      X|Xr=L
+   in
+  mais pas dans
+   local
+     B={Compute blabla}
+   in
+  ?
