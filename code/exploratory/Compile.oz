@@ -32,7 +32,7 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-   Code = 'local  A C=D in A=3.2   local A in A=6 end  A=7 end'
+   Code = 'local  A in A=3.2   local A in A=6 end  A=7 end'
 
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
@@ -212,31 +212,32 @@ define
                         )
    YAssignerParams = params(currentIndex:{NewCell 0})
 
-   GenCodeRecord = fs(  fLocal:  fun {$ AST=fLocal(Decls Body Pos) Params F}
-                                    {F Decls GenCodeRecord {Record.adjoin Params params(indecls: true)}}#' '#{F Body GenCodeRecord Params}
+   GenCodeRecord = fs(
+                        fLocal:  fun {$ AST=fLocal(Decls Body Pos) Params F}
+                                    [ {F Decls GenCodeRecord {Record.adjoin Params params(indecls: true)}} {F Body GenCodeRecord Params}]
                                  end
                         fSym:    fun {$ AST=fSym(Sym Pos) Params F}
                                     if Params.indecls then
-                                       'createVar(y('#{Sym get(yindex $)}#'))\n'
+                                       createVar(y({Sym get(yindex $)}))
                                     else
-                                       'y('#{Sym get(yindex $)}#')'
+                                       y({Sym get(yindex $)})
                                     end
                                  end
                         fVar:    fun {$ AST=fVar(Name Pos) Params F}
                                  % all fVar we get here are globals, as the YAssigner should have replaced locals with fSym
-                                    'g(??)'
+                                    g(unknown)
                                  end
                         fAnd:    fun {$ AST=fAnd(First Second) Params F}
-                                    {F First GenCodeRecord Params}#'\n'#{F Second GenCodeRecord Params}
+                                    [{F First GenCodeRecord Params} {F Second GenCodeRecord Params}]
                                  end
                         fEq:     fun {$ AST=fEq(LHS RHS _) Params F}
-                                    'unify('#{F LHS GenCodeRecord Params}#' '#{F RHS GenCodeRecord Params}#')\n'
+                                    unify({F LHS GenCodeRecord Params} {F RHS GenCodeRecord Params})
                                  end
                         fConst:    fun {$ AST=fConst(Value _) Params F}
-                                    'k('#Value#')'
+                                    k(Value)
                                  end
                      )
-   GenCodeParams = params(indecls:false)
+   GenCodeParams = params(indecls:false opCodes:{NewCell nil})
 
    {System.showInfo '################################################################################'}
    {DumpAST.dumpAST AST}
@@ -244,7 +245,8 @@ define
    %{DumpAST.dumpAST {YAssigner {Namer AST.1}}}
    {DumpAST.dumpAST {Pass AST.1 NamerRecord NamerParams}}
    {System.showInfo '--------------------------------------------------------------------------------'}
-   {System.showInfo {Pass {Pass {Pass AST.1 NamerRecord NamerParams} YAssignerRecord YAssignerParams } GenCodeRecord GenCodeParams}}
+   OpCodes = {List.flatten {Pass {Pass {Pass AST.1 NamerRecord NamerParams} YAssignerRecord YAssignerParams } GenCodeRecord GenCodeParams}}
+   {ForAll OpCodes Show}
    {System.showInfo '################################################################################'}
 
 end
