@@ -30,7 +30,7 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-   Code = 'local  A B=C in A=3.2   local A in A=6 end  A=7 end'
+   Code = 'local  A B=3 in A=3.2   local A in A=6 end  A=7 end'
 
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
@@ -42,11 +42,26 @@ define
 %   {System.showInfo '--------------------------------------------------------------------------------'}
 %   %{DumpAST.dumpAST {YAssigner {Namer AST.1}}}
 %   {DumpAST.dumpAST {Compile.namer AST.1 }}
+%   {System.showInfo '--------------------------------------------------------------------------------'}
+%   {Show {Compile.yAssigner {Compile.namer {Compile.declsFlattener AST.1} } } }
    {System.showInfo '--------------------------------------------------------------------------------'}
-   {Show {Compile.yAssigner {Compile.namer {Compile.declsFlattener AST.1} } } }
-   {System.showInfo '--------------------------------------------------------------------------------'}
-   OpCodes = {Compile.genCode {Compile.yAssigner {Compile.namer {Compile.declsFlattener AST.1} } } }
+   OpCodes = {Compile.genCode {Compile.namer {Compile.declsFlattener AST.1} } }
    {ForAll OpCodes Show}
+
+   Arity = 0
+   PrintName = 'Q'
+   DebugData = d(file:'Truc.oz' line:32 column:3)
+   Switches = switches
+
+   CodeArea VS
+   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
+   {Wait VS}
+   {System.showInfo VS}
+       % allocateY(3)
+       % return
+   Abs = {CompilerSupport.newAbstraction CodeArea [6]}
+   {Abs}
+
 %   {DumpAST.dumpAST AST}
    {System.showInfo '################################################################################'}
 %   {DumpAST.dumpAST {Compile.declsFlattener AST}}

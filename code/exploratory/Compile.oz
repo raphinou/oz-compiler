@@ -10,7 +10,6 @@ import
 export
    pass:Pass
    namer: Namer
-   yAssigner: YAssigner
    genCode: GenCode
    declsFlattener: DeclsFlattener
    pv: PV
@@ -242,51 +241,39 @@ define
      {Pass AST NamerRecord NamerParams}
    end
 
-   % traverses the tree and assigns Y registers to variables with no Y index yet
-   YAssignerRecord = fs(
-                           fSym : fun {$ AST=fSym(Sym _) Params F}
-                                    if {Sym get(yindex $)}==nil then
-                                       {Sym set(yindex @(Params.currentIndex))}
-                                       (Params.currentIndex):=@(Params.currentIndex)+1
-                                    end
-                                    AST
-                                 end
-                        )
-   YAssignerParams = params(currentIndex:{NewCell 0})
-
-   fun {YAssigner AST}
-      {Pass AST YAssignerRecord YAssignerParams}
-   end
-
-   GenCodeRecord = fs(
-                        fLocal:  fun {$ fLocal(Decls Body _) Params F}
-                                    [ {F Decls GenCodeRecord {Record.adjoin Params params(indecls: true)}} {F Body GenCodeRecord Params}]
-                                 end
-                        fSym:    fun {$ fSym(Sym _) Params F}
-                                    if Params.indecls then
-                                       createVar(y({Sym get(yindex $)}))
-                                    else
-                                       y({Sym get(yindex $)})
-                                    end
-                                 end
-                        fVar:    fun {$ fVar(Name _) Params F}
-                                 % all fVar we get here are globals, as the YAssigner should have replaced locals with fSym
-                                    g(unknown)
-                                 end
-                        fAnd:    fun {$ fAnd(First Second) Params F}
-                                    [{F First GenCodeRecord Params} {F Second GenCodeRecord Params}]
-                                 end
-                        fEq:     fun {$ fEq(LHS RHS _) Params F}
-                                    unify({F LHS GenCodeRecord Params} {F RHS GenCodeRecord Params})
-                                 end
-                        fConst:    fun {$ fConst(Value _) Params F}
-                                    k(Value)
-                                 end
-                     )
-   GenCodeParams = params(indecls:false opCodes:{NewCell nil})
 
    fun {GenCode AST}
-      {List.flatten {Pass AST GenCodeRecord GenCodeParams}}
+      fun {GenCodeInt AST Params}
+         F = GenCodeInt
+      in
+         case AST
+         of fLocal(Decls Body _) then
+            [ {F Decls  {Record.adjoin Params params(indecls: true)}} {F Body  Params}]
+         [] fSym(Sym _) then
+            if Params.indecls then
+               if {Sym get(yindex $)}==nil then
+                  {Sym set(yindex @(Params.currentIndex))}
+                  (Params.currentIndex):=@(Params.currentIndex)+1
+               end
+               createVar(y({Sym get(yindex $)}))
+            else
+               y({Sym get(yindex $)})
+            end
+         [] fVar(Name _) then
+            g(unknown)
+         [] fAnd(First Second) then
+            [{F First  Params} {F Second  Params}]
+         [] fEq(LHS RHS _) then
+            unify({F LHS  Params} {F RHS  Params})
+         [] fConst(Value _) then
+            k(Value)
+         end
+      end
+      InitialParams = params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0})
+      OpCodes
+   in
+      OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} [deallocateY() 'return'()]}
+      allocateY(@(InitialParams.currentIndex))|OpCodes
    end
 
 

@@ -129,8 +129,42 @@ end
 V={New A init}
 {Show V.f} 
 
-- J'ai du faire un flatten de list. Une idée de piste? append prend 2 list et retourne la concaténation des deux. Je fais un test isList et ne crée une liste que si j'ai un element isolé....
+- si on remplace les fVar par des fSym pour les locales, peut-on en conclure que quand on rencontre un fVar dans le codegen, il s'agit forcément d'une globale?
+A: non, toutes les vars doivent etre remplacée par des sym. Au sommet, il y a la top level abstraction, et eventuellement l'environnement de base.
 
-- namer remplace les noms des vars par un symbole, et fait un mapping dans le local ou l'abstraction?
+- ou est definie la top abstrction dans scala?
+A: dans symtab/Program.scala
 
-- flattener fait... ?
+
+- decls flattener: si LHS est une expression, appeller PV
+
+- pour déterminer si on a une expression ou un statement, partir du haut.
+expressions et statement subiront souvent des transformations différentes -> distinguer au niveau des fonctions appellées aussi.
+
+- le namer peut-il se contenter de parcourir les declarations pour l'assignation de symbole au variable si ceci se fait apres la 'normalisation' (cad qd "local in" ne contient que des declaration).
+oui
+
+- meme question pour l'assignement des Y registers
+oui
+
+-gencode ne comprends que des statements élémentaires. par ex scala a que generate (statement)
+
+- http://www.mozart-oz.org/documentation/notation/node6.html : 
+  PV: difference entre expression et statement? 
+  E = ... -> PV(E)
+  E1=E2 => PV1 + PV2
+
+  est-ce que PV est à utiliser dans des cas comme 
+   local
+      X|Xr=L
+   in
+  mais pas dans
+   local
+     B={Compute blabla}
+   in
+  ?
+
+- discussion sur les listes. Cf gencode qui a besoin d'un flatten
+   {Append [1 2] 3|4 }    => 1|2|3|4     == brol
+   {Append [1 2] 3|4|nil} => 1|2|3|4|nil
+

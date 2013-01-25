@@ -1,21 +1,4 @@
-- le namer peut-il se contenter de parcourir les declarations pour l'assignation de symbole au variable si ceci se fait apres la 'normalisation' (cad qd "local in" ne contient que des declaration).
-- meme question pour l'assignement des Y registers
-- si on remplace les fVar par des fSym pour les locales, peut-on en conclure que quand on rencontre un fVar dans le codegen, il s'agit forcément d'une globale?
-- discussion sur les listes. Cf gencode qui a besoin d'un flatten
-   {Append [1 2] 3|4 }    => 1|2|3|4     ==?
-   {Append [1 2] 3|4|nil} => 1|2|3|4|nil
+- au sommet, statement avec 0 G, qui donnera une proc avec 0 argument, juste le BaseEnv (cad on peut les considérer comme constante). le compiler
 
-- http://www.mozart-oz.org/documentation/notation/node6.html : 
-  PV: difference entre expression et statement? 
-  E = ... -> PV(E)
-  E1=E2 => PV1 + PV2
-
-  est-ce que PV est à utiliser dans des cas comme 
-   local
-      X|Xr=L
-   in
-  mais pas dans
-   local
-     B={Compute blabla}
-   in
-  ?
+- {CompilerSupport.newAbstraction CodeArea [6]} 
+ -> [6] == ?
