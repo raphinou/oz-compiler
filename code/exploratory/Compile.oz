@@ -8,7 +8,6 @@ import
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
 export
-   pass:Pass
    namer: Namer
    genCode: GenCode
    declsFlattener: DeclsFlattener
@@ -91,24 +90,18 @@ define
   % Actual work happening
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-   % Will apply the function F under the feature {Label AST} in FsR. FsR has label fs.
-   % This function F should take as arguments:
-   %  - the record it will work on (AST)
-   %  - a parameters record
-   %  - a function, which will be Pass itself. The goal is that Pass is called on the features of AST by F.
-   % FsR also has a feature params, which is the initial parameters to use
-   fun {Pass AST FsR Params}
-      L
-   in
-      if {Record.is AST} andthen {List.member L={Label AST} {Record.arity FsR}} then
-         {FsR.L  AST Params Pass}
-      elseif {Record.is AST} then
-         {Record.map AST fun {$ I} {Pass I FsR Params} end}
+  % This is the function to use for default handling of an AST.
+  % Eg, the namer only has to do specific work on fLocal and fVar,
+  % for which it has specific code. But for all other labels, it
+  % just needs to recursively call itself on all features, which
+  % is easily done with this function.
+   fun {DefaultPass AST F Params}
+      if {Record.is AST} then
+         {Record.map AST fun {$ I} {F I Params} end}
       else
          AST
       end
    end
-
    % see http://www.mozart-oz.org/documentation/notation/node6.html
    fun {PV AST}
       case AST
@@ -138,37 +131,54 @@ define
 
    % Leaves only declarations in the first feature of fLocal and moves all code
    % to the second feature
-   DeclsFlattenerRecord =  fs(
-                        fLocal:  fun {$ fLocal(Decl Body Pos) Params F}
-                                    Acc=params(acc:{NewCell nil})
-                                    FinalAcc
-                                    NewDecls
-                                    NewBody
-                                    Res
-                                 in
-                                    % this call will collect in Acc.acc all code to add to the body
-                                    NewDecls={F Decl DeclsFlattenerRecord Acc}
-                                    % list from which we'll build the fAnds.
-                                    % The original Body is the last part of the body's code
-                                    FinalAcc=Body|@(Acc.acc)
-                                    % buidl the fAnd records
-                                    NewBody={List.foldL FinalAcc.2 fun {$ Acc I} fAnd(I Acc) end FinalAcc.1}
-                                    % Put all transformed parts in the new fLocal
-                                    Res = fLocal(
-                                       NewDecls
-                                       NewBody
-                                       Pos
-                                    )
-                                 end
-                        fEq:     fun {$ AST=fEq(LHS RHS Pos) Params F}
-                                    (Params.acc):= AST|@(Params.acc)
-                                    {F LHS DeclsFlattenerRecord Params}
-                                 end
-                     )
-   DeclsFlattenerParams = nil
+
+   %#######################
    fun {DeclsFlattener AST}
-      {Pass AST DeclsFlattenerRecord DeclsFlattenerParams}
+   %#######################
+
+      F = DeclsFlattenerInt
+      fun {DeclsFlattenerInt AST Params}
+         case AST
+         %------------------------
+         of fLocal(Decls Body Pos) then
+         %------------------------
+
+            Acc=params(acc:{NewCell nil})
+            FinalAcc
+            NewDecls
+            NewBody
+            Res
+         in
+            % this call will collect in Acc.acc all code to add to the body
+            NewDecls={F Decls  Acc}
+            % list from which we'll build the fAnds.
+            % The original Body is the last part of the body's code
+            FinalAcc=Body|@(Acc.acc)
+            % buidl the fAnd records
+            NewBody={List.foldL FinalAcc.2 fun {$ A I} fAnd(I A) end FinalAcc.1}
+            % Put all transformed parts in the new fLocal
+            Res = fLocal(
+               NewDecls
+               NewBody
+               Pos
+            )
+
+         %------------------
+         [] fEq(LHS RHS Pos) then
+         %------------------
+            (Params.acc):= AST|@(Params.acc)
+            {F LHS  Params}
+
+         %---
+         else
+         %---
+            {DefaultPass AST F Params}
+         end
+      end
+   in
+      {DeclsFlattenerInt AST unit}
    end
+
 
    % The namer replaces variable names with a Symbol instance, all identical
    % variable instances referencing the same symbol.
@@ -178,101 +188,152 @@ define
    %   env = mapping of var names to symbols built in parents
    %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
 
-   % Declare function to change fInt, fFloat, fAtom to fConst
-   ToConst
-   NamerRecord=fs(
-                  fLocal:  fun {$ fLocal(Decl Body Pos) Params F}
-                              Res
-                           in
-                              {Params.env backup()}
-                              Res=fLocal(
-                                 {F Decl NamerRecord {Record.adjoin Params params(indecls:true)}}
-                                 {F Body NamerRecord {Record.adjoin Params params(indecls:false)}}
-                                 Pos
-                                 )
-                              {Params.env restore()}
-                              Res
-                           end
-                  fEq:  fun {$ fEq(LHS RHS Pos) Params F}
-                           if Params.indecls then
-                              % in declarations, only decend in the LHS because only the LHS variables are declared
-                              fEq(
-                                 {F LHS NamerRecord Params}
-                                 RHS
-                                 Pos
-                              )
-                           else
-                              fEq(
-                                 {F LHS NamerRecord Params}
-                                 {F RHS NamerRecord Params}
-                                 Pos
-                              )
-                           end
-                        end
-                  fVar: fun {$ AST=fVar(Name Pos) Params F}
-                           Sym
-                        in
-                           if Params.indecls then
-                              % assign symbol in declarations
-                              Sym={Params.env setSymbol(Name Pos $)}
-                              fSym( Sym Pos)
-                           elseif {Params.env hasSymbol(Name $)} then
-                              % if a symbol exists for this variable, use it as
-                              % is it a local variable
-                              Sym={Params.env getSymbol(Name $)}
-                              fSym( Sym Pos)
-                           else
-                              % this variable has no symbol associated, it must be a global
-                              AST
-                           end
-                        end
-                  fInt: ToConst=fun {$ AST Params F}
-                           % no pattern matching in formal argument to be able to reuse this function with multiple record labels
-                           fConst(AST.1 AST.2)
-                        end
-                  fFloat: ToConst
-                  fAtom:  ToConst
 
-                  )
-
-   NamerParams =  params(env:{New Environment init()} indecls:false)
-
+   %##############
    fun {Namer AST}
-     {Pass AST NamerRecord NamerParams}
+   %##############
+      F=NamerInt
+      fun {NamerInt AST Params}
+         {Show 'in namer int'}
+         case AST
+         %-----------------------
+         of fLocal(Decl Body Pos) then
+         %-----------------------
+            Res
+         in
+            {Show fLocal}
+            {Params.env backup()}
+            Res=fLocal(
+               {F Decl  {Record.adjoin Params params(indecls:true)}}
+               {F Body  {Record.adjoin Params params(indecls:false)}}
+               Pos
+               )
+            {Params.env restore()}
+            Res
+
+         %------------------
+         [] fEq(LHS RHS Pos) then
+         %------------------
+            {Show fEq}
+            if Params.indecls then
+               % in declarations, only decend in the LHS because only the LHS variables are declared
+               fEq(
+                  {F LHS  Params}
+                  RHS
+                  Pos
+               )
+            else
+               fEq(
+                  {F LHS  Params}
+                  {F RHS  Params}
+                  Pos
+               )
+            end
+
+         %----------------
+         [] fVar(Name Pos) then
+         %----------------
+            Sym
+         in
+            {Show fVar}
+            if Params.indecls then
+               % assign symbol in declarations
+               Sym={Params.env setSymbol(Name Pos $)}
+               fSym( Sym Pos)
+            elseif {Params.env hasSymbol(Name $)} then
+               % if a symbol exists for this variable, use it as
+               % is it a local variable
+               Sym={Params.env getSymbol(Name $)}
+               fSym( Sym Pos)
+            else
+               % this variable has no symbol associated, it must be a global
+               AST
+            end
+
+         %-----------
+         [] fInt(V P) then
+         %-----------
+            {Show fInt}
+            fConst(V P)
+
+         %-------------
+         [] fFloat(V P) then
+         %-------------
+            fConst(V P)
+
+         %------------
+         [] fAtom(V P) then
+         %------------
+            fConst(V P)
+
+         %---
+         else
+         %---
+            {DefaultPass AST F Params}
+         end
+      end
+      InitialParams = params(env:{New Environment init()} indecls:false)
+   in
+      {NamerInt AST InitialParams}
    end
 
-
+   %################
    fun {GenCode AST}
+   %################
+
       fun {GenCodeInt AST Params}
          F = GenCodeInt
       in
          case AST
+         %----------------------
          of fLocal(Decls Body _) then
+         %----------------------
             [ {F Decls  {Record.adjoin Params params(indecls: true)}} {F Body  Params}]
+
+         %-------------
          [] fSym(Sym _) then
+         %-------------
+            % In declarations, assign Y register and issue createVar
             if Params.indecls then
+               % assign Y register
                if {Sym get(yindex $)}==nil then
                   {Sym set(yindex @(Params.currentIndex))}
                   (Params.currentIndex):=@(Params.currentIndex)+1
                end
                createVar(y({Sym get(yindex $)}))
+            % In body, use the Y register
             else
                y({Sym get(yindex $)})
             end
+
+         %--------------
          [] fVar(Name _) then
+         %--------------
             g(unknown)
+
+         %--------------------
          [] fAnd(First Second) then
+         %--------------------
             [{F First  Params} {F Second  Params}]
+
+         %----------------
          [] fEq(LHS RHS _) then
+         %----------------
             unify({F LHS  Params} {F RHS  Params})
+
+         %-----------------
          [] fConst(Value _) then
+         %-----------------
             k(Value)
          end
       end
       InitialParams = params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0})
       OpCodes
    in
+      % append deallocateY and return
       OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} [deallocateY() 'return'()]}
+
+      % prefix with allocateY
       allocateY(@(InitialParams.currentIndex))|OpCodes
    end
 

@@ -95,3 +95,21 @@
       {CodeGenInt AST params(indecls:false)}
    end
 
+   % Will apply the function F under the feature {Label AST} in FsR. FsR has label fs.
+   % This function F should take as arguments:
+   %  - the record it will work on (AST)
+   %  - a parameters record
+   %  - a function, which will be Pass itself. The goal is that Pass is called on the features of AST by F.
+   % FsR also has a feature params, which is the initial parameters to use
+   fun {Pass AST FsR Params}
+      L
+   in
+      if {Record.is AST} andthen {List.member L={Label AST} {Record.arity FsR}} then
+         {FsR.L  AST Params Pass}
+      elseif {Record.is AST} then
+         {Record.map AST fun {$ I} {Pass I FsR Params} end}
+      else
+         AST
+      end
+   end
+
