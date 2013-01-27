@@ -1,5 +1,5 @@
-functor 
-export 
+functor
+export
    dumpAST:DumpAST
 import
    System
@@ -12,13 +12,14 @@ define
       else false
       end
    end
-   
+
    fun {IsTrivial V}
       {IsInt V} orelse
       {IsLiteral V} orelse
       {IsFloat V} orelse
       {IsCoord V} orelse
-      {IsObject V}
+      {IsObject V} orelse
+      {IsProcedure V}
    end
 
    fun {IsOneLiner AST}
@@ -36,6 +37,8 @@ define
          {Value.toVirtualString V 1 1}
       elseif {IsObject V} then
          {V toVS($)}
+      elseif {IsProcedure V} then
+         'procedure'
       else
          V
       end
@@ -52,7 +55,7 @@ define
           {Label AST}#'('}#')'
       end
    end
-   
+
    proc {DumpASTEx AST Indent}
       if {IsOneLiner AST} then
          {System.showInfo Indent#{OneLinerToVS AST}}
