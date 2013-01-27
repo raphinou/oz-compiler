@@ -57,3 +57,14 @@ the form pos(file startline startcol file endline endcol).
 The top record is usually a fLocal(), which has then to be implicitely put under an abstraction (function). See symtab/Program.scala line 38. Also see symtab/Abstraction.scala
 
 
+
+Procedure definitions
+---------------------
+le namer doit nommer les parametres formels, ce qui est valable dans le corps de la procédure.
+
+- Pass to replace  fProc vers fDefineProc (genre flattener
+- CodeGen :
+   allocateY
+   copier les formels vers les Y
+   - CodeArea = CodeGenAndAssemble(nom liste_des_formels body)   
+   - issue createAbstraction(k(CodeArea) nbre_de_g destination=y_correspondant_à_p)

@@ -30,7 +30,7 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
-   Code = 'local  A B=3 in A=3.2   local A in A=6 end   end'
+   Code = 'local  A B=3 in A=3.2   local A in A=6 end {Show A}   end'
 
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
@@ -40,7 +40,7 @@ define
    {System.showInfo '################################################################################'}
 
 %   {DumpAST.dumpAST {Compile.namer AST.1 }}
-%   {System.showInfo '--------------------------------------------------------------------------------'}
+   {System.showInfo '--------------------------------------------------------------------------------'}
 
    OpCodes = {Compile.genCode {Compile.namer {Compile.declsFlattener AST.1} } }
    {ForAll OpCodes Show}
@@ -56,7 +56,7 @@ define
    {System.showInfo VS}
    Abs = {CompilerSupport.newAbstraction CodeArea [6]}
    {Abs}
-%
+
    {System.showInfo '################################################################################'}
 
 end

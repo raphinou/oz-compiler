@@ -188,20 +188,20 @@ define
    %   env = mapping of var names to symbols built in parents
    %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
 
+   % FIXME : we add Show manually to the base environment.
+   AugmentedBase={AdjoinAt Base 'Show' Show}
 
    %##############
    fun {Namer AST}
    %##############
       F=NamerInt
       fun {NamerInt AST Params}
-         {Show 'in namer int'}
          case AST
          %-----------------------
          of fLocal(Decl Body Pos) then
          %-----------------------
             Res
          in
-            {Show fLocal}
             {Params.env backup()}
             Res=fLocal(
                {F Decl  {Record.adjoin Params params(indecls:true)}}
@@ -214,7 +214,6 @@ define
          %------------------
          [] fEq(LHS RHS Pos) then
          %------------------
-            {Show fEq}
             if Params.indecls then
                % in declarations, only decend in the LHS because only the LHS variables are declared
                fEq(
@@ -235,7 +234,6 @@ define
          %----------------
             Sym
          in
-            {Show fVar}
             if Params.indecls then
                % assign symbol in declarations
                Sym={Params.env setSymbol(Name Pos $)}
@@ -245,15 +243,21 @@ define
                % is it a local variable
                Sym={Params.env getSymbol(Name $)}
                fSym( Sym Pos)
+            elseif {HasFeature AugmentedBase Name} then
+               % variable from the Base env
+               fConst(AugmentedBase.Name Pos)
+            elseif Name == 'Base' then
+               % the special variable representing the Base env itself
+               fConst(AugmentedBase Pos)
             else
-               % this variable has no symbol associated, it must be a global
+               % this variable is not declared
+               % TODO issue an error
                AST
             end
 
          %-----------
          [] fInt(V P) then
          %-----------
-            {Show fInt}
             fConst(V P)
 
          %-------------
@@ -305,6 +309,18 @@ define
             else
                y({Sym get(yindex $)})
             end
+
+         %---------------
+         [] fApply(Sym L Pos) then
+         %---------------
+            R={NewCell nil}
+         in
+         {Show AST}
+            %L is the arguments list
+            % first move arguments in x registers
+            % FIXME will need to check from which type of register we need to copy!
+            R:={List.mapInd L fun {$ Index AST} {List.append @R move(y({AST.1 get(yindex $)}) x(Index-1))} end  }
+            {List.append @R [call(k(Sym.1) 1)] }
 
          %--------------
          [] fVar(Name _) then
