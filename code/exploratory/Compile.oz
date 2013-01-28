@@ -214,21 +214,22 @@ define
             {Params.env restore()}
             Res
 
-         %------------------
+         %---------------------------------
          [] fProc(Name Args Body Flags Pos) then
-         %------------------
+         %---------------------------------
+            % We need define new symbols for the proc name and the arguments
+            % In both these cases we set procdecl to true
             NewParams={Record.adjoin Params params(procdecl:true)}
-            NewArgs={List.map Args fun {$ I} {F I NewParams} end }
+            %GOrigins is the list of symbols that are used in the procedure
+            %body, but that are globals
          in
-            {Show '#################IN FPROC############################'}
-            {Show newargs}
-            {Show NewArgs}
             fProc(
-            {F Name  NewParams}
-            NewArgs
-            {F Body Params}
-            Flags
-            Pos
+               % The procedure's variable has to be declared explicitely
+               {F Name Params}
+               {List.map Args fun {$ I} {F I NewParams} end }
+               {F Body Params}
+               Flags
+               Pos
             )
 
 
@@ -296,9 +297,9 @@ define
          %---
          else
          %---
-            {Show 'Default pass for next ast'}
-            {Show AST}
-            {Show '..............................................'}
+            %{Show 'Default pass for next ast'}
+            %{Show AST}
+            %{Show '..............................................'}
             {DefaultPass AST F Params}
          end
       end
@@ -307,8 +308,20 @@ define
       {NamerInt AST InitialParams}
    end
 
+   fun { YAssigner Syms}
+      Counter={NewCell 0}
+      proc {YAssignerInt fSym(Sym _)}
+            if {Sym get(yindex $)}==nil then
+               {Sym set(yindex @Counter)}
+               Counter:=@Counter+1
+            end
+      end
+   in
+      {ForAll Syms YAssignerInt}
+      @Counter
+   end
    %################
-   fun {GenCode AST}
+   fun {GenCode AST CallParams}
    %################
 
       fun {GenCodeInt AST Params}
@@ -320,10 +333,49 @@ define
          %----------------------
             [ {F Decls  {Record.adjoin Params params(indecls: true)}} {F Body  Params}]
 
+         %---------------------------------
+         [] fProc(fSym(Sym _) Args Body Flags Pos) then
+         %---------------------------------
+
+            %FIXME: need to add pass to replace fProc by fDefineProc to add GOrigins for globals used in the body
+            %FIXME: the name of the proc can not be available, eg in the case { {GetProc 2} arg1 arg2}
+
+            CA
+            VS
+            NamedBody
+            YCount
+            OpCodes={NewCell nil}
+            NewBody
+            % Number of globals, ie variables comint from parent's environment
+            GlobalsCount = 0
+         in
+            %
+
+            {Show 'will call GenAndAssemble ni fProc case to create CA'}
+            {GenAndAssemble Body Args 'test' d(file:Pos.1 line:Pos.2 column:Pos.3) switches CA VS}
+            {Show 'will append opcodes ni fProc case'}
+
+
+            OpCodes:={List.append @OpCodes  [createAbstractionUnify(k(CA) GlobalsCount  y({Sym get(yindex $)}))]}
+            % not needed here, we create it, we do not call it!
+            %OpCodes:={List.append @OpCodes {List.mapInd Args fun {$ I fSym(Sym _)} move(x(I-1) y({Sym get(yindex $)})) end }}
+            {Show 'will append opcodes ni fProc case'}
+            if GlobalsCount>1 then
+               for Ind in 1..GlobalsCount do
+                  OpCodes:={List.append @OpCodes  [arrayFill(Ind)] }
+               end
+            end
+            @OpCodes
+
+
+
+
          %-------------
          [] fSym(Sym _) then
          %-------------
             % In declarations, assign Y register and issue createVar
+
+
             if Params.indecls then
                % assign Y register
                if {Sym get(yindex $)}==nil then
@@ -337,15 +389,32 @@ define
             end
 
          %---------------
-         [] fApply(Sym L Pos) then
+         [] fApply(Sym Args Pos) then
          %---------------
             R={NewCell nil}
          in
+            {Show 'in fApply'#Params}
+            %if {HasFeature Params procassemble} andthen Params.procassemble then
+            % FIXME CONTINUE : assigner les registres y si on est dans proc assemble
             %L is the arguments list
             % first move arguments in x registers
             % FIXME will need to check from which type of register we need to copy!
-            R:={List.mapInd L fun {$ Index AST} {List.append @R move(y({AST.1 get(yindex $)}) x(Index-1))} end  }
-            {List.append @R [call(k(Sym.1) 1)] }
+            R:={List.mapInd Args fun {$ Index AST}
+                                    case AST
+                                    of fSym(_ _) then
+                                       {List.append @R move(y({AST.1 get(yindex $)}) x(Index-1))}
+                                    [] fConst(V _) then
+                                       {List.append @R move(k(V) x(Index-1))}
+                                    end
+                                 end}
+
+            case Sym
+            of fConst(Const _) then
+               {List.append @R [call(k(Sym.1) {List.length Args})] }
+            [] fSym(Sym _) then
+               {List.append @R [call(y({Sym get(yindex $)}) 1)] }
+            end
+
 
          %--------------
          [] fVar(Name _) then
@@ -368,15 +437,53 @@ define
             k(Value)
          end
       end
-      InitialParams = params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0})
+      InitialParams = {Record.adjoin params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0}) CallParams}
       OpCodes
    in
       % append deallocateY and return
       OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} [deallocateY() 'return'()]}
 
       % prefix with allocateY
-      allocateY(@(InitialParams.currentIndex))|OpCodes
+      %FIXME: keep prefix in Params?
+      if {HasFeature InitialParams prefix} then
+         {List.append [allocateY(@(InitialParams.currentIndex))] {List.append InitialParams.prefix  OpCodes } }
+         %{Show InitialParams.prefix}
+         %allocateY(@(InitialParams.currentIndex))| OpCodes
+      else
+         allocateY(@(InitialParams.currentIndex))| OpCodes
+      end
    end
 
 
+   proc {AssembleAST Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
+      % FIXME
+      PrintName='test'
+   in
+      {Show 'will call NewAssemble'}
+      {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
+   end
+
+   proc {GenAndAssemble AST Args PrintName DebugData Switches ?CodeArea ?VS}
+      %CHECKME
+      OpCodes={NewCell nil}
+      Prefix ={NewCell nil}
+      YCounter
+      Arity = {List.length Args}
+   in
+      {Show 'Will assign Ys'}
+      YCounter={YAssigner Args}
+      if YCounter>0 then
+         {For 0 YCounter-1 1
+            proc {$ I}
+              Prefix:={List.append @Prefix [move(x(I) y({{Nth Args I+1}.1 get(yindex $)}) )]}
+            end}
+      end
+      {Show 'Assigned Ys:'#YCounter}
+      {Show 'Check if all symbols assigned'}
+      {Show 'Will generate opcodes'}
+      OpCodes := {List.append @OpCodes {GenCode AST params(prefix:@Prefix procassemble:true currentIndex:{NewCell YCounter} )}}
+      {ForAll @OpCodes Show}
+      {Show 'will call AssembleAST'}
+      {AssembleAST Arity @OpCodes PrintName DebugData Switches ?CodeArea ?VS}
+   end
 end
