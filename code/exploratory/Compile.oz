@@ -96,7 +96,10 @@ define
   % just needs to recursively call itself on all features, which
   % is easily done with this function.
    fun {DefaultPass AST F Params}
-      if {Record.is AST} then
+      % beware of the order. a record is also a list!
+      if {List.is AST} then
+         {List.map AST fun {$ I} {F I Params} end}
+      elseif {Record.is AST} then
          {Record.map AST fun {$ I} {F I Params} end}
       else
          AST
@@ -212,6 +215,24 @@ define
             Res
 
          %------------------
+         [] fProc(Name Args Body Flags Pos) then
+         %------------------
+            NewParams={Record.adjoin Params params(procdecl:true)}
+            NewArgs={List.map Args fun {$ I} {F I NewParams} end }
+         in
+            {Show '#################IN FPROC############################'}
+            {Show newargs}
+            {Show NewArgs}
+            fProc(
+            {F Name  NewParams}
+            NewArgs
+            {F Body Params}
+            Flags
+            Pos
+            )
+
+
+         %------------------
          [] fEq(LHS RHS Pos) then
          %------------------
             if Params.indecls then
@@ -234,7 +255,8 @@ define
          %----------------
             Sym
          in
-            if Params.indecls then
+            % in declarations or procedure procdecl, assign symbol to variables
+            if Params.indecls orelse ({HasFeature Params procdecl}  andthen Params.procdecl) then
                % assign symbol in declarations
                Sym={Params.env setSymbol(Name Pos $)}
                fSym( Sym Pos)
@@ -252,6 +274,7 @@ define
             else
                % this variable is not declared
                % TODO issue an error
+               %raise unnamedVariable end
                AST
             end
 
@@ -273,6 +296,9 @@ define
          %---
          else
          %---
+            {Show 'Default pass for next ast'}
+            {Show AST}
+            {Show '..............................................'}
             {DefaultPass AST F Params}
          end
       end
@@ -315,7 +341,6 @@ define
          %---------------
             R={NewCell nil}
          in
-         {Show AST}
             %L is the arguments list
             % first move arguments in x registers
             % FIXME will need to check from which type of register we need to copy!
