@@ -11,6 +11,7 @@ export
    namer: Namer
    genCode: GenCode
    declsFlattener: DeclsFlattener
+   globaliser: Globaliser
    pv: PV
 define
 
@@ -33,18 +34,27 @@ define
          name
          pos
          yindex
+         scope
+         type
       meth init(Name Pos)
          name:=Name
          pos:=Pos
          yindex:=nil
+         scope:=unit
+         type:=localscope
       end
       meth toVS(?R)
          pos(File Line Col _ _ _)=@pos
       in
-         R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#"'"
+         R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#"'"
       end
       meth hasYIndex(?B)
          B=(@yindex\=nil)
+      end
+      meth setScopeIfUnset(Scope)
+         if @scope==unit then
+            scope:=Scope
+         end
       end
    end
 
@@ -308,18 +318,76 @@ define
       {NamerInt AST InitialParams}
    end
 
-   fun { YAssigner Syms}
-      Counter={NewCell 0}
-      proc {YAssignerInt fSym(Sym _)}
-            if {Sym get(yindex $)}==nil then
-               {Sym set(yindex @Counter)}
-               Counter:=@Counter+1
-            end
+   fun {Globaliser AST}
+      F = GlobaliserInt
+
+      fun {AssignScope AST ScopeName}
+         case AST
+         of fSym(Sym _) then
+            {Sym setScopeIfUnset(ScopeName)}
+            AST
+         [] fEq(fSym(Sym _) RHS _) then
+            {Sym setScopeIfUnset(ScopeName)}
+            AST
+         else
+            {DefaultPass AST AssignScope ScopeName}
+         end
       end
+
+      fun {IdentifyGlobals AST CurrentScope}
+         case AST
+         of fSym(Sym _) then
+            if {Sym get(scope $)}\=CurrentScope then
+               {Sym set(type global)}
+            end
+            AST
+         else
+            {DefaultPass AST IdentifyGlobals CurrentScope}
+         end
+      end
+
+      fun {GlobaliserInt AST Params}
+         case AST
+
+         %----------------------
+         of fLocal(Decls Body _) then
+         %----------------------
+            % Identify new scope with a new name
+            ScopeName = {NewName}
+         in
+
+            % In declaration : assign current scope's name to declared symbols
+            _={AssignScope Decls ScopeName}
+
+
+            % In body : identify globals which are symbol with a different
+            % scope name than the current one
+            {IdentifyGlobals AST ScopeName}
+
+         %-------------------
+         [] fProc(fSym(Sym _) Args Body Flags Pos) then
+         %-------------------
+            % Identify new scope with a new name
+            ScopeName = {NewName}
+         in
+            % assign current scope's name to formal parameters
+            _={AssignScope Args ScopeName}
+
+            % In body : identify globals which are symbol with a different
+            % scope name than the current one
+            {IdentifyGlobals AST ScopeName}
+
+         %---
+         else
+         %---
+            {DefaultPass AST F unit}
+         end
+      end
+      InitialParams=params
    in
-      {ForAll Syms YAssignerInt}
-      @Counter
+      {GlobaliserInt AST InitialParams}
    end
+
    %################
    fun {GenCode AST CallParams}
    %################
@@ -468,6 +536,18 @@ define
       Prefix ={NewCell nil}
       YCounter
       Arity = {List.length Args}
+      fun { YAssigner Syms}
+         Counter={NewCell 0}
+         proc {YAssignerInt fSym(Sym _)}
+               if {Sym get(yindex $)}==nil then
+                  {Sym set(yindex @Counter)}
+                  Counter:=@Counter+1
+               end
+         end
+   in
+      {ForAll Syms YAssignerInt}
+      @Counter
+   end
    in
       {Show 'Will assign Ys'}
       YCounter={YAssigner Args}

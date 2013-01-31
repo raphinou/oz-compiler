@@ -32,12 +32,14 @@ define
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
    %Code = 'local  A B=3 in A=3.2   local A in A=6 end {Show A}   end'
    Code = ' local
-               A P
+               A P B
             in
                proc {P V}
+                  {Show B}
                   {Show V}
                end
                A = 5
+               B = 7
                {P A}
                {For 1 5 1 P}
             end'
@@ -52,21 +54,23 @@ define
    %{DumpAST.dumpAST AST.1 }
    {DumpAST.dumpAST {Compile.namer AST.1 }}
    {System.showInfo '--------------------------------------------------------------------------------'}
+   {DumpAST.dumpAST {Compile.globaliser {Compile.namer AST.1 }}}
+   {System.showInfo '--------------------------------------------------------------------------------'}
 
-   OpCodes = {Compile.genCode {Compile.namer {Compile.declsFlattener AST.1} } params() }
-   {ForAll OpCodes Show}
-
-   Arity = 0
-   PrintName = 'Q'
-   DebugData = d(file:'Truc.oz' line:32 column:3)
-   Switches = switches
-
-   CodeArea VS
-   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
-   {Wait VS}
-   {System.showInfo VS}
-   Abs = {CompilerSupport.newAbstraction CodeArea [6]}
-   {Abs}
+%   OpCodes = {Compile.genCode {Compile.namer {Compile.declsFlattener AST.1} } params() }
+%   {ForAll OpCodes Show}
+%
+%   Arity = 0
+%   PrintName = 'Q'
+%   DebugData = d(file:'Truc.oz' line:32 column:3)
+%   Switches = switches
+%
+%   CodeArea VS
+%   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
+%   {Wait VS}
+%   {System.showInfo VS}
+%   Abs = {CompilerSupport.newAbstraction CodeArea [6]}
+%   {Abs}
 
    {System.showInfo '################################################################################'}
 
