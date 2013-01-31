@@ -331,6 +331,7 @@ define
          %----------------------
          of fLocal(Decls Body _) then
          %----------------------
+            % Should create all without recursive call
             [ {F Decls  {Record.adjoin Params params(indecls: true)}} {F Body  Params}]
 
          %---------------------------------
@@ -359,6 +360,7 @@ define
             OpCodes:={List.append @OpCodes  [createAbstractionUnify(k(CA) GlobalsCount  y({Sym get(yindex $)}))]}
             % not needed here, we create it, we do not call it!
             %OpCodes:={List.append @OpCodes {List.mapInd Args fun {$ I fSym(Sym _)} move(x(I-1) y({Sym get(yindex $)})) end }}
+            % arrayfill for globals
             {Show 'will append opcodes ni fProc case'}
             if GlobalsCount>1 then
                for Ind in 1..GlobalsCount do
@@ -401,8 +403,8 @@ define
             % FIXME will need to check from which type of register we need to copy!
             R:={List.mapInd Args fun {$ Index AST}
                                     case AST
-                                    of fSym(_ _) then
-                                       {List.append @R move(y({AST.1 get(yindex $)}) x(Index-1))}
+                                    of fSym(S _) then
+                                       {List.append @R move(y({S get(yindex $)}) x(Index-1))}
                                     [] fConst(V _) then
                                        {List.append @R move(k(V) x(Index-1))}
                                     end
@@ -415,12 +417,6 @@ define
                {List.append @R [call(y({Sym get(yindex $)}) 1)] }
             end
 
-
-         %--------------
-         [] fVar(Name _) then
-         %--------------
-            g(unknown)
-
          %--------------------
          [] fAnd(First Second) then
          %--------------------
@@ -429,11 +425,13 @@ define
          %----------------
          [] fEq(LHS RHS _) then
          %----------------
+            % no recursive call needed because everything is atomic at this stage (fSym of fConst)
             unify({F LHS  Params} {F RHS  Params})
 
          %-----------------
          [] fConst(Value _) then
          %-----------------
+            % should never happen
             k(Value)
          end
       end
@@ -445,6 +443,7 @@ define
 
       % prefix with allocateY
       %FIXME: keep prefix in Params?
+      % Don't do this here!
       if {HasFeature InitialParams prefix} then
          {List.append [allocateY(@(InitialParams.currentIndex))] {List.append InitialParams.prefix  OpCodes } }
          %{Show InitialParams.prefix}
@@ -473,6 +472,7 @@ define
       {Show 'Will assign Ys'}
       YCounter={YAssigner Args}
       if YCounter>0 then
+         % Use List.forAllInd
          {For 0 YCounter-1 1
             proc {$ I}
               Prefix:={List.append @Prefix [move(x(I) y({{Nth Args I+1}.1 get(yindex $)}) )]}
