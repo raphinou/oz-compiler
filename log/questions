@@ -7,3 +7,6 @@
 
 - assignation des y pour la definition de procédures et l'appel à GenCodeAndAssemble:
   les y sont assignés aux variables du body avant cet appel, ou par cet appel?
+
+
+- est-ce que pour les globales dans un "local in", on fait exactement la meme manipulation que pour les proc? (remplacement par un autre symbole)

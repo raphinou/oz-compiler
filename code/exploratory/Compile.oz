@@ -7,6 +7,10 @@ import
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
+   DumpAST at './DumpAST.ozf'
+   % for nested environments debugging
+   OS
+
 export
    namer: Namer
    genCode: GenCode
@@ -19,6 +23,27 @@ define
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Support classes
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+   class ListBuilder
+      attr
+         head
+         tail
+
+      meth init(Head)
+         head:=Head
+         tail:=Head
+      end
+
+      meth append(V)
+         NewTail
+      in
+        @tail=V|NewTail
+        tail:=NewTail
+      end
+
+      meth close()
+         @tail=nil
+      end
+   end
    class Accessors
       meth set(Attr Value)
          Attr:=Value
@@ -35,24 +60,35 @@ define
          pos
          yindex
          scope
+         %possibilities: localscope , global, localised (when a global has been replaced by a new local symbol)
          type
+         ref
+      meth clone(?NewSym)
+         NewSym={New Symbol init(@name @pos)}
+         {NewSym set(yindex @yindex)}
+         {NewSym set(scope @scope)}
+         {NewSym set(type @type)}
+      end
       meth init(Name Pos)
          name:=Name
          pos:=Pos
          yindex:=nil
-         scope:=unit
+         scope:=0
          type:=localscope
       end
       meth toVS(?R)
          pos(File Line Col _ _ _)=@pos
       in
-         R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#"'"
+         %FIXME SCOPENAMEISNAME
+         %R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#"'"
+         %for debugging when scope is printable (ie OS.rand and not NewName)
+         R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#" scope "#@scope#"'"
       end
       meth hasYIndex(?B)
          B=(@yindex\=nil)
       end
       meth setScopeIfUnset(Scope)
-         if @scope==unit then
+         if @scope==0 then
             scope:=Scope
          end
       end
@@ -318,7 +354,9 @@ define
       {NamerInt AST InitialParams}
    end
 
+   %###################
    fun {Globaliser AST}
+   %###################
       F = GlobaliserInt
 
       fun {AssignScope AST ScopeName}
@@ -334,15 +372,39 @@ define
          end
       end
 
-      fun {IdentifyGlobals AST CurrentScope}
+      fun {LocaliseGlobals AST params(currentscope:CurrentScope globalstail:TailG newlocalstail:TailL)}
          case AST
-         of fSym(Sym _) then
+         of fSym(Sym Pos) then
             if {Sym get(scope $)}\=CurrentScope then
-               {Sym set(type global)}
+               NewLocalSymbol
+            in
+               % Create new local symbol referencing the global one
+               NewLocalSymbol = {Sym clone($)}
+               {NewLocalSymbol set(scope CurrentScope)}
+               {NewLocalSymbol set(type global)}
+               {NewLocalSymbol set(ref Sym)}
+
+               % collect global and its corresponding new local symbol
+               { TailG append(Sym)}
+               { TailL append(NewLocalSymbol)}
+
+               {System.showInfo "replaced "#{Sym toVS($)}#" by "#{NewLocalSymbol toVS($)} }
+               % Return the new symbol
+               fSym(NewLocalSymbol Pos)
+            else
+               AST
             end
+            % Do not go inside fProc and fLocal, as these have their own
+            % environment build later by the recursive call to GlobaliserInt
+         [] fProc(_ _ _ _ _ ) then
+            AST
+         [] fLocal(_ _ _) then
             AST
          else
-            {DefaultPass AST IdentifyGlobals CurrentScope}
+            %{Show 'Default pass for'}
+            %{DumpAST.dumpAST AST}
+            %{Show '.......................................'}
+            {DefaultPass AST LocaliseGlobals params(currentscope:CurrentScope globalstail:TailG newlocalstail:TailL)}
          end
       end
 
@@ -353,37 +415,76 @@ define
          of fLocal(Decls Body _) then
          %----------------------
             % Identify new scope with a new name
-            ScopeName = {NewName}
+            %FIXME SCOPENAMEISNAME
+            %ScopeName = {NewName}
+            ScopeName = {OS.rand}
+            Globals
+            GlobalsBuilder={New ListBuilder init(Globals)}
+            NewLocals
+            NewLocalsBuilder={New ListBuilder init(NewLocals)}
+            T
+            R
          in
-
             % In declaration : assign current scope's name to declared symbols
             _={AssignScope Decls ScopeName}
 
+            %% In body : identify globals which are symbol with a different
+            %% scope name than the current one and replace them by a new symbol
+            %% FIXME remove temporary T by putting the closing of lists in LocaliseGlobals
+            T= params(currentscope:ScopeName globalstail:GlobalsBuilder newlocalstail:NewLocalsBuilder)
+            _ = {LocaliseGlobals AST  T }
 
-            % In body : identify globals which are symbol with a different
-            % scope name than the current one
-            {IdentifyGlobals AST ScopeName}
+            %finalise lists:
+            {GlobalsBuilder close()}
+            {NewLocalsBuilder close()}
+
+            {DefaultPass AST GlobaliserInt Params}
+
+
 
          %-------------------
-         [] fProc(fSym(Sym _) Args Body Flags Pos) then
+         [] fProc(FSym Args Body Flags Pos) then
          %-------------------
             % Identify new scope with a new name
-            ScopeName = {NewName}
+            %FIXME SCOPENAMEISNAME
+            %ScopeName = {NewName}
+            ScopeName = {OS.rand}
+            Globals
+            GlobalsBuilder={New ListBuilder init(Globals)}
+            NewLocals
+            NewLocalsBuilder={New ListBuilder init(NewLocals)}
+            T
+            R
          in
-            % assign current scope's name to formal parameters
+            % In declaration : assign current scope's name to declared symbols
             _={AssignScope Args ScopeName}
+
 
             % In body : identify globals which are symbol with a different
             % scope name than the current one
-            {IdentifyGlobals AST ScopeName}
+            % FIXME remove temporary T by putting the closing of lists in IdentifyGlobals
+            T= params(currentscope:ScopeName globalstail:GlobalsBuilder newlocalstail:NewLocalsBuilder)
+            R = {LocaliseGlobals Body  T }
 
+            %finalise lists:
+            {GlobalsBuilder close()}
+            {NewLocalsBuilder close()}
+
+            {Show 'Will show globals and corresponding new locals'}
+            {ForAll Globals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
+            {ForAll NewLocals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
+            {Show '----------------------------------------------'}
+
+            fNewProc(FSym Args R Flags pos)
+            %CONTINUE : need a call to GlobaliserInt for embedded procedure definitions....
          %---
          else
          %---
-            {DefaultPass AST F unit}
+            {DefaultPass AST GlobaliserInt Params}
          end
       end
       InitialParams=params
+      R
    in
       {GlobaliserInt AST InitialParams}
    end
@@ -465,7 +566,6 @@ define
          in
             {Show 'in fApply'#Params}
             %if {HasFeature Params procassemble} andthen Params.procassemble then
-            % FIXME CONTINUE : assigner les registres y si on est dans proc assemble
             %L is the arguments list
             % first move arguments in x registers
             % FIXME will need to check from which type of register we need to copy!

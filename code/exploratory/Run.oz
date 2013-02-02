@@ -32,10 +32,11 @@ define
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
    %Code = 'local  A B=3 in A=3.2   local A in A=6 end {Show A}   end'
    Code = ' local
-               A P B
+               A P B C
             in
                proc {P V}
                   {Show B}
+                  {Show C}
                   {Show V}
                end
                A = 5
@@ -44,6 +45,24 @@ define
                {For 1 5 1 P}
             end'
 
+   % next step: proc ... in ... end
+   %Code = ' local
+   %            A P B
+   %         in
+   %            proc {P V}
+   %               T
+   %            in
+   %               proc {T U}
+   %                 {Show U}
+   %               end
+   %               {Show B}
+   %               {Show V}
+   %            end
+   %            A = 5
+   %            B = 7
+   %            {P A}
+   %            {For 1 5 1 P}
+   %         end'
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
           GetSwitch EnvDictionary}
