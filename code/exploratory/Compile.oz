@@ -470,12 +470,12 @@ define
             {GlobalsBuilder close()}
             {NewLocalsBuilder close()}
 
-            {Show 'Will show globals and corresponding new locals'}
-            {ForAll Globals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
-            {ForAll NewLocals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
-            {Show '----------------------------------------------'}
+            %{Show 'Will show globals and corresponding new locals'}
+            %{ForAll Globals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
+            %{ForAll NewLocals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
+            %{Show '----------------------------------------------'}
 
-            fNewProc(FSym Args R Flags pos)
+            fDefineProc(FSym Args R Flags Pos Globals NewLocals)
             %CONTINUE : need a call to GlobaliserInt for embedded procedure definitions....
          %---
          else
