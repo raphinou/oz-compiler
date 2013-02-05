@@ -10,3 +10,5 @@
 
 
 - est-ce que pour les globales dans un "local in", on fait exactement la meme manipulation que pour les proc? (remplacement par un autre symbole)
+
+- pourquoi define proc a-t-il besoin d'un argument reprenant les globals, si celles-ci sont accessible depuis les new locals?

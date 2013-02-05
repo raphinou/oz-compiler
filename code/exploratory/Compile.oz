@@ -59,6 +59,7 @@ define
          name
          pos
          yindex
+         gindex
          scope
          %possibilities: localscope , global, localised (when a global has been replaced by a new local symbol)
          type
@@ -66,6 +67,7 @@ define
       meth clone(?NewSym)
          NewSym={New Symbol init(@name @pos)}
          {NewSym set(yindex @yindex)}
+         {NewSym set(gindex @gindex)}
          {NewSym set(scope @scope)}
          {NewSym set(type @type)}
       end
@@ -73,6 +75,7 @@ define
          name:=Name
          pos:=Pos
          yindex:=nil
+         gindex:=nil
          scope:=0
          type:=localscope
       end
@@ -475,8 +478,8 @@ define
             %{ForAll NewLocals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
             %{Show '----------------------------------------------'}
 
-            fDefineProc(FSym Args R Flags Pos Globals NewLocals)
-            %CONTINUE : need a call to GlobaliserInt for embedded procedure definitions....
+            % Add the gindex to each new local, and return the new fDefineProc
+            fDefineProc(FSym Args R Flags Pos Globals {List.mapInd NewLocals fun {$ Ind L} {L set(gindex Ind-1)} L end })
          %---
          else
          %---
@@ -504,7 +507,7 @@ define
             [ {F Decls  {Record.adjoin Params params(indecls: true)}} {F Body  Params}]
 
          %---------------------------------
-         [] fProc(fSym(Sym _) Args Body Flags Pos) then
+         [] fDefineProc(fSym(Sym _) Args Body Flags Pos Globals NewLocals) then
          %---------------------------------
 
             %FIXME: need to add pass to replace fProc by fDefineProc to add GOrigins for globals used in the body
@@ -517,12 +520,16 @@ define
             OpCodes={NewCell nil}
             NewBody
             % Number of globals, ie variables comint from parent's environment
-            GlobalsCount = 0
+            GlobalsCount = {List.length Globals}
+            ArrayFills
          in
             %
+            if {List.length Globals}\={List.length NewLocals} then
+               raise "IncoherenceBetweenGlobalsAndNewLocalsListsSizes" end
+            end
 
             {Show 'will call GenAndAssemble ni fProc case to create CA'}
-            {GenAndAssemble Body Args 'test' d(file:Pos.1 line:Pos.2 column:Pos.3) switches CA VS}
+            {GenAndAssemble Body Args 'test' d(file:Pos.1 line:Pos.2 column:Pos.3) switches ?CA ?VS}
             {Show 'will append opcodes ni fProc case'}
 
 
@@ -531,11 +538,8 @@ define
             %OpCodes:={List.append @OpCodes {List.mapInd Args fun {$ I fSym(Sym _)} move(x(I-1) y({Sym get(yindex $)})) end }}
             % arrayfill for globals
             {Show 'will append opcodes ni fProc case'}
-            if GlobalsCount>1 then
-               for Ind in 1..GlobalsCount do
-                  OpCodes:={List.append @OpCodes  [arrayFill(Ind)] }
-               end
-            end
+            ArrayFills = {List.map Globals fun {$ I} arrayFill(y({I get(yindex $)})) end }
+            OpCodes:={List.append @OpCodes  ArrayFills }
             @OpCodes
 
 
@@ -564,7 +568,6 @@ define
          %---------------
             R={NewCell nil}
          in
-            {Show 'in fApply'#Params}
             %if {HasFeature Params procassemble} andthen Params.procassemble then
             %L is the arguments list
             % first move arguments in x registers
@@ -572,7 +575,13 @@ define
             R:={List.mapInd Args fun {$ Index AST}
                                     case AST
                                     of fSym(S _) then
-                                       {List.append @R move(y({S get(yindex $)}) x(Index-1))}
+                                       if {S get(type $)}==localscope then
+                                          {List.append @R move(y({S get(yindex $)}) x(Index-1))}
+                                       elseif {S get(type $)}==global then
+                                          {List.append @R move(g({S get(gindex $)}) x(Index-1))}
+                                       else
+                                          raise 'UnknownSymbolType' end
+                                       end
                                     [] fConst(V _) then
                                        {List.append @R move(k(V) x(Index-1))}
                                     end
@@ -626,7 +635,9 @@ define
       % FIXME
       PrintName='test'
    in
-      {Show 'will call NewAssemble'}
+      %{Show 'will call NewAssemble on opcodes'}
+      %{ForAll OpCodes Show}
+      %{Show '..............................'}
       {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
    end
 
