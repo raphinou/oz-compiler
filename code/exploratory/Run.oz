@@ -56,12 +56,10 @@ define
    %               proc {T U}
    %                 {Show U}
    %               end
-   %               {Show B}
-   %               {Show V}
    %            end
    %            A = 5
    %            B = 7
-   %            {P A}
+   %            {T A}
    %            {For 1 5 1 P}
    %         end'
 

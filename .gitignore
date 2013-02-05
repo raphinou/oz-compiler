@@ -11,3 +11,4 @@ draft.oz
 *.toc
 *.aux
 vc.tex
+session.vim

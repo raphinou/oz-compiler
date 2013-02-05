@@ -149,7 +149,13 @@ define
       if {List.is AST} then
          {List.map AST fun {$ I} {F I Params} end}
       elseif {Record.is AST} then
-         {Record.map AST fun {$ I} {F I Params} end}
+         case AST
+         of pos(_ _ _ _) then
+            % Do not go down into position records
+            AST
+         else
+            {Record.map AST fun {$ I} {F I Params} end}
+         end
       else
          AST
       end
@@ -206,7 +212,7 @@ define
             % list from which we'll build the fAnds.
             % The original Body is the last part of the body's code
             FinalAcc=Body|@(Acc.acc)
-            % buidl the fAnd records
+            % build the fAnd records
             NewBody={List.foldL FinalAcc.2 fun {$ A I} fAnd(I A) end FinalAcc.1}
             % Put all transformed parts in the new fLocal
             Res = fLocal(
@@ -266,11 +272,9 @@ define
          %---------------------------------
          [] fProc(Name Args Body Flags Pos) then
          %---------------------------------
-            % We need define new symbols for the proc name and the arguments
-            % In both these cases we set procdecl to true
+            % We need define new symbols for the arguments
+            % for this we set procdecl to true
             NewParams={Record.adjoin Params params(procdecl:true)}
-            %GOrigins is the list of symbols that are used in the procedure
-            %body, but that are globals
          in
             fProc(
                % The procedure's variable has to be declared explicitely
@@ -286,7 +290,7 @@ define
          [] fEq(LHS RHS Pos) then
          %------------------
             if Params.indecls then
-               % in declarations, only decend in the LHS because only the LHS variables are declared
+               % in declarations, only descend in the LHS because only the LHS variables are declared
                fEq(
                   {F LHS  Params}
                   RHS
@@ -510,7 +514,6 @@ define
          [] fDefineProc(fSym(Sym _) Args Body Flags Pos Globals NewLocals) then
          %---------------------------------
 
-            %FIXME: need to add pass to replace fProc by fDefineProc to add GOrigins for globals used in the body
             %FIXME: the name of the proc can not be available, eg in the case { {GetProc 2} arg1 arg2}
 
             CA
