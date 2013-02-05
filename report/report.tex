@@ -1,0 +1,71 @@
+\documentclass[draft,a4paper]{memoir}
+\usepackage[utf8]{inputenc}
+\usepackage{pgf}
+\usepackage[margin=false,inline=true]{fixme}
+\fxsetup{theme=color}
+\definecolor{fxnote}{rgb}{0.8000,0.0000,0.0000}
+\author{Bauduin Raphaël}
+\title{Oz Compiler}
+\begin{document}
+
+% requires memoir
+% include git rev
+\ifdraftdoc
+\makeoddhead{plain}{}{}{\textit{Draft: \today{} Rev: \GITAbrHash{} \VCModifiedText{}}}{}
+\fi
+
+% write and require version control info
+\immediate\write18{sh ./vc -m} 
+\input{vc}
+\maketitle
+\tableofcontents
+
+
+\chapter{Introduction}
+\section{Initial State}
+\GITAbrHash
+--
+\VCModifiedText
+--
+New vm developed.
+Old compiler patched, boot compiler in scala.
+Need for a new Oz compiler, written in OZ
+
+\section{Goal and Scope}
+Flexible documented and tested compiler taking as input the AST in the form of Oz records, and generating opcodes send to the assembler.
+Document as much as possible the whole compilation chain from parser through AST to opcodes and virtual machine.
+
+\chapter{Infrastructure}
+\section{Virtual Machine}
+Describe virtual machine. I think to put it first so all concepts are introduced by the time I describe the opcodes.
+\section{Compiler input}
+Describe records received from parser.
+\section{Compiler output}
+Describe opcodes.
+
+
+\chapter{Compiler}
+\section{Architecture}
+Explaine the phases
+\subsection{Namer}
+replaces fVar by fSym. In declarations, creates a new symbol for declared variables, in body, looks at already defined symbols.
+\subsection{Globaliser}
+Each scope is assigned a name, and variables are assigned the scope in which they are declared. When a variable is used in a scope other than its declaration scope, it is a global variable relative to its use scope. We replace this symbol by new symbol marked as 'global' referencing the original symbol.
+
+fProc is replaced by fDefineProc taking 2 additional arguments: the global variables and their corresponding new symbols. \fxnote{Check that the two arguments are really needed}
+\subsection{CodeGen}
+\subsubsection{Register allocation}
+It is CodeGen that allocates registers. For the moment only Y registers.
+When a Symbol of type global is found, it is handled differntly than local symbols.
+For a procedure definition, we initialise the global variables with arrayFill( y(yindex)). \fxnote{handle multiple levels of nesting}
+For a local\ldots in \ldots end, a g() is issued in place of a y(). \fxnote{is this working yet?}
+
+\section{Tests}
+Explain the tests
+
+\section{Performance}
+Possibly include some measure?
+
+
+
+\end{document}

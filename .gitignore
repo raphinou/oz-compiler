@@ -6,3 +6,6 @@ mozart2-bootcompiler/
 .*
 *.swp
 draft.oz
+*.pdf
+*.log
+*.toc
