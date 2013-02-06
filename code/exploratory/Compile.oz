@@ -307,9 +307,9 @@ define
 
             CodeInDeclatationsAST={WrapInFAnd CodeInDeclarations}
             if CodeInDeclatationsAST==unit then
-               NewBody=Body
+               NewBody={DeclsFlattener Body}
             else
-               NewBody=fAnd(CodeInDeclatationsAST Body)
+               NewBody=fAnd(CodeInDeclatationsAST {DeclsFlattener Body})
             end
 
             % Put all transformed parts in the new fLocal
@@ -318,12 +318,6 @@ define
                NewBody
                Pos
             )
-
-         %------------------
-         [] fEq(LHS RHS Pos) then
-         %------------------
-            (Params.acc):= AST|@(Params.acc)
-            {F LHS  Params}
 
          %---
          else
