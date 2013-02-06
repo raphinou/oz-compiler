@@ -16,7 +16,8 @@ export
    genCode: GenCode
    declsFlattener: DeclsFlattener
    globaliser: Globaliser
-   pv: PV
+   pve: PVE
+   pvs: PVS
 define
 
 
@@ -161,29 +162,69 @@ define
       end
    end
    % see http://www.mozart-oz.org/documentation/notation/node6.html
-   fun {PV AST}
+   % Pattern Variables from Statements
+   fun {PVS AST}
       case AST
-      of fLocal(Decls Body _) then
-         % {PV Body} - {PV Decls}
-         {Show fLocal}
-         {Show 'fLocal returns'#{Record.subtractList{PV Body}  {Record.arity {PV Decls}}}}
-         {Record.subtractList{PV Body}  {Record.arity {PV Decls}}}
+      of fAnd(First Second ) then
+         %{PVS First} + {PVS Second}
+         {Show fAnd}
+         {Record.adjoin {PVS First}  {PVS Second}}
       [] fVar(Name _) then
          {Show fVar#' '#Name}
-         pv(Name:unit)
-      [] fAnd(First Second ) then
-         %{PV First} + {PV Second}
-         {Show fAnd}
-         {Record.adjoin {PV First}  {PV Second}}
+         pv(AST)
+      [] fLocal(Decls Body _) then
+         % {PVS Body} - {PVS Decls}
+         {Show fLocal}
+         {Record.subtractList{PVS Body}  {Record.arity {PVS Decls}}}
+      [] fProc(E _ _ _ _ ) then
+         {PVE E}
       [] fEq(LHS RHS _) then
-         {Show fEq}
-         {Record.adjoin {PV LHS}  {PV RHS}}
+         {PVE LHS}
       else
-         {Show 'else'}
-         {Show AST}
          pv()
       end
    end
+
+
+   % Pattern Variables from Expressions
+   fun {PVE AST}
+      case AST
+      of fVar(Name _) then
+         {Show fVar#' '#Name}
+         pv(AST)
+      [] fLocal(Decls Body _) then
+         % Get last feature in fAnd hierarchy
+         fun {Last AST}
+            case AST
+            of fAnd(First Second) then
+               {Last Second}
+            else
+               AST
+            end
+         end
+         %Return all but last feature in fAnd hierarchy
+         fun {ButLast AST}
+            case AST
+            of fAnd(V fAnd(First Second)) then
+               fAnd(V {ButLast fAnd(First Second)})
+            [] fAnd(First _) then
+               First
+            else
+               AST
+            end
+         end
+      in
+         % Body2 is the body except the last instruction
+         % ({PVS Body2} + {PVE Last}) - {PVS Decls}
+         {Show fLocal}
+         {Record.subtractList{{Record.adjoin {PVS {ButLast Body}} {PVE Last}}  {Record.arity {PVS Decls}}}}
+      [] fEq(LHS RHS) then
+         {Record.adjoin {PVE LHS} {PVE RHS}}
+      else
+         pv()
+      end
+   end
+
 
 
 
