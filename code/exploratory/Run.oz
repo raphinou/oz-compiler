@@ -32,14 +32,13 @@ define
   %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
   %Code = 'local  A B=3 in A=3.2   local A in A=6 end {Show A}   end'
    Code = ' local
-               A P B C
+               A=5 P B C
             in
                proc {P V}
                   {Show B}
                   {Show C}
                   {Show V}
                end
-               A = 5
                B = 7
                C = 9
                {P A}

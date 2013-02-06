@@ -138,6 +138,28 @@ define
       end
    end
 
+   % Wrap an instructions list in fAnd
+   % Note the first element of the list is the deepest nested.
+   % This is usually ok as instructions list are often build by adding the new
+   % instruction at the beginning of the list like:
+   %   NewInstr|CurrentInstrs
+   fun {WrapInFAnd Instrs}
+      if {Not {List.is Instrs}}then
+         {Show Instrs}
+         raise wrapInFAndNeedsAListOfLength2OrMore end
+      else
+         L = {List.length Instrs}
+      in
+         if L>1 then
+            {List.foldL Instrs.2 fun {$ A I} fAnd(I A) end Instrs.1}
+         elseif L==1 then
+            Instrs.1
+         else
+            unit
+         end
+      end
+   end
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Actual work happening
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -237,6 +259,31 @@ define
 
       F = DeclsFlattenerInt
       fun {DeclsFlattenerInt AST Params}
+         fun {CodeInDecls AST}
+            proc {CodeInDeclsInt AST Acc}
+               case AST
+               of fAnd(First Second) then
+                  CodeInFirst={CodeInDecls First}
+                  CodeInSecond={CodeInDecls Second}
+               in
+                  if CodeInFirst\=nil then
+                     Acc:={List.append CodeInFirst @Acc}
+                  end
+                  if CodeInSecond\=nil then
+                     Acc:={List.append CodeInSecond @Acc}
+                  end
+               [] fVar(_ _) then
+                  skip
+               else
+                 Acc:=AST|@Acc
+               end
+            end
+            Instrs = {NewCell nil}
+         in
+            {CodeInDeclsInt AST Instrs}
+            @Instrs
+         end
+      in
          case AST
          %------------------------
          of fLocal(Decls Body Pos) then
@@ -248,31 +295,22 @@ define
             NewBody
             Res
             Tmp
+            CodeInDeclarations
+            CodeInDeclatationsAST
+
             PatternVariables
          in
-            % this call will collect in Acc.acc all code to add to the body
-            % FIXME : do not call F but use another function to extract all code to move to the body
-            %         does not need to go deep: fVar is left out, fAnd handles
-            %         both parts, all others are move to body without a
-            %         recursive call needed
-            _={F Decls  Acc}
+            CodeInDeclarations={CodeInDecls Decls}
             PatternVariables={PVS Decls}
-            NewDecls={List.foldL PatternVariables.2 fun {$ A I} fAnd(I A) end PatternVariables.1}
+            NewDecls={WrapInFAnd PatternVariables}
 
-            % list from which we'll build the fAnds.
-            % The original Body is the last part of the body's code
-            FinalAcc=Body|@(Acc.acc)
 
-            %%FIXME: refactor in 2 functions, flatten decls and flatten body
-            %% this code does not seem to make much sense ('declarations' that
-            %% will be accumulated by the next call will never be used, because
-            %% they don't have to move. This call is only here to handle nested locals....
-            %Tmp= {F Body params(acc:{NewCell nil})}
-            %FinalAcc=Tmp|@(Acc.acc)
-
-            %% build the fAnd records
-            NewBody={List.foldL FinalAcc.2 fun {$ A I} fAnd(I A) end FinalAcc.1}
-
+            CodeInDeclatationsAST={WrapInFAnd CodeInDeclarations}
+            if CodeInDeclatationsAST==unit then
+               NewBody=Body
+            else
+               NewBody=fAnd(CodeInDeclatationsAST Body)
+            end
 
             % Put all transformed parts in the new fLocal
             Res = fLocal(
@@ -425,9 +463,9 @@ define
 
       InitialParams = params(env:{New Environment init()})
    in
-      {Show 'AST received by Namer:'}
-      {DumpAST.dumpAST AST}
-      {Show '--------------------------------------------------------------------------------'}
+      %{Show 'AST received by Namer:'}
+      %{DumpAST.dumpAST AST}
+      %{Show '--------------------------------------------------------------------------------'}
       {NamerForBody AST InitialParams}
    end
 
