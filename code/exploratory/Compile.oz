@@ -312,8 +312,32 @@ define
    %##############
    fun {Namer AST}
    %##############
-      F=NamerInt
-      fun {NamerInt AST Params}
+      fun {NamerForDecls AST Params}
+         case AST
+         %----------------
+         of fVar(Name Pos) then
+         %----------------
+            Sym
+         in
+            % in declarations or procedure procdecl, assign symbol to variables
+            %if Params.indecls orelse ({HasFeature Params procdecl}  andthen Params.procdecl) then
+               % assign symbol in declarations
+               Sym={Params.env setSymbol(Name Pos $)}
+               fSym( Sym Pos)
+         [] fAnd(First Second) then
+            fAnd( {NamerForDecls First Params} {NamerForDecls Second Params})
+         %---
+         else
+         %---
+            {Show 'AST received by NamerForDecls:'}
+            {DumpAST.dumpAST AST}
+            raise flattenerLeftOtherThingsThanFVarInDecls end
+         end
+      end
+
+
+
+      fun {NamerForBody AST Params}
          case AST
          %-----------------------
          of fLocal(Decl Body Pos) then
@@ -322,8 +346,8 @@ define
          in
             {Params.env backup()}
             Res=fLocal(
-               {F Decl  {Record.adjoin Params params(indecls:true)}}
-               {F Body  {Record.adjoin Params params(indecls:false)}}
+               {NamerForDecls Decl Params}
+               {NamerForBody Body  Params}
                Pos
                )
             {Params.env restore()}
@@ -332,15 +356,11 @@ define
          %---------------------------------
          [] fProc(Name Args Body Flags Pos) then
          %---------------------------------
-            % We need define new symbols for the arguments
-            % for this we set procdecl to true
-            NewParams={Record.adjoin Params params(procdecl:true)}
-         in
             fProc(
                % The procedure's variable has to be declared explicitely
-               {F Name Params}
-               {List.map Args fun {$ I} {F I NewParams} end }
-               {F Body Params}
+               {NamerForBody Name Params}
+               {List.map Args fun {$ I} {NamerForDecls I Params} end }
+               {NamerForBody Body Params}
                Flags
                Pos
             )
@@ -349,32 +369,18 @@ define
          %------------------
          [] fEq(LHS RHS Pos) then
          %------------------
-            if Params.indecls then
-               % in declarations, only descend in the LHS because only the LHS variables are declared
                fEq(
-                  {F LHS  Params}
-                  RHS
+                  {NamerForBody LHS  Params}
+                  {NamerForBody RHS  Params}
                   Pos
                )
-            else
-               fEq(
-                  {F LHS  Params}
-                  {F RHS  Params}
-                  Pos
-               )
-            end
 
          %----------------
          [] fVar(Name Pos) then
          %----------------
             Sym
          in
-            % in declarations or procedure procdecl, assign symbol to variables
-            if Params.indecls orelse ({HasFeature Params procdecl}  andthen Params.procdecl) then
-               % assign symbol in declarations
-               Sym={Params.env setSymbol(Name Pos $)}
-               fSym( Sym Pos)
-            elseif {Params.env hasSymbol(Name $)} then
+            if {Params.env hasSymbol(Name $)} then
                % if a symbol exists for this variable, use it as
                % is it a local variable
                Sym={Params.env getSymbol(Name $)}
@@ -413,12 +419,16 @@ define
             %{Show 'Default pass for next ast'}
             %{Show AST}
             %{Show '..............................................'}
-            {DefaultPass AST F Params}
+            {DefaultPass AST NamerForBody Params}
          end
       end
-      InitialParams = params(env:{New Environment init()} indecls:false)
+
+      InitialParams = params(env:{New Environment init()})
    in
-      {NamerInt AST InitialParams}
+      {Show 'AST received by Namer:'}
+      {DumpAST.dumpAST AST}
+      {Show '--------------------------------------------------------------------------------'}
+      {NamerForBody AST InitialParams}
    end
 
    %###################
