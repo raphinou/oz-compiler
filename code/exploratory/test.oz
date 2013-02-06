@@ -2,7 +2,12 @@ local
 A P
 in
 proc {P V}
-   {Show V}
+   T
+in
+   proc {T W}
+     {Show W}
+   end
+   {T V}
 end
 A = 5
 {P A}

@@ -12,3 +12,5 @@
 - est-ce que pour les globales dans un "local in", on fait exactement la meme manipulation que pour les proc? (remplacement par un autre symbole)
 
 - pourquoi define proc a-t-il besoin d'un argument reprenant les globals, si celles-ci sont accessible depuis les new locals?
+
+- dans mes tests, quand je raise un exception, il m'affiche uniquement 'unhandled exception' sans trace, ce qui fait que je n'ai pas d'idée ou s'est passée l'erreur. Que dois je faire alors?

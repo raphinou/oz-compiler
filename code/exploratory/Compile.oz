@@ -94,7 +94,7 @@ define
       meth setScope(Scope)
 
          if @scope\=0 then
-            raise 'TryingToOverrideAssignedScope' end
+            raise tryingToOverrideAssignedScope end
          end
          scope:=Scope
       end
@@ -166,25 +166,25 @@ define
    % see http://www.mozart-oz.org/documentation/notation/node6.html
    % Pattern Variables from Statements
    fun {PVS AST}
-      case AST
-      of fAnd(First Second ) then
-         %{PVS First} + {PVS Second}
-         {Show fAnd}
-         {Record.adjoin {PVS First}  {PVS Second}}
-      [] fVar(Name _) then
-         {Show fVar#' '#Name}
-         pv(AST)
-      [] fLocal(Decls Body _) then
-         % {PVS Body} - {PVS Decls}
-         {Show fLocal}
-         {Record.subtractList{PVS Body}  {Record.arity {PVS Decls}}}
-      [] fProc(E _ _ _ _ ) then
-         {PVE E}
-      [] fEq(LHS RHS _) then
-         {PVE LHS}
-      else
-         pv()
+      fun {PVSInt AST}
+         case AST
+         of fAnd(First Second ) then
+            {Record.adjoin {PVSInt First}  {PVSInt Second}}
+         [] fVar(Name _) then
+            pv(Name:AST)
+         [] fLocal(Decls Body _) then
+            % {PVS Body} - {PVS Decls}
+            {Record.subtractList {PVSInt Body}  {Record.arity {PVSInt Decls}}}
+         [] fProc(E _ _ _ _ ) then
+            {PVE E}
+         [] fEq(LHS RHS _) then
+            {PVE LHS}
+         else
+            pv()
+         end
       end
+   in
+      {Record.toList {PVSInt AST}}
    end
 
 
@@ -192,8 +192,7 @@ define
    fun {PVE AST}
       case AST
       of fVar(Name _) then
-         {Show fVar#' '#Name}
-         pv(AST)
+         pv(Name:AST)
       [] fLocal(Decls Body _) then
          % Get last feature in fAnd hierarchy
          fun {Last AST}
@@ -218,7 +217,6 @@ define
       in
          % Body2 is the body except the last instruction
          % ({PVS Body2} + {PVE Last}) - {PVS Decls}
-         {Show fLocal}
          {Record.subtractList{{Record.adjoin {PVS {ButLast Body}} {PVE Last}}  {Record.arity {PVS Decls}}}}
       [] fEq(LHS RHS) then
          {Record.adjoin {PVE LHS} {PVE RHS}}
@@ -249,14 +247,33 @@ define
             NewDecls
             NewBody
             Res
+            Tmp
+            PatternVariables
          in
             % this call will collect in Acc.acc all code to add to the body
-            NewDecls={F Decls  Acc}
+            % FIXME : do not call F but use another function to extract all code to move to the body
+            %         does not need to go deep: fVar is left out, fAnd handles
+            %         both parts, all others are move to body without a
+            %         recursive call needed
+            _={F Decls  Acc}
+            PatternVariables={PVS Decls}
+            NewDecls={List.foldL PatternVariables.2 fun {$ A I} fAnd(I A) end PatternVariables.1}
+
             % list from which we'll build the fAnds.
             % The original Body is the last part of the body's code
             FinalAcc=Body|@(Acc.acc)
-            % build the fAnd records
+
+            %%FIXME: refactor in 2 functions, flatten decls and flatten body
+            %% this code does not seem to make much sense ('declarations' that
+            %% will be accumulated by the next call will never be used, because
+            %% they don't have to move. This call is only here to handle nested locals....
+            %Tmp= {F Body params(acc:{NewCell nil})}
+            %FinalAcc=Tmp|@(Acc.acc)
+
+            %% build the fAnd records
             NewBody={List.foldL FinalAcc.2 fun {$ A I} fAnd(I A) end FinalAcc.1}
+
+
             % Put all transformed parts in the new fLocal
             Res = fLocal(
                NewDecls
@@ -539,6 +556,18 @@ define
 
             % Add the gindex to each new local, and return the new fDefineProc
             fDefineProc(FSym Args R Flags Pos Globals {List.mapInd NewLocals fun {$ Ind L} {L set(gindex Ind-1)} L end })
+
+         %-------------
+         [] fVar(_ _) then
+         %-------------
+            raise namerLeftFVarIntact end
+
+         %-------------
+         [] fAtom(_ _) then
+         %-------------
+            raise namerLeftFAtomIntact end
+
+
          %---
          else
          %---
@@ -548,7 +577,18 @@ define
       InitialParams=params
       R
    in
-      {GlobaliserInt AST InitialParams}
+      try
+         {GlobaliserInt AST InitialParams}
+      catch E then
+         case E
+         of 'NamerLeftFVarIntact' then
+            {Show 'Namer left fVar intact'}
+            {DumpAST.dumpAST AST}
+         else
+            {Show E}
+         end
+         unit
+      end
    end
 
    %################
@@ -583,19 +623,16 @@ define
          in
             %
             if {List.length Globals}\={List.length NewLocals} then
-               raise "IncoherenceBetweenGlobalsAndNewLocalsListsSizes" end
+               raise incoherenceBetweenGlobalsAndNewLocalsListsSizes end
             end
 
-            {Show 'will call GenAndAssemble ni fProc case to create CA'}
             {GenAndAssemble Body Args 'test' d(file:Pos.1 line:Pos.2 column:Pos.3) switches ?CA ?VS}
-            {Show 'will append opcodes ni fProc case'}
 
 
             OpCodes:={List.append @OpCodes  [createAbstractionUnify(k(CA) GlobalsCount  y({Sym get(yindex $)}))]}
             % not needed here, we create it, we do not call it!
             %OpCodes:={List.append @OpCodes {List.mapInd Args fun {$ I fSym(Sym _)} move(x(I-1) y({Sym get(yindex $)})) end }}
             % arrayfill for globals
-            {Show 'will append opcodes ni fProc case'}
             ArrayFills = {List.map Globals fun {$ I} arrayFill(y({I get(yindex $)})) end }
             OpCodes:={List.append @OpCodes  ArrayFills }
             @OpCodes
@@ -638,7 +675,7 @@ define
                                        elseif {S get(type $)}==global then
                                           {List.append @R move(g({S get(gindex $)}) x(Index-1))}
                                        else
-                                          raise 'UnknownSymbolType' end
+                                          raise unknownSymbolType end
                                        end
                                     [] fConst(V _) then
                                        {List.append @R move(k(V) x(Index-1))}
@@ -728,7 +765,6 @@ define
             end}
       end
       {Show 'Assigned Ys:'#YCounter}
-      {Show 'Check if all symbols assigned'}
       {Show 'Will generate opcodes'}
       OpCodes := {List.append @OpCodes {GenCode AST params(prefix:@Prefix procassemble:true currentIndex:{NewCell YCounter} )}}
       {ForAll @OpCodes Show}
