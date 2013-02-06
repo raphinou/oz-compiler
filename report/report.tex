@@ -38,8 +38,13 @@ Document as much as possible the whole compilation chain from parser through AST
 \chapter{Infrastructure}
 \section{Virtual Machine}
 Describe virtual machine. I think to put it first so all concepts are introduced by the time I describe the opcodes.
+\subsection{Registers}
+Y are locals(y(index)), X are work registers (x(index)), G are globals filled sequentially with arrayFill (g(index)), k are constants (k(value))
+\subsection{Abstractions}
+Abstraction (with G regs)  -> CodeArea (with K regs) -> Code
 \section{Compiler input}
 Describe records received from parser.
+fInt,fFloat,fVar, fEq, fProc\ldots
 \section{Compiler output}
 Describe opcodes.
 
