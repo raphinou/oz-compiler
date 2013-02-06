@@ -91,10 +91,12 @@ define
       meth hasYIndex(?B)
          B=(@yindex\=nil)
       end
-      meth setScopeIfUnset(Scope)
-         if @scope==0 then
-            scope:=Scope
+      meth setScope(Scope)
+
+         if @scope\=0 then
+            raise 'TryingToOverrideAssignedScope' end
          end
+         scope:=Scope
       end
    end
 
@@ -410,10 +412,10 @@ define
       fun {AssignScope AST ScopeName}
          case AST
          of fSym(Sym _) then
-            {Sym setScopeIfUnset(ScopeName)}
+            {Sym setScope(ScopeName)}
             AST
          [] fEq(fSym(Sym _) RHS _) then
-            {Sym setScopeIfUnset(ScopeName)}
+            {Sym setScope(ScopeName)}
             AST
          else
             {DefaultPass AST AssignScope ScopeName}
@@ -491,7 +493,7 @@ define
 
 
          %-------------------
-         [] fProc(FSym Args Body Flags Pos) then
+         [] fProc(FSym Args ProcBody Flags Pos) then
          %-------------------
             % Identify new scope with a new name
             %FIXME SCOPENAMEISNAME
@@ -503,16 +505,28 @@ define
             NewLocalsBuilder={New ListBuilder init(NewLocals)}
             T
             R
+            Body
          in
             % In declaration : assign current scope's name to declared symbols
             _={AssignScope Args ScopeName}
 
+            %if flocal, then assign scope to declared variables
+            %and extract Body from the fLocal for the rest of the operations
+            case ProcBody
+            of fLocal(Decls LocalBody) then
+               _={AssignScope Decls ScopeName}
+               Body=LocalBody
+            else
+               Body=ProcBody
+            end
+
 
             % In body : identify globals which are symbol with a different
             % scope name than the current one
+            % We do this on Body only, and Decls have been flattened before and only contain local var declarations
             % FIXME remove temporary T by putting the closing of lists in IdentifyGlobals
             T= params(currentscope:ScopeName globalstail:GlobalsBuilder newlocalstail:NewLocalsBuilder)
-            R = {LocaliseGlobals Body  T }
+            R = {GlobaliserInt {LocaliseGlobals Body  T } Params}
 
             %finalise lists:
             {GlobalsBuilder close()}
