@@ -309,7 +309,7 @@ define
             if CodeInDeclatationsAST==unit then
                NewBody={DeclsFlattener Body}
             else
-               NewBody=fAnd(CodeInDeclatationsAST {DeclsFlattener Body})
+               NewBody=fAnd({DeclsFlattener CodeInDeclatationsAST} {DeclsFlattener Body})
             end
 
             % Put all transformed parts in the new fLocal
