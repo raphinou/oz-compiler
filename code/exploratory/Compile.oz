@@ -398,15 +398,6 @@ define
             )
 
 
-         %------------------
-         [] fEq(LHS RHS Pos) then
-         %------------------
-               fEq(
-                  {NamerForBody LHS  Params}
-                  {NamerForBody RHS  Params}
-                  Pos
-               )
-
          %----------------
          [] fVar(Name Pos) then
          %----------------
