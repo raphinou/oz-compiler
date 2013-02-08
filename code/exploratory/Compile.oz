@@ -62,15 +62,15 @@ define
          pos
          yindex
          gindex
-         scope
-         %possibilities: localscope , global, localised (when a global has been replaced by a new local symbol)
+         procId
+         %possibilities: localProcId , global, localised (when a global has been replaced by a new local symbol)
          type
          ref
       meth clone(?NewSym)
          NewSym={New Symbol init(@name @pos)}
          {NewSym set(yindex @yindex)}
          {NewSym set(gindex @gindex)}
-         {NewSym set(scope @scope)}
+         {NewSym set(procId @procId)}
          {NewSym set(type @type)}
       end
       meth init(Name Pos)
@@ -78,8 +78,8 @@ define
          pos:=Pos
          yindex:=nil
          gindex:=nil
-         scope:=0
-         type:=localscope
+         procId:=0
+         type:=localProcId
       end
       meth toVS(?R)
          pos(File Line Col _ _ _)=@pos
@@ -87,17 +87,17 @@ define
          %FIXME SCOPENAMEISNAME
          %R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#"'"
          %for debugging when scope is printable (ie OS.rand and not NewName)
-         R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#" scope "#@scope#"'"
+         R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#" procId "#@procId#"'"
       end
       meth hasYIndex(?B)
          B=(@yindex\=nil)
       end
-      meth setScope(Scope)
+      meth setProcId(ProcId)
 
-         if @scope\=0 then
-            raise tryingToOverrideAssignedScope end
+         if @procId\=0 then
+            raise tryingToOverrideAssignedProcId end
          end
-         scope:=Scope
+         procId:=ProcId
       end
    end
 
@@ -478,19 +478,16 @@ define
    fun {Globaliser AST}
    %###################
       fun {GlobaliserInt AST Params}
-         CurrentScope
-         TailG
-         TailL
-         fun {AssignScope AST ScopeName}
+         fun {AssignScope AST ProcId}
             case AST
             of fSym(Sym _) then
-               {Sym setScope(ScopeName)}
+               {Sym setProcId(ProcId)}
                AST
             [] fEq(fSym(Sym _) RHS _) then
-               {Sym setScope(ScopeName)}
+               {Sym setProcId(ProcId)}
                AST
             else
-               {DefaultPass AST AssignScope ScopeName}
+               {DefaultPass AST AssignScope ProcId}
             end
          end
 
@@ -502,14 +499,14 @@ define
             % Identify new scope with a new name
             %FIXME SCOPENAMEISNAME
             %ScopeName = {NewName}
-            NewScope = {OS.rand}
-            NewParams={Record.adjoin Params params(currentScope:NewScope)}
+            NewProcId = {OS.rand}
+            NewParams={Record.adjoin Params params(currentProcId:NewProcId)}
             DeclaredLocals
             NewBody
             NewLocals
          in
             % Assign scope to the formal parameters (Args)
-            {AssignScope Args NewScope _}
+            {AssignScope Args NewProcId _}
             %Extract the list of variables declared
             DeclaredLocals = {UnWrapFAnd Args}
 
@@ -530,7 +527,7 @@ define
             NewBody
             NewLocals
          in
-            {AssignScope Decls Params.currentScope _}
+            {AssignScope Decls Params.currentProcId _}
             DeclaredLocals = {UnWrapFAnd Decls}
             NewBody = {GlobaliserInt Body Params}
             NewLocals={List.filter @(Params.newlocals) fun {$ I} {Not {List.member {I get(ref $)} DeclaredLocals}} end }
@@ -542,9 +539,9 @@ define
             NewLocalSymbol
          in
             {Show fSym}
-            if {Sym get(scope $)}\=Params.currentScope then
+            if {Sym get(procId $)}\=Params.currentProcId then
                NewLocalSymbol = {Sym clone($)}
-               {NewLocalSymbol set(scope Params.currentScope)}
+               {NewLocalSymbol set(procId Params.currentProcId)}
                {NewLocalSymbol set(type global)}
                {NewLocalSymbol set(ref Sym)}
 
@@ -576,7 +573,7 @@ define
             {DefaultPass AST GlobaliserInt Params}
          end
       end
-      InitialParams=params(currentScope: {OS.rand} newlocals:{NewCell nil} )
+      InitialParams=params(currentProcId: {OS.rand} newlocals:{NewCell nil} )
    in
       try
          {GlobaliserInt AST InitialParams}
@@ -673,7 +670,7 @@ define
             R:={List.mapInd Args fun {$ Index AST}
                                     case AST
                                     of fSym(S _) then
-                                       if {S get(type $)}==localscope then
+                                       if {S get(type $)}==localProcId then
                                           {List.append @R move(y({S get(yindex $)}) x(Index-1))}
                                        elseif {S get(type $)}==global then
                                           {List.append @R move(g({S get(gindex $)}) x(Index-1))}

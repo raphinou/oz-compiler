@@ -47,7 +47,7 @@ define
 
    % next step: proc ... in ... end
    %Code = 'local A=5 B=6 in local B=7 in {Show A} {Show B} end {Show A} end'
-   %Code = 'local A=5 in local B=7 in local C=8 in {Show A} {Show B} {Show C} end end end'
+   %Code = 'local A=5 in local A=6 B=7 in local C=8 in {Show A} {Show B} {Show C} end end end'
    Code = 'local
                A P B
             in
