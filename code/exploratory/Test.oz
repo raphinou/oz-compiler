@@ -53,6 +53,12 @@ define
 
 
    %--------------------------------------------------------------------------------
+   % Test function UnwrapFAnd
+   %--------------------------------------------------------------------------------
+   {Equals {Compile.unWrapFAnd fAnd(first fAnd(fAnd(second third) fAnd(fourth fifth)))} 'first'|'second'|'third'|'fourth'|'fifth'|'nil' }
+   {Equals {Compile.unWrapFAnd fProc()} 'fProc'|nil}
+
+   %--------------------------------------------------------------------------------
    % The code we work on
    %--------------------------------------------------------------------------------
 

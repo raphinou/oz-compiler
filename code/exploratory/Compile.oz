@@ -18,6 +18,7 @@ export
    globaliser: Globaliser
    pve: PVE
    pvs: PVS
+   unWrapFAnd: UnWrapFAnd
 define
 
 
@@ -159,6 +160,25 @@ define
          end
       end
    end
+   fun {UnWrapFAnd AST}
+      fun {UnWrapFAndInt AST Terminate}
+         case AST
+         of fAnd(First Second=fAnd(_ _)) then
+       {UnWrapFAndInt First false}|{UnWrapFAndInt Second Terminate}
+         [] fAnd(First Second) then
+            {UnWrapFAndInt First false} | {UnWrapFAndInt Second Terminate}
+         else
+            if Terminate then
+               AST|nil
+            else
+               AST
+            end
+         end
+      end
+   in
+      {UnWrapFAndInt AST true}
+   end
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Actual work happening
@@ -457,139 +477,86 @@ define
    %###################
    fun {Globaliser AST}
    %###################
-      F = GlobaliserInt
-
-      fun {AssignScope AST ScopeName}
-         case AST
-         of fSym(Sym _) then
-            {Sym setScope(ScopeName)}
-            AST
-         [] fEq(fSym(Sym _) RHS _) then
-            {Sym setScope(ScopeName)}
-            AST
-         else
-            {DefaultPass AST AssignScope ScopeName}
+      fun {GlobaliserInt AST Params}
+         CurrentScope
+         TailG
+         TailL
+         fun {AssignScope AST ScopeName}
+            case AST
+            of fSym(Sym _) then
+               {Sym setScope(ScopeName)}
+               AST
+            [] fEq(fSym(Sym _) RHS _) then
+               {Sym setScope(ScopeName)}
+               AST
+            else
+               {DefaultPass AST AssignScope ScopeName}
+            end
          end
-      end
 
-      fun {LocaliseGlobals AST params(currentscope:CurrentScope globalstail:TailG newlocalstail:TailL)}
+      in
          case AST
-         of fSym(Sym Pos) then
-            if {Sym get(scope $)}\=CurrentScope then
-               NewLocalSymbol
-            in
-               % Create new local symbol referencing the global one
+         %-------------------
+         of fProc(FSym Args ProcBody Flags Pos) then
+         %-------------------
+            % Identify new scope with a new name
+            %FIXME SCOPENAMEISNAME
+            %ScopeName = {NewName}
+            NewScope = {OS.rand}
+            NewParams={Record.adjoin Params params(currentScope:NewScope)}
+            DeclaredLocals
+            NewBody
+            NewLocals
+         in
+            % Assign scope to the formal parameters (Args)
+            {AssignScope Args NewScope _}
+            %Extract the list of variables declared
+            DeclaredLocals = {UnWrapFAnd Args}
+
+            %Call recursively on children doing a post-order traversal
+            NewBody = {GlobaliserInt ProcBody NewParams}
+
+            %Children Globals are in Params.globals
+            %An fProc's globals are the globals of its children minus the variables it declares
+            %This fProc's NewLocals are the newlocals of its childrent minus thos it declares
+            NewLocals={List.filter @(Params.newlocals) fun {$ I} {Not {List.member {I get(ref $)} DeclaredLocals}} end }
+            (Params.newlocals):=NewLocals
+
+            % FIXME: can we do without the Globals list?
+            fDefineProc(FSym Args NewBody Flags Pos {List.mapInd NewLocals fun {$ Ind L} {L set(gindex Ind-1)} {L get(ref $)} end } NewLocals)
+
+         [] fLocal(Decls Body Pos) then
+            DeclaredLocals
+            NewBody
+            NewLocals
+         in
+            {AssignScope Decls Params.currentScope _}
+            DeclaredLocals = {UnWrapFAnd Decls}
+            NewBody = {GlobaliserInt Body Params}
+            NewLocals={List.filter @(Params.newlocals) fun {$ I} {Not {List.member {I get(ref $)} DeclaredLocals}} end }
+            (Params.newlocals):=NewLocals
+            fLocal(Decls NewBody Pos)
+         %-------------
+         []fSym(Sym Pos) then
+         %-------------
+            NewLocalSymbol
+         in
+            {Show fSym}
+            if {Sym get(scope $)}\=Params.currentScope then
                NewLocalSymbol = {Sym clone($)}
-               {NewLocalSymbol set(scope CurrentScope)}
+               {NewLocalSymbol set(scope Params.currentScope)}
                {NewLocalSymbol set(type global)}
                {NewLocalSymbol set(ref Sym)}
 
                % collect global and its corresponding new local symbol
-               { TailG append(Sym)}
-               { TailL append(NewLocalSymbol)}
+               (Params.newlocals):=NewLocalSymbol|@(Params.newlocals)
 
-               {System.showInfo "replaced "#{Sym toVS($)}#" by "#{NewLocalSymbol toVS($)} }
+               %{System.showInfo "replaced "#{Sym toVS($)}#" by "#{NewLocalSymbol toVS($)} }
                % Return the new symbol
                fSym(NewLocalSymbol Pos)
             else
                AST
             end
-            % Do not go inside fProc and fLocal, as these have their own
-            % environment build later by the recursive call to GlobaliserInt
-         [] fProc(_ _ _ _ _ ) then
-            AST
-         [] fLocal(_ _ _) then
-            AST
-         else
-            %{Show 'Default pass for'}
-            %{DumpAST.dumpAST AST}
-            %{Show '.......................................'}
-            {DefaultPass AST LocaliseGlobals params(currentscope:CurrentScope globalstail:TailG newlocalstail:TailL)}
-         end
-      end
-
-      fun {GlobaliserInt AST Params}
-         case AST
-
-         %----------------------
-         of fLocal(Decls Body _) then
-         %----------------------
-            % Identify new scope with a new name
-            %FIXME SCOPENAMEISNAME
-            %ScopeName = {NewName}
-            ScopeName = {OS.rand}
-            Globals
-            GlobalsBuilder={New ListBuilder init(Globals)}
-            NewLocals
-            NewLocalsBuilder={New ListBuilder init(NewLocals)}
-            T
-            R
-         in
-            % In declaration : assign current scope's name to declared symbols
-            _={AssignScope Decls ScopeName}
-
-            %% In body : identify globals which are symbol with a different
-            %% scope name than the current one and replace them by a new symbol
-            %% FIXME remove temporary T by putting the closing of lists in LocaliseGlobals
-            T= params(currentscope:ScopeName globalstail:GlobalsBuilder newlocalstail:NewLocalsBuilder)
-            _ = {LocaliseGlobals AST  T }
-
-            %finalise lists:
-            {GlobalsBuilder close()}
-            {NewLocalsBuilder close()}
-
-            {DefaultPass AST GlobaliserInt Params}
-
-
-
-         %-------------------
-         [] fProc(FSym Args ProcBody Flags Pos) then
-         %-------------------
-            % Identify new scope with a new name
-            %FIXME SCOPENAMEISNAME
-            %ScopeName = {NewName}
-            ScopeName = {OS.rand}
-            Globals
-            GlobalsBuilder={New ListBuilder init(Globals)}
-            NewLocals
-            NewLocalsBuilder={New ListBuilder init(NewLocals)}
-            T
-            R
-            Body
-         in
-            % In declaration : assign current scope's name to declared symbols
-            _={AssignScope Args ScopeName}
-
-            %if flocal, then assign scope to declared variables
-            %and extract Body from the fLocal for the rest of the operations
-            case ProcBody
-            of fLocal(Decls LocalBody) then
-               _={AssignScope Decls ScopeName}
-               Body=LocalBody
-            else
-               Body=ProcBody
-            end
-
-
-            % In body : identify globals which are symbol with a different
-            % scope name than the current one
-            % We do this on Body only, and Decls have been flattened before and only contain local var declarations
-            % FIXME remove temporary T by putting the closing of lists in IdentifyGlobals
-            T= params(currentscope:ScopeName globalstail:GlobalsBuilder newlocalstail:NewLocalsBuilder)
-            R = {GlobaliserInt {LocaliseGlobals Body  T } Params}
-
-            %finalise lists:
-            {GlobalsBuilder close()}
-            {NewLocalsBuilder close()}
-
-            %{Show 'Will show globals and corresponding new locals'}
-            %{ForAll Globals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
-            %{ForAll NewLocals proc {$ G} {Show {G get(name $)}#'-'#{G get(scope $)}} end }
-            %{Show '----------------------------------------------'}
-
-            % Add the gindex to each new local, and return the new fDefineProc
-            fDefineProc(FSym Args R Flags Pos Globals {List.mapInd NewLocals fun {$ Ind L} {L set(gindex Ind-1)} L end })
-
          %-------------
          [] fVar(_ _) then
          %-------------
@@ -599,16 +566,17 @@ define
          [] fAtom(_ _) then
          %-------------
             raise namerLeftFAtomIntact end
-
-
          %---
+         [] fConst(_ _) then
+            AST
+         [] pos(_ _ _ _ _ ) then
+            AST
          else
          %---
             {DefaultPass AST GlobaliserInt Params}
          end
       end
-      InitialParams=params
-      R
+      InitialParams=params(currentScope: {OS.rand} newlocals:{NewCell nil} )
    in
       try
          {GlobaliserInt AST InitialParams}
@@ -618,9 +586,8 @@ define
             {Show 'Namer left fVar intact'}
             {DumpAST.dumpAST AST}
          else
-            {Show E}
+            raise E end
          end
-         unit
       end
    end
 
@@ -687,6 +654,9 @@ define
                end
                createVar(y({Sym get(yindex $)}))
             % In body, use the Y register
+            %CHECKME:  don't we need this global case?
+            %elseif {Sym get(type $)}==global then
+            %   g({Sym get(gindex $)})
             else
                y({Sym get(yindex $)})
             end
@@ -745,6 +715,7 @@ define
    in
       % append deallocateY and return
       OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} [deallocateY() 'return'()]}
+      %OpCodes={List.flatten {GenCodeInt AST InitialParams}}
 
       % prefix with allocateY
       %FIXME: keep prefix in Params?
