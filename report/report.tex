@@ -102,7 +102,92 @@ In the example we see that P3 uses 2 variables declared by another procedure: A 
 P2 does not directly use any variable, but it defines P3 which itself has 2 global variables. Those two variables are thus also globals to P2
 P1 also does not use any variable directly, but it gets 2 globals from P2, of which it declares one: B. P1 indeed only has one global: A.
 
-In the abstract syntax tree, fProc is replaced by fDefineProc taking 2 additional arguments: the global variables and their corresponding new symbols. This additional information will enable the code generator handle global variables. \fxnote{Check that the two arguments are really needed}
+In the abstract syntax tree, fProc is replaced by fDefineProc taking 1 additional argument: the newly created local variables referencing a variables in the surrounding procedure. This additional information will enable the code generator handle global variables.
+
+Variables declared by a proc P1 and used by a procedure P2 is also defines are globals for P1 and local to P1. So P1 does not have to create a new local. This is done in the code simply by looking  which procId each new locals of P2 references. If it references P1's procId, it does nothing as this means it references a variable declared by P1 itself.
+
+Handling globals is tricky, as illustrated by these examples:
+
+local
+   A
+in
+   proc {P1}
+      P2
+   in
+      proc {P2}
+         P3
+      in
+         proc {P3}
+            {Show A}
+         end
+         {P3}
+      end
+   end
+end
+In this case, A is global for P3 and it created a new local referencing a variable in P2. But for P2, A is also global, and this needs to trigger a new local creation in P2, which will be referenced by the new local in P3. Same thing in P1.
+
+local
+   A
+in
+   proc {P1}
+      P2
+   in
+      {Show A}  % Use A before a defined procedure needs it
+      proc {P2}
+         P3
+      in
+         proc {P3}
+            {Show A}
+         end
+         {P3}
+      end
+   end
+end
+
+In this case, the traversal of the AST will first analyse {Show A} and later on the procedures P2 and P3. In this case, P2 will create a new local that will reference a variable in P2, which is also a new local as A os global to P1. But this new local does not have to be created as it already has been created when {Show A} was traversed.
+
+Of course, the inverse has to be handled too, ie a new local is created for a defined proc, and reused later
+
+local
+   A
+in
+   proc {P1}
+      P2
+   in
+      proc {P2}
+         P3
+      in
+         proc {P3}
+            {Show A}
+         end
+         {P3}
+      end
+   end
+   {Show A}  % Use A after a nested proc triggered the creation of a new local.
+end
+
+
+
+Two procs defined at the same level have to reference the same variable (new local or declared variable of the outer proc). In this example, A is referenced by a new local in P1, which itself has to be referenced from new locals in P2 and P3.
+
+local
+   A
+in
+   proc {P1}
+      P2 P3
+   in
+      proc {P2}
+         {Show A}
+      end
+      proc {P3}
+          {Show A}
+      end
+      {P2}
+      {P3}
+   end
+   {Show A}  % Use A after a nested proc triggered the creation of a new local.
+end
+
 \subsection{CodeGen}
 \subsubsection{Register allocation}
 It is CodeGen that allocates registers. For the moment only Y registers.

@@ -54,7 +54,26 @@ define
    %            proc {P V}
    %               T
    %            in
-   %               {Show A}
+   %               proc {T U}
+   %                 A=44
+   %               in
+   %                 {Show A}
+   %                 {Show U}
+   %               end
+   %               {T A} % use it after a nested proc requested a new local for it
+   %            end
+   %            A = 5
+   %            B = 7
+   %            {P A}
+   %            {For 1 5 1 P}
+   %         end'
+   %Code = 'local
+   %            A P B
+   %         in
+   %            proc {P V}
+   %               T
+   %            in
+   %               {Show A}   % use before a nested proc request a new local creation for it
    %               proc {T U}
    %                 A=44
    %               in
@@ -68,6 +87,28 @@ define
    %            {P A}
    %            {For 1 5 1 P}
    %         end'
+   Code = 'local
+               A P B
+            in
+               proc {P V}
+                  T W
+               in
+                  proc {T U}
+                    A=44
+                  in
+                    {Show A}
+                    {Show U}
+                  end
+                  proc {W}       %|this introduces a problem: 2 procs defined at the same level, both using the same global
+                     {Show A}    %|
+                  end            %|
+                  {W}
+                  {T A}
+               end
+               A = 5
+               B = 7
+               {P A}
+            end'
    %Code = 'local
    %            P1 A
    %         in
@@ -84,26 +125,26 @@ define
    %            A=3
    %            {P1 A}
    %         end'
-   Code = 'local
-               A P B
-            in
-               proc {P V}
-                  T
-               in
-                  proc {T U}
-                    Text=44
-                  in
-                    {Show Text}
-                    {Show U}
-                    {Show A}
-                  end
-                  {T V}
-               end
-               A = 5
-               B = 7
-               {P A}
-               {For 1 5 1 P}
-            end'
+%   Code = 'local
+%               A P B
+%            in
+%               proc {P V}
+%                  T
+%               in
+%                  proc {T U}
+%                    Text=44
+%                  in
+%                    {Show Text}
+%                    {Show U}
+%                    {Show A}
+%                  end
+%                  {T V}
+%               end
+%               A = 5
+%               B = 7
+%               {P A}
+%               {For 1 5 1 P}
+%            end'
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
           GetSwitch EnvDictionary}
