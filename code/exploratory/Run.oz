@@ -48,20 +48,56 @@ define
    % next step: proc ... in ... end
    %Code = 'local A=5 B=6 in local B=7 in {Show A} {Show B} end {Show A} end'
    %Code = 'local A=5 in local A=6 B=7 in local C=8 in {Show A} {Show B} {Show C} end end end'
+   %Code = 'local
+   %            A P B
+   %         in
+   %            proc {P V}
+   %               T
+   %            in
+   %               {Show A}
+   %               proc {T U}
+   %                 A=44
+   %               in
+   %                 {Show A}
+   %                 {Show U}
+   %               end
+   %               {T A}
+   %            end
+   %            A = 5
+   %            B = 7
+   %            {P A}
+   %            {For 1 5 1 P}
+   %         end'
+   %Code = 'local
+   %            P1 A
+   %         in
+   %            proc {P1 A11}
+   %               P2 C=2
+   %            in
+   %               proc {P2 A21}
+   %                 {Show A}
+   %                 {Show A}
+   %                 {Show C}
+   %               end
+   %               {P2 A11}
+   %            end
+   %            A=3
+   %            {P1 A}
+   %         end'
    Code = 'local
                A P B
             in
                proc {P V}
                   T
                in
-                  {Show A}
                   proc {T U}
                     Text=44
                   in
                     {Show Text}
                     {Show U}
+                    {Show A}
                   end
-                  {T A}
+                  {T V}
                end
                A = 5
                B = 7
@@ -77,15 +113,15 @@ define
 
    %{DumpAST.dumpAST AST.1 }
    %{DumpAST.dumpAST {Compile.declsFlattener AST.1 }}
-   {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1 }}}
+   %{DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1 }}}
    {System.showInfo '--------------------------------------------------------------------------------'}
-   {DumpAST.dumpAST {Compile.globaliser {Compile.namer {Compile.declsFlattener AST.1 }}}}
+   %{DumpAST.dumpAST {Compile.globaliser {Compile.namer {Compile.declsFlattener AST.1 }}}}
    {System.showInfo '--------------------------------------------------------------------------------'}
 
-   OpCodes = {Compile.genCode {Compile.globaliser {Compile.namer {Compile.declsFlattener AST.1} }} params() }
+   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}} params() }
    {System.showInfo '--------------------------------------------------------------------------------'}
-   {Show 'Generate OpCodes:'}
-   {ForAll OpCodes Show}
+   %{Show 'Generate OpCodes:'}
+   %{ForAll OpCodes Show}
 
 
    Arity = 0
