@@ -68,8 +68,9 @@ define
       end
    end
 
-   proc {DumpAST AST}
+   fun {DumpAST AST}
       {DumpASTEx AST ''}
+      AST
    end
 %% in
 %   {DumpAST fAnd(fRecord(fVar('Hello' pos(1 2 3))
