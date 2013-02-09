@@ -48,13 +48,61 @@ Describe opcodes.
 
 \chapter{Compiler}
 \section{Architecture}
-Explaine the phases
+Explain the phases
 \subsection{Namer}
 replaces fVar by fSym. In declarations, creates a new symbol for declared variables, in body, looks at already defined symbols.
-\subsection{Globaliser}
-Each scope is assigned a name, and variables are assigned the scope in which they are declared. When a variable is used in a scope other than its declaration scope, it is a global variable relative to its use scope. We replace this symbol by new symbol marked as 'global' referencing the original symbol.
+fLocal introduces a new environment, in which the variables declared in its first feature are added to the environment, possibly erasing variables with the same name coming from the parent environment.
+It is this manipulation of the environments that make that the code here 1) does not throws an error of impossible unification and 2)shows 6.
+local
+   A=5
+in
+   local 
+      A=6
+   in
+      {Show A}
+   end
+end
 
-fProc is replaced by fDefineProc taking 2 additional arguments: the global variables and their corresponding new symbols. \fxnote{Check that the two arguments are really needed}
+\subsection{Globaliser}            
+This pass handles the global variables. It is interesting to note that the concept of global variables is only defined for procedures.
+Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
+Variables declared by a procedure, including formal parameters, get assigned the procId of said procedure.
+
+When a variable is used in a procedure other than its declaring procedure, it is a global variable for said procedure. We replace this symbol by new symbol marked as 'global' referencing the original symbol.
+
+Special attention has to be paid to nested procedure declarations. For example
+A=1
+proc {P1}                 % A is global
+   B=2
+   P2
+in
+   proc {P2}              % A and B are globals
+      P3 
+   in
+      proc {P3}           % A and B are globals
+         C
+      in
+         {Show A}
+         {Show B}
+         {Show C}
+      end
+      {P3}
+   end
+   {P2}
+end
+
+The globals of procedures in the code have to be determined from the inside to the outside: determine the globals of the deepest nested procedure, and go up. 
+We see that the globals of a procedure are:
+\begin{itemize}
+  \item variables it uses (i.e. not in a procedure definition) that were defined in a parent procedure
+  \item the globals of all the procedures it defines
+  \item minus the variables it declares
+\end{itemize}
+In the example we see that P3 uses 2 variables declared by another procedure: A and B. 
+P2 does not directly use any variable, but it defines P3 which itself has 2 global variables. Those two variables are thus also globals to P2
+P1 also does not use any variable directly, but it gets 2 globals from P2, of which it declares one: B. P1 indeed only has one global: A.
+
+In the abstract syntax tree, fProc is replaced by fDefineProc taking 2 additional arguments: the global variables and their corresponding new symbols. This additional information will enable the code generator handle global variables. \fxnote{Check that the two arguments are really needed}
 \subsection{CodeGen}
 \subsubsection{Register allocation}
 It is CodeGen that allocates registers. For the moment only Y registers.
