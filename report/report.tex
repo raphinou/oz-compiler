@@ -68,18 +68,18 @@ This pass handles the global variables. It is interesting to note that the conce
 Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
 Variables declared by a procedure, including formal parameters, get assigned the procId of said procedure.
 
-When a variable is used in a procedure other than its declaring procedure, it is a global variable for said procedure. We replace this symbol by new symbol marked as 'global' referencing the original symbol.
+When a variable is used in a procedure other than its declaring procedure, it is a global variable for the using procedure.
 
 Special attention has to be paid to nested procedure declarations. For example
 A=1
-proc {P1}                 % A is global
+proc {P1}                 % A is global to P1
    B=2
    P2
 in
-   proc {P2}              % A and B are globals
+   proc {P2}              % A and B are globals to P2
       P3 
    in
-      proc {P3}           % A and B are globals
+      proc {P3}           % A and B are globals to P3
          C
       in
          {Show A}
@@ -94,19 +94,20 @@ end
 The globals of procedures in the code have to be determined from the inside to the outside: determine the globals of the deepest nested procedure, and go up. 
 We see that the globals of a procedure are:
 \begin{itemize}
-  \item variables it uses (i.e. not in a procedure definition) that were defined in a parent procedure
-  \item the globals of all the procedures it defines
+  \item all variables it uses directly (i.e. not in a procedure definition)
+  \item plus the globals of all the procedures it defines
   \item minus the variables it declares
 \end{itemize}
+
 In the example we see that P3 uses 2 variables declared by another procedure: A and B. 
 P2 does not directly use any variable, but it defines P3 which itself has 2 global variables. Those two variables are thus also globals to P2
 P1 also does not use any variable directly, but it gets 2 globals from P2, of which it declares one: B. P1 indeed only has one global: A.
 
+In the abstract syntax tree, we replace symbols corresponding to a global variables by a new local symbol of type 'newlocal' referencing the symbol for this variables in the parent proc which might itself be replaced by a 'newlocal' symbol, and so on until we reach the level where the variables is declared.
+
 In the abstract syntax tree, fProc is replaced by fDefineProc taking 1 additional argument: the newly created local variables referencing a variables in the surrounding procedure. This additional information will enable the code generator handle global variables.
 
-Variables declared by a proc P1 and used by a procedure P2 is also defines are globals for P1 and local to P1. So P1 does not have to create a new local. This is done in the code simply by looking  which procId each new locals of P2 references. If it references P1's procId, it does nothing as this means it references a variable declared by P1 itself.
-
-Handling globals is tricky, as illustrated by these examples:
+Handling globals correctly requires to handle numerous cases, as illustrated by these examples:
 
 local
    A
@@ -124,7 +125,7 @@ in
       end
    end
 end
-In this case, A is global for P3 and it created a new local referencing a variable in P2. But for P2, A is also global, and this needs to trigger a new local creation in P2, which will be referenced by the new local in P3. Same thing in P1.
+In this case, A is global to P3 and it creates a new local symbol that will reference a symbol local to P2. But for P2, A is also global, and this situation needs to trigger a new local creation in P2, which will be referenced by the new local in P3. Same thing in P1.
 
 local
    A
@@ -144,9 +145,30 @@ in
    end
 end
 
-In this case, the traversal of the AST will first analyse {Show A} and later on the procedures P2 and P3. In this case, P2 will create a new local that will reference a variable in P2, which is also a new local as A os global to P1. But this new local does not have to be created as it already has been created when {Show A} was traversed.
+In this case, the traversal of the AST will first analyse {Show A} and create a new local symbol for the variables A in P1. P2 is cisited later and will create a new local to reference a symbol local to P2, which is also a new local as A is global to P1. But this new local has already been created, and this situation must not trigger the creation of a new local symbol for A. Rather, the new local symbol to P2 must reference the new local symbol to P1. We see that the new local variables created in a procedure definition may have to be modified by its parent procedure.
 
-Of course, the inverse has to be handled too, ie a new local is created for a defined proc, and reused later
+Of course, the inverse has to be handled too, ie a new local is created for a defined proc, and reused later:
+
+local
+   A
+in
+   proc {P1}
+      P2
+   in
+      proc {P2}
+         P3
+      in
+         proc {P3}
+            {Show A}
+         end
+         {P3}
+      end
+      {Show A}  % Use A after a nested proc triggered the creation of a new local.
+   end
+end
+
+
+Of course, a new local symbol must not be created when it would represent a locally declared variables, as in this case:
 
 local
    A
@@ -163,12 +185,10 @@ in
          {P3}
       end
    end
-   {Show A}  % Use A after a nested proc triggered the creation of a new local.
+   {Show A}  % A is defined locally, and the nested procs defined should not trigger the creation of a new local, but P1's new local for A should reference the A declared by the local .. in .. end
 end
 
-
-
-Two procs defined at the same level have to reference the same variable (new local or declared variable of the outer proc). In this example, A is referenced by a new local in P1, which itself has to be referenced from new locals in P2 and P3.
+Two procs defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, P2 and P3 each create a new local for A and both trigger the creation of a new local in P1 for A. But only one new local should be created in P1 for A, and both locals in P2 and P3 should reference it.
 
 local
    A

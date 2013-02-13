@@ -88,7 +88,7 @@ define
          pos(File Line Col _ _ _)=@pos
          Ref
       in
-         if @type==global then
+         if @type==localised then
             Ref = ' refprocid: '#{@ref get(procId $)}#' ref:Sym'#{@ref get(id $)}
          else
             Ref=''
@@ -104,6 +104,8 @@ define
       meth setProcId(ProcId)
 
          if @procId\=0 then
+            {Show 'Trying to override procId value to '#ProcId}
+            {System.showInfo {self toVS($)}}
             raise tryingToOverrideAssignedProcId end
          end
          procId:=ProcId
@@ -483,19 +485,129 @@ define
       {NamerForBody AST InitialParams}
    end
 
+
+
+   % List helper functions
+   fun {IndexOf Xs Y}
+      fun {IndexOfInt Xs Y I}
+         case Xs
+         of nil then notFound
+         [] X|Xr then
+            if X == Y then found(I)
+            else {IndexOfInt Xr Y I+1}
+            end
+         end
+      end
+   in
+      case {IndexOfInt Xs Y 1}
+      of found(I) then
+         I
+      else
+         0
+      end
+   end
+   proc {FirstOfP Xs P ?Index ?Item}
+      fun {FirstOfPInt Xs P I}
+         case Xs
+         of nil then notFound
+         [] X|Xr then
+            if {P X} then found(I X)
+            else {FirstOfPInt Xr P I+1}
+            end
+         end
+      end
+   in
+      case {FirstOfPInt Xs P 1}
+      of found(I R) then
+         Index=I
+         Item=R
+      else
+         Index=0
+         Item=unit
+      end
+   end
+
    %###################
    fun {Globaliser AST}
    %###################
+      class GlobalsManager
+         attr
+            globals
+            newlocals
+         meth init()
+            globals:=nil   % array of global variables of the current fProc
+            newlocals:=nil  % list of locals created for the global with same index
+         end
+
+         meth indexOfGlobal(Global ?Ind)
+            Ind={IndexOf @globals Global}
+         end
+         meth hasLocalForGlobalInProcId(Global ProcId ?B ?Local)
+            GlobalInd
+            Locals
+         in
+            % get index of global
+            GlobalInd={self indexOfGlobal(Global $)}
+            if GlobalInd>0 then
+               % the global was found
+               % get list of corresponding locals
+               Locals = @{Nth @newlocals GlobalInd}
+               % return boolean true if found, ie if index received is > 0
+               B=({FirstOfP Locals fun {$ I} {I get(procId $)}==ProcId end $ ?Local}>0)
+            else
+               B=false
+               Local=unit
+            end
+            % search for local with ProcId
+         end
+
+         meth createLocalForGlobalInProcId(Global ProcId ?Local)
+            GlobalInd
+            L
+         in
+            %FIXME handle position!! Need to get
+            Local = {New Symbol init({Global get(name $)} {Global get(pos $)})}
+            {Local set(type localised)}
+            {Local set(ref Global)}
+            {Local set(procId ProcId)}
+            {self addPair(Global Local)}
+         end
+
+         % Apply P to all pairs (GlobalVariable, CorrespondingLocalsList)
+         meth forAllPairs(P)
+            {List.forAllInd @globals proc {$ Ind Global} {P Global @{List.nth @newlocals Ind } } end }
+         end
+         meth addPair(Global Local)
+            GlobalInd
+         in
+            GlobalInd={self indexOfGlobal(Global $)}
+            if GlobalInd>0 then
+               %this global already had a local created, just append the new local
+               % get cell containing the list of locals for the global at index GlobalInd
+               LocalsForGlobal = {Nth @newlocals GlobalInd}
+            in
+               % prepend the new local to the list in the cell
+               LocalsForGlobal:=Local|@LocalsForGlobal
+            else
+               %Global was not yet see, so add it to the list and create a new list for its locals
+               globals:=Global|@globals
+               newlocals:={NewCell Local|nil}|@newlocals
+            end
+         end
+      end
       fun {GlobaliserInt AST Params}
          fun {AssignScope AST ProcId}
             case AST
             of fSym(Sym _) then
+               {Show 'assigning procId '#ProcId#' to '}
+               {System.showInfo {Sym toVS($)}}
                {Sym setProcId(ProcId)}
                AST
             else
                {DefaultPass AST AssignScope ProcId}
             end
          end
+
 
       in
          case AST
@@ -506,180 +618,92 @@ define
             %FIXME SCOPENAMEISNAME
             %ScopeName = {NewName}
             NewProcId = {OS.rand} mod 1000
-            NewParams={Record.adjoin Params params( currentProcId:NewProcId newlocals:{NewCell nil})}
+            NewParams={Record.adjoin Params params( currentProcId:NewProcId gm:{New GlobalsManager init()})}
             (NewParams.setter):={FSym.1 get(name $)}
             DeclaredLocals
             NewBody
-            NewLocals
+            NewLocals={NewCell nil}
          in
             % Assign scope to the formal parameters (Args)
+            {Show 'assign scope to arguments of fProc'}
             {AssignScope Args NewProcId _}
             %Extract the list of variables declared
             DeclaredLocals = {UnWrapFAnd Args}
-
-            {System.showInfo "received globals from parent for procedure "#{FSym.1 get(name $)}}
-            {ForAll {List.map @(NewParams.newlocals) fun {$ I} {I toVS($)} end } System.showInfo}
-            %Call recursively on children doing a post-order traversal
             NewBody = {GlobaliserInt ProcBody NewParams}
-            {System.showInfo "children's globals for procedure "#{FSym.1 get(name $)}}
-            {ForAll {List.map @(NewParams.newlocals) fun {$ I} {I toVS($)} end } System.showInfo}
 
-            %Children Globals are in Params.globals
-            %An fProc's globals are the globals of its children minus the variables it declares
-            % For each newlocal defined by the children and not declared by the proc, it needs to create a newlocal of its own, and make the child's new local point to this one
-            % The child's new local originally points to the root declaration, so the current proc's new local takes it over
-            %False: This fProc's NewLocals are the newlocals of its childrent minus thos it declares
-            NewLocals=  {List.mapInd
-                           %{List.filter @(NewParams.newlocals) fun {$ I} {{I get(ref $)} get(procId $)}\=NewParams.currentProcId end }
-                           %Filter out newlocals that have already been created in parent by direct use and only keep those that have to be created for children procs
-                           {List.filter @(NewParams.newlocals)
-                                          fun {$ I}
-                                             {Not
-                                                {List.member
-                                                   {I get(ref $)}
-                                                   {List.map   @(Params.newlocals)
-                                                               fun {$ I} {I get(ref $)} end
-                                                   }
-                                                }
-                                                orelse
-                                                % the new local points to a variable we declare, which is not placed in NewLocals
-                                                {{I get(ref $)} get(procId $)}==NewParams.currentProcId
-                                             }
-                                          end  }
-                           fun {$ Index ChildNewLocal}
-                              NewLocalSymbol
-                           in
-                              {Show '...................................................'}
-                              {System.showInfo 'fProc '#{FSym.1 get(name $)}#' globaliser looking at:'}
-                              {System.showInfo {ChildNewLocal toVS($)}}
-                              if {ChildNewLocal get(procId $)}==NewParams.currentProcId then
-                                 {Show 'Same procId as in NewParams => just append it to newlocals'}
-                                 %this is a directly used global, no need to map it
-                                 %{ChildNewLocal set(gindex Index-1)}
-                              {Show '...................................................'}
-                                 % Append it to newlocals already created
-                                 (Params.newlocals):=ChildNewLocal|@(Params.newlocals)
-                                 ChildNewLocal
-                              else
-                                 % this is a global used by a nested procedure for which we need to create a new local
-                                 {Show 'Other procId than in NewParams'}
-                                 {System.showInfo 'Changing '#{ChildNewLocal toVS($)}}
-                                 NewLocalSymbol = {ChildNewLocal clone($)}
-                                 {NewLocalSymbol set(procId NewParams.currentProcId)}
-                                 {NewLocalSymbol set(type global)}
-                                 % make the new symbol point to the child's original reference
-                                 {NewLocalSymbol set(ref {ChildNewLocal get(ref $)})}
-                                 % and put the NewLocalSymbol in its place
-                                 {ChildNewLocal set(ref NewLocalSymbol)}
-                                 %{NewLocalSymbol set(gindex Index-1)}
-                                 {System.showInfo ' to '#{NewLocalSymbol toVS($)}}
-                              {Show '...................................................'}
-                                 (Params.newlocals):=NewLocalSymbol|@(Params.newlocals)
-                                 NewLocalSymbol
-                              end
-                           end
-                        }
+            {NewParams.gm forAllPairs(proc {$ Global Locals}
+                                       FoundLocal
+                                       NewLocal
+                                    in
+                                       if {Global get(procId $)}==NewParams.currentProcId then
+                                          % this is a variable we declare, don't pass it to the parent
+                                          skip
+                                       else
+                                          if {FirstOfP Locals fun{$ I} {I get(procId $)}==NewParams.currentProcId end $ ?FoundLocal}>0 then
+                                             %make all locals reference the local with current procId that was found
+                                             {List.forAll Locals  proc {$ I}
+                                                                     if I\=FoundLocal then
+                                                                     {I set(ref FoundLocal)}
+                                                                     end
+                                                                  end}
+                                             % then push the pair (Global FoundLocal) in parent's global manager
+                                             {Params.gm addPair(Global FoundLocal)}
+                                             % and collect in the newlocals to pass to fDefineProc
+                                             NewLocals:=FoundLocal|@NewLocals
+                                          else
+                                             NewLocal
+                                          in
+                                             % No local with current procId was found, need to create one
+                                             % we create it at the parent level
+                                             {Params.gm createLocalForGlobalInProcId(Global NewParams.currentProcId ?NewLocal)}
+                                             % Make all our children's locals for that global point to our newly created local
+                                             {List.forAll Locals  proc {$ I}
+                                                                     {I set(ref NewLocal)}
+                                                                  end}
+                                             % And add it to our level
+                                             {NewParams.gm addPair(Global NewLocal)}
+                                             % and collect in the newlocals to pass to fDefineProc
+                                             NewLocals:=NewLocal|@NewLocals
+                                          end
+                                       end
+                                    end)}
 
-
-
-
-            % Do not do this because in the following code, it messes up the last A as it does not recognise it as already localised
-            % proc T should not push its newlocals up
-            % local
-            %   A
-            % in
-            % proc P
-            %    T
-            %  in
-            %    {Show A}
-            %    proc {T}
-            %      {Show A} <-----------------------------------------------------------------+
-            %    end                                                                          |
-            %    {Show A} <- this one will get a new proc id because it is compared to the new local created by T
-            %  end
-            % However, on the following code the new local for B created by T should create a newlocal in P.
-            % It can create the new local for A; and reuse it when getting to the  {Show A}
-            % local
-            %   A B
-            % in
-            % proc P
-            %    T
-            %  in
-            %    proc {T}
-            %      {Show B}
-            %      {Show A}
-            %    end                                                                          |
-            %    {Show A}
-            %  end
-            %(Params.newlocals):=NewLocals
-            %(Params.setter):={FSym.1 get(name $)}
-            {List.mapInd @(Params.newlocals) fun {$ Index I} {I set(gindex Index-1)} I end _}
-
-            % FIXME: can we do without the Globals list?
-            fDefineProc(FSym Args NewBody Flags Pos NewLocals)
+            % Set the gindex for the newlocals of this fProc
+            {List.forAllInd @NewLocals proc {$ Ind Sym} {Sym set(gindex Ind-1)} end }
+            fDefineProc(FSym Args NewBody Flags Pos @NewLocals)
 
          [] fLocal(Decls Body Pos) then
             DeclaredLocals
             NewBody
             NewLocals
          in
+            {Show 'assign scope in fLocal'}
             {AssignScope Decls Params.currentProcId _}
             DeclaredLocals = {UnWrapFAnd Decls}
             NewBody = {GlobaliserInt Body Params}
-            NewLocals={List.filter @(Params.newlocals) fun {$ I} {Not {List.member {I get(ref $)} DeclaredLocals}} end }
-            (Params.newlocals):=NewLocals
-            (Params.setter):=flocal(Pos)
             fLocal(Decls NewBody Pos)
          %-------------
          []fSym(Sym Pos) then
          %-------------
+            LocalSymbolFound
             NewLocalSymbol
+            Found
          in
             {Show '------------------------------fSym--------------------------'}
             {System.showInfo {Sym toVS($)}}
+            % If the Symbol's procId is different from the current proc's
+            % procId, it means that it is a global for the current proc.
             if {Sym get(procId $)}\=Params.currentProcId then
-               CorrespondingReplacements
-               Length
-            in
-               %Check if we already created a new symbol for this one
-               {Show 'will filter list'}
-               {Show {List.map @(Params.newlocals) fun {$ I} {I toVS($)} end }}
-               {Show 'last setter:'}
-               {Show @(Params.setter)}
-               {Show 'Looking for'}
-               {System.showInfo {Sym toVS($)}}
-               CorrespondingReplacements = {List.filter @(Params.newlocals) fun {$ I} {I get(ref $)}==Sym end }
-               {Show 'done'}
-               Length={List.length CorrespondingReplacements}
-               {Show Length}
-               if Length>1 then
-                  raise multipleExistingReplacementsFoundInGlobaliser end
-               end
-
-               if {List.length CorrespondingReplacements}>0 then
-                  {Show 'Replacement found! Will reuse:'}
-                  {System.showInfo {CorrespondingReplacements.1 toVS($)}}
-                  {Show 'done with this fSym'}
-                  fSym(CorrespondingReplacements.1 Pos)
+               {Params.gm hasLocalForGlobalInProcId(Sym Params.currentProcId ?Found ?LocalSymbolFound)}
+               if Found then
+                  if LocalSymbolFound==unit then raise localClaimedToExistNotReturned end end
+                  fSym(LocalSymbolFound Pos)
                else
-                  {Show 'No replacement found! Doing replacement'}
-                  {System.showInfo 'Symbol has a different procIdi '#{Sym get(procId $)} #' than current one being'#Params.currentProcId}
-                  NewLocalSymbol = {Sym clone($)}
-                  {NewLocalSymbol set(procId Params.currentProcId)}
-                  {NewLocalSymbol set(type global)}
-                  {NewLocalSymbol set(ref Sym)}
-
-                  % collect global and its corresponding new local symbol
-                  (Params.newlocals):=NewLocalSymbol|@(Params.newlocals)
-                  (Params.setter):=Sym
-
-                  {System.showInfo "replaced "#{Sym toVS($)}#" by "#{NewLocalSymbol toVS($)} }
-                  % Return the new symbol
+                  {Params.gm createLocalForGlobalInProcId(Sym Params.currentProcId ?NewLocalSymbol)}
                   fSym(NewLocalSymbol Pos)
                end
             else
-               {System.showInfo 'has a same procId as current one being'#Params.currentProcId}
-               {Show 'so we keep it!'}
+               % Same procId, so keep it!
                AST
             end
          %-------------
@@ -701,7 +725,7 @@ define
             {DefaultPass AST GlobaliserInt Params}
          end
       end
-      InitialParams=params(currentProcId: {OS.rand} mod 1000  newlocals:{NewCell nil} setter:{NewCell 'toplevel'})
+      InitialParams=params(currentProcId: {OS.rand} mod 1000 gm:{New GlobalsManager init()} setter:{NewCell 'toplevel'})
    in
       try
          {GlobaliserInt AST InitialParams}
@@ -754,30 +778,30 @@ define
 
 
             OpCodes:={List.append @OpCodes  [createAbstractionUnify(k(CA) GlobalsCount  y({Sym get(yindex $)}))]}
-            % not needed here, we create it, we do not call it!
-            %OpCodes:={List.append @OpCodes {List.mapInd Args fun {$ I fSym(Sym _)} move(x(I-1) y({Sym get(yindex $)})) end }}
+
             % arrayfill for globals
+            %----------------------
             {System.showInfo 'Here are the globals for '#{Sym get(name $)}}
             {ForAll NewLocals proc {$ G} {System.showInfo {G get(name $)}#' '#{G get(type $)}#' '#{G get(procId $)}#' ' } end }
             ArrayFills = {List.map NewLocals
                                     fun {$ I}
-                                       if {{I get(ref $)} get(type $)}==global then
-                                          {Show '####################'}
-                                          {Show '----ArrayFill-------'}
-                                          {Show '####################'}
-                                          {Show 'next var is referencing a global'}
-                                          {System.showInfo {I toVS($)}}
-                                          {Show 'References:' }
-                                          {System.showInfo {{I get(ref $)}  toVS($)}}
+                                       if {{I get(ref $)} get(type $)}==localised then
+                                          %{Show '####################'}
+                                          %{Show '----ArrayFill-------'}
+                                          %{Show '####################'}
+                                          %{Show 'next var is referencing a global (so use g)'}
+                                          %{System.showInfo {I toVS($)}}
+                                          %{Show 'References:' }
+                                          %{System.showInfo {{I get(ref $)}  toVS($)}}
                                           arrayFill(g({{I get(ref $)} get(gindex $)}))
                                        else
-                                          {Show 'next var is referencing a non global'}
-                                          {System.showInfo {I toVS($)}}
-                                          {Show 'References:' }
-                                          {System.showInfo {{I get(ref $)}  toVS($)}}
+                                          %{Show 'next var is referencing a non globali (so use y)'}
+                                          %{System.showInfo {I toVS($)}}
+                                          %{Show 'References:' }
+                                          %{System.showInfo {{I get(ref $)}  toVS($)}}
                                           arrayFill(y({{I get(ref $)} get(yindex $)})) end
                                     end }
-            OpCodes:={List.append @OpCodes  ArrayFills }
+            OpCodes:={List.append @OpCodes ArrayFills}
 
             {System.showInfo {Sym get(name $)}#' Opcode is:'}
             {ForAll @OpCodes Show}
@@ -794,8 +818,6 @@ define
          %-------------
             % In declarations, assign Y register and issue createVar
 
-            {Show 'Symbol '#{Sym get(name $)} }
-
             if Params.indecls then
                % assign Y register
                if {Sym get(yindex $)}==nil then
@@ -805,11 +827,9 @@ define
                createVar(y({Sym get(yindex $)}))
             % In body, use the Y register
             %CHECKME:  don't we need this global case?
-            elseif {Sym get(type $)}==global then
-               {Show 'is global and ends up in '#g({Sym get(gindex $)})}
+            elseif {Sym get(type $)}==localised then
                g({Sym get(gindex $)})
             else
-               {Show 'is local and ends up in '#y({Sym get(yindex $)})}
                y({Sym get(yindex $)})
             end
 
@@ -821,34 +841,33 @@ define
             %if {HasFeature Params procassemble} andthen Params.procassemble then
             %L is the arguments list
             % first move arguments in x registers
-            % FIXME will need to check from which type of register we need to copy!
-            R:={List.mapInd Args fun {$ Index AST}
+            _={List.mapInd Args fun {$ Index AST}
                                     case AST
                                     of fSym(S _) then
                                        if {S get(type $)}==localProcId then
-                                          %if {S get(yindex $)}==nil then
-                                          %   raise missingNeededYIndex end
-                                          %end
-                                          {List.append @R move(y({S get(yindex $)}) x(Index-1))}
-                                       elseif {S get(type $)}==global then
+                                          if {S get(yindex $)}==nil then
+                                             raise missingNeededYIndex end
+                                          end
+                                          R:={List.append @R [move(y({S get(yindex $)}) x(Index-1))]}
+                                       elseif {S get(type $)}==localised then
                                           if {S get(gindex $)}==nil then
                                              {System.showInfo 'missing gindex for '#{S toVS($)}}
-                                          %   raise missingNeededGIndex end
+                                             raise missingNeededGIndex end
                                           end
-                                          {List.append @R move(g({S get(gindex $)}) x(Index-1))}
+                                          R:={List.append @R [move(g({S get(gindex $)}) x(Index-1))]}
                                        else
                                           raise unknownSymbolType end
                                        end
                                     [] fConst(V _) then
-                                       {List.append @R move(k(V) x(Index-1))}
+                                       R:={List.append @R [move(k(V) x(Index-1))]}
                                     end
                                  end}
-
             case Sym
             of fConst(Const _) then
                {List.append @R [call(k(Sym.1) {List.length Args})] }
-            [] fSym(Sym _) then
-               {List.append @R [call(y({Sym get(yindex $)}) 1)] }
+            % FIXME: find better naming for Sym2 ?
+            [] fSym(Sym2 _) then
+               {List.append @R [call(y({Sym2 get(yindex $)}) {List.length Args})] }
             end
 
          %--------------------

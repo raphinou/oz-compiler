@@ -87,44 +87,49 @@ define
    %            {P A}
    %            {For 1 5 1 P}
    %         end'
-   Code = 'local
-               A P B
-            in
-               proc {P V}
-                  T W
-               in
-                  proc {T U}
-                    A=44
-                  in
-                    {Show A}
-                    {Show U}
-                  end
-                  proc {W}       %|this introduces a problem: 2 procs defined at the same level, both using the same global
-                     {Show A}    %|
-                  end            %|
-                  {W}
-                  {T A}
-               end
-               A = 5
-               B = 7
-               {P A}
-            end'
-   %Code = 'local
-   %            P1 A
-   %         in
-   %            proc {P1 A11}
-   %               P2 C=2
-   %            in
-   %               proc {P2 A21}
-   %                 {Show A}
-   %                 {Show A}
-   %                 {Show C}
-   %               end
-   %               {P2 A11}
-   %            end
-   %            A=3
-   %            {P1 A}
-   %         end'
+%   Code = 'local
+%               A P B
+%            in
+%               proc {P V}
+%                  T W
+%               in
+%                  proc {T U}
+%                    {Show A}
+%                    {Show A}
+%                    {Show U}
+%                  end
+%                  proc {W}       %|this introduces a problem: 2 procs defined at the same level, both using the same global
+%                     {Show A}    %|
+%                  end            %|
+%                  {W}
+%                  {T A}
+%               end
+%               A = 5
+%               B = 7
+%               {P A}
+%            end'
+%   Code = 'local                 %this code has a problem of arity of P (?)
+%               A P B
+%            in
+%               proc {P V}
+%                  T W
+%               in
+%                  proc {T U}
+%                    A=44
+%                  in
+%                    {Show A}
+%                    {Show U}
+%                  end
+%                  proc {W}
+%                     {Show A}
+%                  end
+%                  {W}
+%                  {T A}
+%               end
+%               A = 5
+%               B = 7
+%               {P A}
+%            end'
 %   Code = 'local
 %               A P B
 %            in
@@ -145,6 +150,23 @@ define
 %               {P A}
 %               {For 1 5 1 P}
 %            end'
+   Code = 'local
+               P1 A
+            in
+               proc {P1 A11}
+                  P2 C
+               in
+                  C=2
+                  proc {P2 A21}
+                    {Show A}
+                    {Show A}
+                    {Show C}
+                  end
+                  {P2 A11}
+               end
+               A=3
+               {P1 A}
+            end'
 
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
           GetSwitch EnvDictionary}
