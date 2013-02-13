@@ -64,11 +64,9 @@ in
 end
 
 \subsection{Globaliser}            
-This pass handles the global variables. It is interesting to note that the concept of global variables is only defined for procedures.
+This pass handles the global variables of a procedure, that is, variables used by a procedure that does not declare it (implying that the declaration is done at un upper level. It is interesting to note that the concept of global variables is only defined for procedures.
 Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
 Variables declared by a procedure, including formal parameters, get assigned the procId of said procedure.
-
-When a variable is used in a procedure other than its declaring procedure, it is a global variable for the using procedure.
 
 Special attention has to be paid to nested procedure declarations. For example
 A=1
@@ -96,18 +94,18 @@ We see that the globals of a procedure are:
 \begin{itemize}
   \item all variables it uses directly (i.e. not in a procedure definition)
   \item plus the globals of all the procedures it defines
-  \item minus the variables it declares
+  \item minus the variables it declares itself
 \end{itemize}
 
 In the example we see that P3 uses 2 variables declared by another procedure: A and B. 
 P2 does not directly use any variable, but it defines P3 which itself has 2 global variables. Those two variables are thus also globals to P2
 P1 also does not use any variable directly, but it gets 2 globals from P2, of which it declares one: B. P1 indeed only has one global: A.
 
-In the abstract syntax tree, we replace symbols corresponding to a global variables by a new local symbol of type 'newlocal' referencing the symbol for this variables in the parent proc which might itself be replaced by a 'newlocal' symbol, and so on until we reach the level where the variables is declared.
+In the abstract syntax tree, we replace symbols corresponding to a global variables by a new local symbol of type 'newlocal' referencing the symbol for this variables in the parent proc which might itself be a 'newlocal' symbol, and so on until we reach the level where the variables is declared.
 
 In the abstract syntax tree, fProc is replaced by fDefineProc taking 1 additional argument: the newly created local variables referencing a variables in the surrounding procedure. This additional information will enable the code generator handle global variables.
 
-Handling globals correctly requires to handle numerous cases, as illustrated by these examples:
+Handling globals correctly requires to handle numerous cases, and determining the algorithm to use requires some care, as illustrated by these examples:
 
 local
    A
@@ -190,6 +188,8 @@ end
 
 Two procs defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, P2 and P3 each create a new local for A and both trigger the creation of a new local in P1 for A. But only one new local should be created in P1 for A, and both locals in P2 and P3 should reference it.
 
+
+Example V:
 local
    A
 in
@@ -207,6 +207,30 @@ in
    end
    {Show A}  % Use A after a nested proc triggered the creation of a new local.
 end
+
+In the end, the algorithm used is the following.
+Each call of the globaliser takes the AST subtree and an additional Params argument with three fields:
+\begin{itemize}
+   \item the current procId
+   \item a list of global variables already seen in the current procId
+   \item a list, each item being the list of new local symbols created for the global with same index in the previous list.
+\end{itemize}
+
+The globalise handles the following nodes:
+\begin{description}
+   \item[fProc] When handling a fProc, the globaliser call gets the informations from the parent in its Params argument. Because we enter a new level of procedure nesting, a NewParams is initialised to be passed to recursive globaliser calls handling children nodes. NewParams is initialised with a new procId and two empty lists. 
+      The symbol of the procedure itself gets the procId of its parent, found in Params. The arguments of the procedure get the procId of the currently handled procedure, found in NewParams. At that time the globaliser function is called resursively on the children nodes, with NewParams as additional argument.
+      Once all children have been traversed, the list of their globals and their respective newly created locals is found in NewParams.  We have multiple new locals corresponding to one global in the case of 2 siblings procedure definitions refering the same global as in example V. 
+      Globals whose procId match the NewParams' procId are ignored, as those are variables that are declared at this level, and the chain of references must stop here for these variables.
+      For each remaining global, we look at the list of their locals. 
+      If one of these has the procId matching the current level, all other locals are changed to reference this one. This is because this specific symbol has been created by a direct use at this level, and we will use this one as the new localised symbol at this level. Then we push the global on the parent's globals list and add the local symbol to its corresponding list of new locals (those lists are found in Params)
+      If none of the locals has the current level's procId, it means the global variables has only been used in nested procedure definitions. We need to create a new local symbol for that variable at the current level that will be referenced by the existing locals. Finally, we push the global and the new local symbol we created to the parent. 
+   \item[fSym] If the symbol in this fSym has the current procId found in NewParams, keep it as is, do not change it! 
+      If its procId is different from the current procId, this fSym represents a global variable for the current level. We look in Params if a loca variable with the current procId has already been created for this global variable. If yes we reuse it, else We define a new symbol, having the curren tprocId and referencing the symbol initially in fSym. We modify the fSym to use that newly created symbol. Finally, push the global and its local to the parent.
+      
+\end{description}
+
+
 
 \subsection{CodeGen}
 \subsubsection{Register allocation}
