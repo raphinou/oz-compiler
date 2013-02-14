@@ -240,8 +240,16 @@ For a procedure definition, we initialise the global variables with arrayFill( y
 For a local\ldots in \ldots end, a g() is issued in place of a y(). \fxnote{is this working yet?}
 
 \section{Tests}
-Explain the tests
+Tests are defined by three files each:
+\begin{itemize}
+  \item the oz code to compile and execute
+  \item the expected stdout
+  \item the expected stderr
+\end{itemize}
 
+A TestRunner script in oz loads the code found in the file whose path is passed as argument, parses it, gives the AST to the compiler which returns the opcodes which are assembled and executed. 
+A shell script iterates over all tests and for each execute the TestRunner, puts the stdout and stderr in result files, compares their content with the expected results and in case of difference can open a diffviewer (like vimdiff).
+All test code has a preamble comment describing what case this test covers.
 \section{Performance}
 Possibly include some measure?
 
