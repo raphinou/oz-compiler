@@ -7,7 +7,7 @@ import
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
-   DumpAST at './DumpAST.ozf'
+   DumpAST at '../lib/DumpAST.ozf'
    % for nested environments debugging
    OS
 
