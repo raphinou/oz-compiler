@@ -873,8 +873,8 @@ define
       InitialParams = {Record.adjoin params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0}) CallParams}
       OpCodes
    in
-      % append deallocateY and return
-      OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} [deallocateY() 'return'()]}
+      % append return
+      OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} ['return'()]}
       %OpCodes={List.flatten {GenCodeInt AST InitialParams}}
 
       % prefix with allocateY
