@@ -7,9 +7,9 @@ import
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
    Application(getArgs)
-   DumpAST at './DumpAST.ozf'
+   DumpAST at '../lib/DumpAST.ozf'
    Debug at 'x-oz://boot/Debug'
-   Compile at './Compile.ozf'
+   Compile at '../lib/Compile.ozf'
 define
    AST
    proc {Equals Result Expected}

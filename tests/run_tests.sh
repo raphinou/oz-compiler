@@ -1,4 +1,4 @@
-
+#!/usr/bin/env bash
 
 halt_on_error=1
 view_diffs_on_error=1
@@ -6,8 +6,8 @@ diff_viewer=vimdiff
 
 
 
-testsdir=tests
-resultsdir=$testsdir/results
+testsdir=definitions
+resultsdir=results
 
 
 # colors
@@ -24,7 +24,7 @@ col=30
 
 # ensure tests are read-only
 chmod a-w $testsdir/*
-chmod +w $testsdir/results
+chmod +w $resultsdir
 
 
 # Function that will check the output of the test is what was expected.
@@ -53,7 +53,7 @@ for f in $testsdir/*oz; do
   basename=${filename%.*}
   echo $basename
   dest=$resultsdir/${filename%.*}
-  ozengine src/TestRunner.ozf $f 2> $dest.err | tee $dest.debug | sed -e '1,/^--END DEBUG--$/d' > $dest.out
+  ozengine TestRunner.ozf $f 2> $dest.err | tee $dest.debug | sed -e '1,/^--END DEBUG--$/d' > $dest.out
 
   extensions="out err"
   for ext in $extensions; do 
