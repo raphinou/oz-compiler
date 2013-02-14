@@ -246,31 +246,13 @@ define
       case AST
       of fVar(Name _) then
          pv(Name:AST)
+      [] fAnd(S E) then
+         {Record.adjoin {PVS S} {PVE E}}
       [] fLocal(Decls Body _) then
          % Get last feature in fAnd hierarchy
-         fun {Last AST}
-            case AST
-            of fAnd(First Second) then
-               {Last Second}
-            else
-               AST
-            end
-         end
-         %Return all but last feature in fAnd hierarchy
-         fun {ButLast AST}
-            case AST
-            of fAnd(V fAnd(First Second)) then
-               fAnd(V {ButLast fAnd(First Second)})
-            [] fAnd(First _) then
-               First
-            else
-               AST
-            end
-         end
-      in
          % Body2 is the body except the last instruction
          % ({PVS Body2} + {PVE Last}) - {PVS Decls}
-         {Record.subtractList{{Record.adjoin {PVS {ButLast Body}} {PVE Last}}  {Record.arity {PVS Decls}}}}
+         {Record.subtractList {PVE Body}  {Record.arity {PVS Decls} }}
       [] fEq(LHS RHS) then
          {Record.adjoin {PVE LHS} {PVE RHS}}
       else
