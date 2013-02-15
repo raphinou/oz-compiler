@@ -176,8 +176,8 @@ define
    fun {UnWrapFAnd AST}
       fun {UnWrapFAndInt AST Terminate}
          case AST
-         of fAnd(First Second=fAnd(_ _)) then
-       {UnWrapFAndInt First false}|{UnWrapFAndInt Second Terminate}
+         of fAnd(First=fAnd(FF FS) Second) then
+       {UnWrapFAndInt FF false}|{UnWrapFAndInt FS false}|{UnWrapFAndInt Second Terminate}
          [] fAnd(First Second) then
             {UnWrapFAndInt First false} | {UnWrapFAndInt Second Terminate}
          else

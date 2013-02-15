@@ -56,6 +56,9 @@ define
    % Test function UnwrapFAnd
    %--------------------------------------------------------------------------------
    % FIXME: good result, but fails....
+   {Equals {Compile.unWrapFAnd fAnd(first fAnd(second third) )} first|second|third|nil }
+   {Equals {Compile.unWrapFAnd fAnd(fAnd(first second) third )} first|second|third|nil }
+   {Equals {Compile.unWrapFAnd fAnd(fAnd(first second) fAnd(third fourth) )} first|second|third|fourth|nil }
    {Equals {Compile.unWrapFAnd fAnd(first fAnd(fAnd(second third) fAnd(fourth fifth)))} first|second|third|fourth|fifth|nil }
    {Equals {Compile.unWrapFAnd fProc()} 'fProc'|nil}
 

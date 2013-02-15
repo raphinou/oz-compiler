@@ -59,7 +59,7 @@ for f in $testsdir/*oz; do
   for ext in $extensions; do 
     if ! valid_output && [[ $halt_on_error -eq 1 ]] ; then
       echo "Halting on error"
-      break 2
+      exit 1
     fi
   done
 
