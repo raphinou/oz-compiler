@@ -6,9 +6,9 @@ import
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
-   DumpAST at './DumpAST.ozf'
+   DumpAST at '../lib/DumpAST.ozf'
    Debug at 'x-oz://boot/Debug'
-   Compile at './Compile.ozf'
+   Compile at '../lib/Compile.ozf'
 define
    {Debug.setRaiseOnBlock {Thread.this} true}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -29,40 +29,37 @@ define
   %--------------------------------------------------------------------------------
   % The code we work on
   %--------------------------------------------------------------------------------
-  %Code = 'local A = 5 B = 3 in {System.showInfo A + B} end'
+  %Code = 'local A = 5 B = 3 C in C = A + B  {Show C}end'
+  Code ='local
+            A = 8
+            B = 2
+            Add Sub Mult Div
+         in
+            Add = A + B
+            Sub = A - B
+            Mult= A * B
+            Div = A div B
+            {Show Add}
+            {Show Sub}
+            {Show Mult}
+            {Show Div}
+         end  '
    % next step: proc ... in ... end
-   Code = 'local
-               P1 A
-            in
-               proc {P1 A11}
-                  P2 C
-               in
-                  C=2
-                  proc {P2 A21}
-                    {Show A}
-                    {Show A}
-                    {Show C}
-                  end
-                  {P2 A11}
-               end
-               A=3
-               {P1 A}
-            end'
-
    AST = {Compiler.parseOzVirtualString Code PrivateNarratorO
           GetSwitch EnvDictionary}
 
 
    {System.showInfo '################################################################################'}
 
-   %{DumpAST.dumpAST AST.1 }
-   %{DumpAST.dumpAST {Compile.declsFlattener AST.1 }}
-   %{DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1 }}}
-   {System.showInfo '--------------------------------------------------------------------------------'}
-   %{DumpAST.dumpAST {Compile.globaliser {Compile.namer {Compile.declsFlattener AST.1 }}}}
-   {System.showInfo '--------------------------------------------------------------------------------'}
-
-   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}} params() }
+%   _={DumpAST.dumpAST AST.1 }
+%   {System.showInfo '--------------------------------------------------------------------------------'}
+%   %_={DumpAST.dumpAST {Compile.desugar {Compile.declsFlattener AST.1 }}}
+%   _={DumpAST.dumpAST {Compile.unnester {Compile.namer {Compile.desugar {Compile.declsFlattener AST.1 }}}}}
+%   {System.showInfo '--------------------------------------------------------------------------------'}
+%   %{DumpAST.dumpAST {Compile.globaliser {Compile.unnester {Compile.namer {Compile.declsFlattener AST.1 }}}}}
+%   {System.showInfo '--------------------------------------------------------------------------------'}
+%
+   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.namer {Compile.desugar {Compile.declsFlattener AST.1} }}}}}} params() }
    {System.showInfo '--------------------------------------------------------------------------------'}
    %{Show 'Generate OpCodes:'}
    %{ForAll OpCodes Show}

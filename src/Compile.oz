@@ -15,6 +15,8 @@ export
    namer: Namer
    genCode: GenCode
    declsFlattener: DeclsFlattener
+   desugar: Desugar
+   unnester: Unnester
    globaliser: Globaliser
    pve: PVE
    pvs: PVS
@@ -342,6 +344,46 @@ define
       {DeclsFlattenerInt AST unit}
    end
 
+   fun {Desugar AST}
+      fun {DesugarOp Op Args Pos}
+         case Op
+         of '+' then %orelse '-' orelse '/' orelse '*' then
+            fConst(Number.Op Pos)
+         [] '-' then
+            fConst(Number.Op Pos)
+         [] '*' then
+            fConst(Number.Op Pos)
+         [] 'div' then
+            fConst(Int.Op Pos)
+         [] '/' then
+            fConst(Float.Op Pos)
+         end
+      end
+
+      fun {DesugarInt AST Params}
+         case AST
+         of fOpApply(Op Args Pos) then
+            fApply({DesugarOp Op Args Pos} Args Pos)
+         else
+            {DefaultPass AST DesugarInt Params}
+         end
+      end
+   in
+      {DesugarInt AST params}
+   end
+
+   fun {Unnester AST}
+      fun {UnnesterInt AST Params}
+         case AST
+         of fEq( fSym(Sym SymPos) fApply(Op Args ApplyPos) _) then
+            fApply(Op {List.append Args [fSym(Sym SymPos)]} ApplyPos)
+         else
+            {DefaultPass AST UnnesterInt Params}
+         end
+      end
+   in
+      {UnnesterInt AST params}
+   end
 
    % The namer replaces variable names with a Symbol instance, all identical
    % variable instances referencing the same symbol.

@@ -48,7 +48,22 @@ Describe opcodes.
 
 \chapter{Compiler}
 \section{Architecture}
-Explain the phases
+The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument that they need to transform, and they return the transformed AST.
+These functions all have the same structure:
+   fun {Transform AST}
+      fun {TransformInt AST Params}
+         case AST
+         of \ldots then
+         else
+            {DefaultPass AST TransformInt Params}
+         end
+      end
+      InitialParams = \ldots
+   in
+      {TransformInt AST InitialParams}
+   end
+Having the same structure enables the use of the function DefaultPass, which calls the function passed as second arguments recursively on the AST with Params as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
+Params if a record with label params, and features are added according to use. For an example, loog at the globaliser below.%FIXME: add reference
 \subsection{Namer}
 replaces fVar by fSym. In declarations, creates a new symbol for declared variables, in body, looks at already defined symbols.
 fLocal introduces a new environment, in which the variables declared in its first feature are added to the environment, possibly erasing variables with the same name coming from the parent environment.
