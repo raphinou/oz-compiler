@@ -174,22 +174,16 @@ define
       end
    end
    fun {UnWrapFAnd AST}
-      fun {UnWrapFAndInt AST Terminate}
+      fun {UnWrapFAndInt AST }
          case AST
-         of fAnd(First=fAnd(FF FS) Second) then
-       {UnWrapFAndInt FF false}|{UnWrapFAndInt FS false}|{UnWrapFAndInt Second Terminate}
-         [] fAnd(First Second) then
-            {UnWrapFAndInt First false} | {UnWrapFAndInt Second Terminate}
+         of fAnd(First Second) then
+            {UnWrapFAndInt First } | {UnWrapFAndInt Second }
          else
-            if Terminate then
-               AST|nil
-            else
-               AST
-            end
+            AST|nil
          end
       end
    in
-      {UnWrapFAndInt AST true}
+      {List.flatten {UnWrapFAndInt AST }}
    end
 
 
