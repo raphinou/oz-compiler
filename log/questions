@@ -17,3 +17,5 @@
 - pourquoi HelpersTests fail alors qu'il voit bien les memes listes?
 
 - validation de l'include '../lib/Compiler.ozf'
+
+- in fConst peut etre généré par le parser??

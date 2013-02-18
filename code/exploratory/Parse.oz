@@ -1,9 +1,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                 Parse an oz file and shows the resulting AST
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-functor 
+functor
 
-import 
+import
    Narrator('class')
    ErrorListener('class')
    Application(getArgs)
@@ -13,7 +13,7 @@ import
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
    DumpAST at './DumpAST.ozf'
-define 
+define
    PrivateNarratorO
    AST
    NarratorO = {New Narrator.'class' init(?PrivateNarratorO)}
@@ -31,13 +31,13 @@ define
      AST = {Compiler.parseOzFile FileName PrivateNarratorO
           GetSwitch EnvDictionary}
    end
-   
-   if {ListenerO hasErrors($)} then 
+
+   if {ListenerO hasErrors($)} then
       {System.printInfo {ListenerO getVS($)}}
       {ListenerO reset()}
    else
       {Show AST}
-      {DumpAST.dumpAST AST}
+      {DumpAST.dumpAST AST _}
    end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -54,7 +54,7 @@ define
 %   PrintName = 'Q'
 %   DebugData = d(file:'Truc.oz' line:32 column:3)
 %   Switches = switches
-%   
+%
 %   CodeArea VS
 %   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
 %

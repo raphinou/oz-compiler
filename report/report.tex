@@ -1,13 +1,20 @@
 %http://vim-latex.sourceforge.net/documentation/latex-suite.html#environment-mappings
-\documentclass[draft,a4paper]{memoir}
+%http://www.latextemplates.com/template/masters-doctoral-thesis
+\documentclass[a4paper]{memoir}
 \usepackage[utf8]{inputenc}
 \usepackage{pgf}
 \usepackage[margin=false,inline=true]{fixme}
+\usepackage{listings} % DO NOT USE DRAFT DOCUMENT AS IT WILL NOT DISPLAY THE CODE
+
+
 \fxsetup{theme=color}
 \definecolor{fxnote}{rgb}{0.8000,0.0000,0.0000}
 \author{Bauduin Raphaël}
 \title{Oz Compiler}
 \begin{document}
+% configure listings package to handle code as Oz code
+\lstset{language=Oz}
+
 
 % requires memoir
 % include git rev
@@ -41,7 +48,93 @@ Y are locals(y(index)), X are work registers (x(index)), G are globals filled se
 Abstraction (with G regs)  -> CodeArea (with K regs) -> Code
 \section{Compiler input}
 Describe records received from parser.
-fInt,fFloat,fVar, fEq, fProc\ldots
+Not all will be described here as an exhaustive list is available at %http://www.mozart-oz.org/home/doc/compiler/node7.html#appendix.syntax. 
+\subsection{Position in source code}
+Most records have the corresponding position in the source code available in their last feature, in the form of a record of the form pos(file linebegin columnbegin fileend lineend columend). This information has to trickle through all transformations so meaningful error messages can be given to the programmer in case of error.
+\subsection{Basic data types}
+The basic data type described in this section are the simplest node found in the AST as they have no children and are the leafs of the tree.
+These are the types that are currently handled, with their corresponding records in the AST:
+\begin{description}
+  \item[integers] fInt(Val Pos)
+  \item[floats] fFloat(Val Pos)
+  \item[atoms] fAtom(value position)
+\end{description}
+
+\subsection{Variables}
+A variable is found in a record fVar(VarName Pos)
+
+\subsection{Unification}
+A unification is found in a record fEq(LHS RHS Pos).
+A=3 gives fEq(fVar(A \_) fInt(3 \_))
+
+\subsection{Instructions sequence}
+A sequence of instructions is wrapped in fAnd records, the first feature being usually one instruction, the second feature being a fAnd if more than one instruction follows,  or a single instruction. The code also handles the case when the two features are fAnd records. %FIXME: is this needed? 
+Example:\\
+\begin{tabular}{ p{0.3\textwidth} p{0.8\textwidth} }
+  \begin{lstlisting}
+    A=1
+    B=2
+    C=3
+  \end{lstlisting}
+&
+  \footnotesize{
+  \begin{verbatim}
+  fAnd( fEq (fVar (A _) fInt (1 _))
+        fAnd(fEq (fVar(B _)) fInt(2 _) 
+             fEq(fVar(C _) fInt(3 _))))
+  \end{verbatim}
+  }
+\end{tabular}
+
+\subsection{Declarations}
+Declarations are found in records of the form fLocal(Declarations Body Pos), where declarations and Body are both AST subtrees. 
+example:
+
+\begin{lstlisting}
+local
+  A B C
+in
+  A=1
+end
+\end{lstlisting}
+will give
+\begin{verbatim}
+fLocal(
+       fAnd(
+            fVar(A _) 
+            fAnd(
+                 fVar(B _) 
+                 fVar(C _) 
+                 _) 
+            _) 
+       fEq( 
+            fVar(A _) 
+            fInt(1 _) ))
+\end{verbatim}
+
+\subsection{Procedures}
+\subsubsection{Definitions}
+Procedures are found in records of the form fProc(Name Arguments Body Flags Pos), where the Arguments and Body features are AST subtrees. %FIXME: what can be Name? fVar, $. Other possibilities?
+Example:
+
+\subsubsection{Calls}
+%FIXME: distinguish arguments and parameters?
+Procedure calls are found in records of the form fApply(Proc Arguments Pos). 
+Example:
+
+\begin{lstlisting}
+  {Compute 1 2 3}
+\end{lstlisting}
+
+will result in the AST portion:
+\begin{verbatim}
+fApply(
+       fVar(Compute _)
+       |(fInt(1 _)
+         |(fInt( 2 _)
+           |fInt( 3 _))))
+\end{verbatim}
+
 \section{Compiler output}
 Describe opcodes.
 
@@ -50,6 +143,8 @@ Describe opcodes.
 \section{Architecture}
 The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument that they need to transform, and they return the transformed AST.
 These functions all have the same structure:
+\begin{figure}[h]
+\begin{lstlisting}
    fun {Transform AST}
       fun {TransformInt AST Params}
          case AST
@@ -62,12 +157,17 @@ These functions all have the same structure:
    in
       {TransformInt AST InitialParams}
    end
+\end{lstlisting}
+\caption{Structure of a transformation function}
+\end{figure}
 Having the same structure enables the use of the function DefaultPass, which calls the function passed as second arguments recursively on the AST with Params as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
-Params if a record with label params, and features are added according to use. For an example, loog at the globaliser below.%FIXME: add reference
+Params if a record with label params, and features are added according to use. For an example, look at the globaliser below.%FIXME: add reference
 \subsection{Namer}
 replaces fVar by fSym. In declarations, creates a new symbol for declared variables, in body, looks at already defined symbols.
 fLocal introduces a new environment, in which the variables declared in its first feature are added to the environment, possibly erasing variables with the same name coming from the parent environment.
-It is this manipulation of the environments that make that the code here 1) does not throws an error of impossible unification and 2)shows 6.
+It is this manipulation of the environments that make that the code in Figure~\ref{fig:namer_nested_locals} does not throws an error of impossible unification and shows 6.
+\begin{figure}
+\begin{lstlisting}
 local
    A=5
 in
@@ -77,13 +177,18 @@ in
       {Show A}
    end
 end
+\end{lstlisting}
+\caption{Nested locals handled by Namer}
+\label{fig:namer_nested_locals}
+\end{figure}
 
 \subsection{Globaliser}            
-This pass handles the global variables of a procedure, that is, variables used by a procedure that does not declare it (implying that the declaration is done at un upper level. It is interesting to note that the concept of global variables is only defined for procedures.
+This pass handles the global variables of a procedure, that is, variables used by a procedure that does not declare it (implying that the declaration is done at an upper level. It is interesting to note that the concept of global variables is only defined for procedures.
 Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
 Variables declared by a procedure, including formal parameters, get assigned the procId of said procedure.
 
 Special attention has to be paid to nested procedure declarations. For example
+\begin{lstlisting}
 A=1
 proc {P1}                 % A is global to P1
    B=2
@@ -103,6 +208,7 @@ in
    end
    {P2}
 end
+\end{lstlisting}
 
 The globals of procedures in the code have to be determined from the inside to the outside: determine the globals of the deepest nested procedure, and go up. 
 We see that the globals of a procedure are:
@@ -122,6 +228,7 @@ In the abstract syntax tree, fProc is replaced by fDefineProc taking 1 additiona
 
 Handling globals correctly requires to handle numerous cases, and determining the algorithm to use requires some care, as illustrated by these examples:
 
+\begin{lstlisting}
 local
    A
 in
@@ -138,8 +245,10 @@ in
       end
    end
 end
+\end{lstlisting}
 In this case, A is global to P3 and it creates a new local symbol that will reference a symbol local to P2. But for P2, A is also global, and this situation needs to trigger a new local creation in P2, which will be referenced by the new local in P3. Same thing in P1.
 
+\begin{lstlisting}
 local
    A
 in
@@ -157,11 +266,13 @@ in
       end
    end
 end
+\end{lstlisting}
 
-In this case, the traversal of the AST will first analyse {Show A} and create a new local symbol for the variables A in P1. P2 is cisited later and will create a new local to reference a symbol local to P2, which is also a new local as A is global to P1. But this new local has already been created, and this situation must not trigger the creation of a new local symbol for A. Rather, the new local symbol to P2 must reference the new local symbol to P1. We see that the new local variables created in a procedure definition may have to be modified by its parent procedure.
+In this case, the traversal of the AST will first analyse {Show A} and create a new local symbol for the variables A in P1. P2 is visited later and will create a new local to reference a symbol local to P2, which is also a new local as A is global to P1. But this new local has already been created, and this situation must not trigger the creation of a new local symbol for A. Rather, the new local symbol to P2 must reference the new local symbol to P1. We see that the new local variables created in a procedure definition may have to be modified by its parent procedure.
 
-Of course, the inverse has to be handled too, ie a new local is created for a defined proc, and reused later:
+Of course, the inverse has to be handled too, i.e. a new local is created for a defined proc, and reused later:
 
+\begin{lstlisting}
 local
    A
 in
@@ -179,10 +290,12 @@ in
       {Show A}  % Use A after a nested proc triggered the creation of a new local.
    end
 end
+\end{lstlisting}
 
 
 Of course, a new local symbol must not be created when it would represent a locally declared variables, as in this case:
 
+\begin{lstlisting}
 local
    A
 in
@@ -200,11 +313,13 @@ in
    end
    {Show A}  % A is defined locally, and the nested procs defined should not trigger the creation of a new local, but P1's new local for A should reference the A declared by the local .. in .. end
 end
+\end{lstlisting}
 
 Two procs defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, P2 and P3 each create a new local for A and both trigger the creation of a new local in P1 for A. But only one new local should be created in P1 for A, and both locals in P2 and P3 should reference it.
 
 
 Example V:
+\begin{lstlisting}
 local
    A
 in
@@ -222,9 +337,10 @@ in
    end
    {Show A}  % Use A after a nested proc triggered the creation of a new local.
 end
+\end{lstlisting}
 
 In the end, the algorithm used is the following.
-Each call of the globaliser takes the AST subtree and an additional Params argument with three fields:
+Each call of the globaliser takes the AST sub tree and an additional Params argument with three fields:
 \begin{itemize}
    \item the current procId
    \item a list of global variables already seen in the current procId
@@ -234,14 +350,14 @@ Each call of the globaliser takes the AST subtree and an additional Params argum
 The globalise handles the following nodes:
 \begin{description}
    \item[fProc] When handling a fProc, the globaliser call gets the informations from the parent in its Params argument. Because we enter a new level of procedure nesting, a NewParams is initialised to be passed to recursive globaliser calls handling children nodes. NewParams is initialised with a new procId and two empty lists. 
-      The symbol of the procedure itself gets the procId of its parent, found in Params. The arguments of the procedure get the procId of the currently handled procedure, found in NewParams. At that time the globaliser function is called resursively on the children nodes, with NewParams as additional argument.
-      Once all children have been traversed, the list of their globals and their respective newly created locals is found in NewParams.  We have multiple new locals corresponding to one global in the case of 2 siblings procedure definitions refering the same global as in example V. 
+      The symbol of the procedure itself gets the procId of its parent, found in Params. The arguments of the procedure get the procId of the currently handled procedure, found in NewParams. At that time the globaliser function is called recursively on the children nodes, with NewParams as additional argument.
+      Once all children have been traversed, the list of their globals and their respective newly created locals is found in NewParams.  We have multiple new locals corresponding to one global in the case of 2 siblings procedure definitions referring the same global as in example V. 
       Globals whose procId match the NewParams' procId are ignored, as those are variables that are declared at this level, and the chain of references must stop here for these variables.
       For each remaining global, we look at the list of their locals. 
       If one of these has the procId matching the current level, all other locals are changed to reference this one. This is because this specific symbol has been created by a direct use at this level, and we will use this one as the new localised symbol at this level. Then we push the global on the parent's globals list and add the local symbol to its corresponding list of new locals (those lists are found in Params)
       If none of the locals has the current level's procId, it means the global variables has only been used in nested procedure definitions. We need to create a new local symbol for that variable at the current level that will be referenced by the existing locals. Finally, we push the global and the new local symbol we created to the parent. 
    \item[fSym] If the symbol in this fSym has the current procId found in NewParams, keep it as is, do not change it! 
-      If its procId is different from the current procId, this fSym represents a global variable for the current level. We look in Params if a loca variable with the current procId has already been created for this global variable. If yes we reuse it, else We define a new symbol, having the curren tprocId and referencing the symbol initially in fSym. We modify the fSym to use that newly created symbol. Finally, push the global and its local to the parent.
+      If its procId is different from the current procId, this fSym represents a global variable for the current level. We look in Params if a local variable with the current procId has already been created for this global variable. If yes we reuse it, else We define a new symbol, having the current procId and referencing the symbol initially in fSym. We modify the fSym to use that newly created symbol. Finally, push the global and its local to the parent.
       
 \end{description}
 
@@ -250,11 +366,39 @@ The globalise handles the following nodes:
 \subsection{CodeGen}
 \subsubsection{Register allocation}
 It is CodeGen that allocates registers. For the moment only Y registers.
-When a Symbol of type global is found, it is handled differntly than local symbols.
+When a Symbol of type global is found, it is handled differently than local symbols.
 For a procedure definition, we initialise the global variables with arrayFill( y(yindex)). \fxnote{handle multiple levels of nesting}
 For a local\ldots in \ldots end, a g() is issued in place of a y(). \fxnote{is this working yet?}
 
 \section{Tests}
+\subsection{Helper functions tests}
+Some helper functions are tested specifically by Oz code, checking that the result returned by the function is correct. This is simply done by calling the function in Figure~\ref{fig:helperstestsfunction} with the first argument the function call we want to test, and the expected result as second argument as illustrated in Figure~\ref{fig:helperstestsexample} where the function UnWrapFAnd is tested.
+The only downside to this approach is that helper functions have to be exported for them to be available in the test code..
+
+\begin{figure}
+\begin{lstlisting}
+   proc {Equals Result Expected}
+      if Result\=Expected then
+         %Show error information
+         raise unexpectedResult end
+      end
+      {System.printInfo '.'}
+   end
+\end{lstlisting}
+\label{fig:helperstestsfunction}
+\caption{HelpersTests function}
+\end{figure}
+
+\begin{figure}
+\begin{lstlisting}
+   {Equals 
+      {Compile.unWrapFAnd fAnd(first fAnd(second third) )}
+      first|second|third|nil }
+\end{lstlisting}
+\label{fig:helperstestsexample}
+\caption{Helper test example}
+\end{figure}
+\subsection{Compiler tests}
 Tests are defined by three files each:
 \begin{itemize}
   \item the oz code to compile and execute

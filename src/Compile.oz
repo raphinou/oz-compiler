@@ -595,6 +595,8 @@ define
          meth forAllPairs(P)
             {List.forAllInd @globals proc {$ Ind Global} {P Global @{List.nth @newlocals Ind } } end }
          end
+
+         % Add Local to Global's locals. If global was not yet present, initilise it first with an empty list of locals.
          meth addPair(Global Local)
             GlobalInd
          in
@@ -614,6 +616,7 @@ define
          end
       end
       fun {GlobaliserInt AST Params}
+         % Assign ProcId to all symbols found in AST
          fun {AssignScope AST ProcId}
             case AST
             of fSym(Sym _) then
@@ -632,7 +635,7 @@ define
          %-------------------
          of fProc(FSym Args ProcBody Flags Pos) then
          %-------------------
-            % Identify new scope with a new name
+            % Identify new scope with a new name, and create NewParams passed to recursive calls done on children
             %FIXME SCOPENAMEISNAME
             %ScopeName = {NewName}
             NewProcId = {OS.rand} mod 1000
@@ -649,6 +652,18 @@ define
             DeclaredLocals = {UnWrapFAnd Args}
             NewBody = {GlobaliserInt ProcBody NewParams}
 
+            % Work on each global and its respective list of locals.
+            % We decide here if
+            % - the children procs' globals are variables we define at this level
+            % - the children procs' globals are variables that are global at
+            %   this level too
+            %   - in that case, we look if this level uses the variable directly too
+            %     - if yes we already have a new local defined at this level that we need to link the children's new locals to.
+            %     - else we need to define a new local at this level, and link the children proc's new locals to it.
+            %   - finally, we pass to our parent the list of new locals we
+            %     defined at our level, so that the parent can link our new
+            %     locals to its variables (which can also be new locals at its
+            %     level).
             {NewParams.gm forAllPairs(proc {$ Global Locals}
                                        FoundLocal
                                        NewLocal
