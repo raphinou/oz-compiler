@@ -42,7 +42,7 @@ define
      AST = {Compiler.parseOzFile FileName PrivateNarratorO
           GetSwitch EnvDictionary}
    end
-   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.namer {Compile.desugar {Compile.declsFlattener AST.1} }}}}}} params() }
+   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
    {Show 'Generated OpCodes:'}
    {ForAll OpCodes Show}
 
