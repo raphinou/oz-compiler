@@ -32,7 +32,7 @@ chmod +w $resultsdir
 # and set stop=1 if an error is encountered and halt_on_error is set to 1
 function valid_output()
 {
-  # ext is from parent context
+  # basename,ext are from parent context
   # stop is set to 1 and used by parent
   echo -n "std$ext"
   if diff $testsdir/$basename.$ext $resultsdir/$basename.$ext >/dev/null ; then
@@ -53,15 +53,23 @@ for f in $testsdir/*oz; do
   basename=${filename%.*}
   echo $basename
   dest=$resultsdir/${filename%.*}
-  ozengine TestRunner.ozf $f 2> $dest.err | tee $dest.debug | sed -e '1,/^--END DEBUG--$/d' > $dest.out
+  if grep '^% --SKIP TEST--$' $f > /dev/null ; then
+    # this is a test to skip currently
+    printf '%s%s\n' "$RED" "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo "$basename is skipped as request in test definition"
+    printf '%s%s%s\n' "$RED" "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" "$NORMAL"
+    echo "Remove the line '% --SKIP TEST--' from the test definition file to re-enable it"
+  else
+    ozengine TestRunner.ozf $f 2> $dest.err | tee $dest.debug | sed -e '1,/^--END DEBUG--$/d' > $dest.out
 
-  extensions="out err"
-  for ext in $extensions; do 
-    if ! valid_output && [[ $halt_on_error -eq 1 ]] ; then
-      echo "Halting on error"
-      exit 1
-    fi
-  done
+    extensions="err out"
+    for ext in $extensions; do 
+      if ! valid_output && [[ $halt_on_error -eq 1 ]] ; then
+        echo "Halting on error"
+        exit 1
+      fi
+    done
+  fi
 
 done
 echo "done"
