@@ -113,6 +113,12 @@ define
          procId:=ProcId
       end
    end
+   class SyntheticSymbol from Symbol
+      meth init(Pos)
+         Symbol, init('' Pos)
+         type:=synthetic
+      end
+   end
 
    class Environment
       attr
@@ -357,7 +363,7 @@ define
       fun {DesugarInt AST Params}
          case AST
          of fOpApply(Op Args Pos) then
-            fApply({DesugarOp Op Args Pos} Args Pos)
+            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarInt I Params} end } Pos)
          else
             {DefaultPass AST DesugarInt Params}
          end
@@ -367,10 +373,86 @@ define
    end
 
    fun {Unnester AST}
-      fun {UnnesterInt AST Params}
+      fun {IsElementary AST}
+         if {Record.is AST} then
+            case {Label AST}
+            of fConst then
+               true
+            [] fSym then
+               true
+            else
+               false
+            end
+         else
+            true
+         end
+      end
+
+      fun {BindVarToExpr Sym AST Params}
          case AST
-         of fEq( fSym(Sym SymPos) fApply(Op Args ApplyPos) _) then
-            fApply(Op {List.append Args [fSym(Sym SymPos)]} ApplyPos)
+         of fApply(Proc Args Pos) then
+            {UnnesterInt fApply(Proc {List.append Args [Sym]} Pos) Params }
+         [] fAnd(First Second) then
+            %FIXME: set Pos
+            {UnnesterInt fAnd(First fEq(Sym Second pos)) Params}
+         [] fLocal(Decls Body Pos) then
+            {UnnesterInt fLocal(Decls fEq(Sym Body Pos) Pos) Params}
+         end
+      end
+
+      fun {UnnestFApply AST=fApply(Op Args Pos) Params}
+         % does not use Params
+         fun {UnnestFApplyInt FApplyAST NewArgsList ArgsRest}
+            case ArgsRest
+            of X|Xs then
+               if {IsElementary X} then
+                 {UnnestFApplyInt FApplyAST X|NewArgsList Xs}
+               else
+                  NewSymbol={New SyntheticSymbol init(Pos)}
+               in
+                  {UnnesterInt fLocal(fSym(NewSymbol Pos)
+                                      fAnd( fEq(fSym(NewSymbol Pos) X Pos)
+                                            {UnnestFApplyInt FApplyAST fSym(NewSymbol Pos)|NewArgsList Xs}) Pos)
+                               Params}
+               end
+            else
+               FApplyAST=fApply(Op _ Pos)
+            in
+               fApply(Op {List.reverse NewArgsList} Pos)
+            end
+         end
+      in
+         {UnnestFApplyInt AST nil Args}
+
+      end
+
+      fun {UnnestFEq AST=fEq(LHS RHS Pos) Params}
+         case {IsElementary LHS}#{IsElementary RHS}
+         of true#true then
+            AST
+         [] true#false then
+            % elementaty passed as first argument
+            {BindVarToExpr LHS RHS Params}
+         [] false#true then
+            % elementaty passed as first argument
+            {BindVarToExpr RHS LHS Params}
+         else
+            LHSSymbol={New SyntheticSymbol init(Pos)}
+            RHSSymbol={New SyntheticSymbol init(Pos)}
+         in
+            fAnd( {UnnesterInt fEq(LHSSymbol LHS Pos) Params}
+                   {UnnesterInt fEq(RHSSymbol RHS Pos) Params})
+         end
+      end
+      fun {UnnesterInt AST Params}
+      {DumpAST.dumpAST AST _}
+         case AST
+         of fEq(_ _ _) then
+            {UnnestFEq AST Params}
+         [] fLocal(Decls Body Pos) then
+            fLocal(Decls {UnnesterInt Body Params} Pos)
+         [] fApply(Op Args Pos) then
+            {UnnestFApply AST Params}
          else
             {DefaultPass AST UnnesterInt Params}
          end
@@ -877,12 +959,14 @@ define
             _={List.mapInd Args fun {$ Index AST}
                                     case AST
                                     of fSym(S _) then
-                                       if {S get(type $)}==localProcId then
+                                       SymbolType = {S get(type $)}
+                                    in
+                                       if SymbolType==localProcId orelse SymbolType==synthetic then
                                           if {S get(yindex $)}==nil then
                                              raise missingNeededYIndex end
                                           end
                                           R:={List.append @R [move(y({S get(yindex $)}) x(Index-1))]}
-                                       elseif {S get(type $)}==localised then
+                                       elseif SymbolType==localised then
                                           if {S get(gindex $)}==nil then
                                              {System.showInfo 'missing gindex for '#{S toVS($)}}
                                              raise missingNeededGIndex end
