@@ -361,6 +361,7 @@ define
       end
 
       fun {DesugarInt AST Params}
+         % Desugar function. Direct translation from sugared to desugared.
          case AST
          of fOpApply(Op Args Pos) then
             fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarInt I Params} end } Pos)
@@ -379,6 +380,8 @@ define
 
    fun {Unnester AST}
       fun {IsElementary AST}
+         % Records are elementary if of the form fConst or fSym.
+         % All other types are elementary
          if {Record.is AST} then
             case {Label AST}
             of fConst then
@@ -394,13 +397,19 @@ define
       end
 
       fun {BindVarToExpr Sym AST Params}
+         % Handles the binding of a variables to a complex expression
          case AST
          of fApply(Proc Args Pos) then
+            % enters the assignation target in the proc call
+            % Res = {P Arg} -> {P Arg Res}
             {UnnesterInt fApply(Proc {List.append Args [Sym]} Pos) Params }
          [] fAnd(First Second) then
+            % the result of a sequence of instructions is the value of the last one
+            % Recursive call to get to the end of the sequence
             %FIXME: set Pos
             {UnnesterInt fAnd(First fEq(Sym Second pos)) Params}
          [] fLocal(Decls Body Pos) then
+            % the value of a local..in..end is the value of the last expression in the body
             {UnnesterInt fLocal(Decls fEq(Sym Body Pos) Pos) Params}
          end
       end
@@ -408,8 +417,17 @@ define
       fun {UnnestFApply AST=fApply(Op Args Pos) Params}
          % does not use Params
          fun {UnnestFApplyInt FApplyAST NewArgsList ArgsRest}
+            % Unnest all arguments one by one.
+            % Elementary arguments are left untouched
+            % Complex arguments are extracted from the arguments list by:
+            % - declaring a new symbol
+            % - unifyind this new symbol with the argument
+            % - replacing the argument by the new symbol in the argument list.
+
             case ArgsRest
             of X|Xs then
+               % The recursive calls haven't reached the end of the argument list.
+               % Handle the head of the remaining list, and make a recursive call
                if {IsElementary X} then
                  {UnnestFApplyInt FApplyAST X|NewArgsList Xs}
                else
@@ -421,18 +439,24 @@ define
                                Params}
                end
             else
+               % All unnested arguments are now found in NewArgsList
+               % We can now work on the fApply itself
                FApplyAST=fApply(Op _ Pos)
             in
                case Op
                of fApply(_ _ _) then
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
+                  % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
                   {UnnesterInt fLocal( NewSymbol
                                        fAnd( fEq(NewSymbol {UnnestFApply Op Params} Pos)
                                              fApply(NewSymbol {List.reverse NewArgsList} Pos))
                                        Pos)
                                Params}
                else
+                  % otherwise no recursive call
+                  % all fLocal introduced by complex arguments have been directly place out of fApply when traversing ArgsRest
+                  % and all what's left in the argument list are Symbols.
                   fApply(Op {List.reverse NewArgsList} Pos)
                end
 
@@ -454,15 +478,21 @@ define
             % elementaty passed as first argument
             {BindVarToExpr RHS LHS Params}
          else
-            NewSymbol={New SyntheticSymbol init(Pos)}
+            % declare a new symbol (hence the fLocal) and
+            % unify it first with the LHS, then with RHS.
+            % Then recursively unnest
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            fAnd( {UnnesterInt fEq(NewSymbol LHS Pos) Params}
-                   {UnnesterInt fEq(NewSymbol RHS Pos) Params})
+            {UnnesterInt fLocal( NewSymbol
+                                 fAnd( fEq(NewSymbol LHS Pos)
+                                       fEq(NewSymbol RHS Pos))
+                                 Pos)
+                         Params}
          end
       end
       fun {UnnesterInt AST Params}
-         {Show 'UnnesterInt works on:'}
-         {DumpAST.dumpAST AST _}
+         %{Show 'UnnesterInt works on:'}
+         %{DumpAST.dumpAST AST _}
          case AST
          of fEq(_ _ _) then
             {UnnestFEq AST Params}

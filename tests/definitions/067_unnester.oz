@@ -1,5 +1,4 @@
 % Unnest the taget of a call
-% --SKIP TEST--
 local
    proc {MakeAdder X ?P}
       proc {P Y ?R}

@@ -10,6 +10,7 @@ in
       fun {AddInt First Second}
          First
       end
+      in
       {AddInt A B}+B
    end
    fun {Mul A B}

@@ -38,19 +38,26 @@ define
   %          {Show V}
   %       end'
 
-Code='
-local
-   proc {MakeAdder X ?P}
-      proc {P Y ?R}
-         R = X + Y
-      end
-   end
-in
-   {Show 1}
-   {Show {{MakeAdder 3} 4}}
-   {Show 2}
-end'
+%Code='
+%local
+%   proc {MakeAdder X ?P}
+%      proc {P Y ?R}
+%         R = X + Y
+%      end
+%   end
+%in
+%   {Show 1}
+%   {Show {{MakeAdder 3} 4}}
+%   {Show 2}
+%end'
 
+Code ='local
+      A = 5
+      Add Sub
+   in
+      {Show {Add {Sub 3 2} 2}}
+   end
+   '
 
   %Code ='local
   %          A = 8
