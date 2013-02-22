@@ -364,6 +364,11 @@ define
          case AST
          of fOpApply(Op Args Pos) then
             fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarInt I Params} end } Pos)
+
+         [] fFun(FSym Args Body Flags Pos) then
+            ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            {DesugarInt fProc(FSym {List.append Args [ReturnSymbol]} fEq(ReturnSymbol Body Pos) Flags Pos) Params}
          else
             {DefaultPass AST DesugarInt Params}
          end
@@ -444,7 +449,8 @@ define
          end
       end
       fun {UnnesterInt AST Params}
-      {DumpAST.dumpAST AST _}
+         {Show 'UnnesterInt works on:'}
+         {DumpAST.dumpAST AST _}
          case AST
          of fEq(_ _ _) then
             {UnnestFEq AST Params}
@@ -514,6 +520,18 @@ define
                )
             {Params.env restore()}
             Res
+
+         %---------------------------------
+         [] fFun(Name Args Body Flags Pos) then
+         %---------------------------------
+            fFun(
+               % The procedure's variable has to be declared explicitely
+               {NamerForBody Name Params}
+               {List.map Args fun {$ I} {NamerForDecls I Params} end }
+               {NamerForBody Body Params}
+               Flags
+               Pos
+            )
 
          %---------------------------------
          [] fProc(Name Args Body Flags Pos) then
@@ -956,6 +974,8 @@ define
             %L is the arguments list
             % first move arguments in x registers
             _={List.mapInd Args fun {$ Index AST}
+                                    {Show 'working on:'}
+                                    {DumpAST.dumpAST AST _}
                                     case AST
                                     of fSym(S _) then
                                        SymbolType = {S get(type $)}

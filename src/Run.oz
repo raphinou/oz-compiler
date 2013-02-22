@@ -31,16 +31,23 @@ define
   %--------------------------------------------------------------------------------
   %Code = '{Show 5+2*3}'
   %Code = 'local X in X=5+3*2 {Show X} end'
-  Code = 'local
-             Sum
-         in
-            proc {Sum O1 O2}
-               {Show willShowSum}
-               {Show O1+O2}
-            end
-            {Sum 1+2 3*(2+1)}
-         end'
+  %Code = 'local
+  %          V
+  %       in
+  %          V = local A=2 in A+2 end + local B=2 in B end
+  %          {Show V}
+  %       end'
 
+  Code = 'local
+  F R
+  in
+  fun {F A B}
+     A+B
+     end
+     R = {F 2 3}
+     {Show R}
+     end
+     '
 
   %Code ='local
   %          A = 8

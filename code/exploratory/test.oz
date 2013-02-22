@@ -1,14 +1,9 @@
 local
-A P
+F R
 in
-proc {P V}
-   T
-in
-   proc {T W}
-     {Show W}
-   end
-   {T V}
+fun {F A B}
+   A+B
 end
-A = 5
-{P A}
+R = {F 2 3}
+{Show R}
 end
