@@ -396,21 +396,26 @@ define
          end
       end
 
-      fun {BindVarToExpr Sym AST Params}
+      fun {BindVarToExpr FSym AST Params}
          % Handles the binding of a variables to a complex expression
          case AST
          of fApply(Proc Args Pos) then
             % enters the assignation target in the proc call
             % Res = {P Arg} -> {P Arg Res}
-            {UnnesterInt fApply(Proc {List.append Args [Sym]} Pos) Params }
+            {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
             % Recursive call to get to the end of the sequence
             %FIXME: set Pos
-            {UnnesterInt fAnd(First fEq(Sym Second pos)) Params}
+            {UnnesterInt fAnd(First fEq(FSym Second pos)) Params}
          [] fLocal(Decls Body Pos) then
             % the value of a local..in..end is the value of the last expression in the body
-            {UnnesterInt fLocal(Decls fEq(Sym Body Pos) Pos) Params}
+            {UnnesterInt fLocal(Decls fEq(FSym Body Pos) Pos) Params}
+         [] fProc(_ Args Body Flags Pos) then
+            {UnnesterInt fProc(FSym Args Body Flags Pos) Params}
+         else
+            {DumpAST.dumpAST AST _}
+            raise unexpectedASTForBidVarToExpr end
          end
       end
 

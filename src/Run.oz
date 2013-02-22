@@ -52,10 +52,25 @@ define
 %end'
 
 Code ='local
-      A = 5
       Add Sub
    in
-      {Show {Add {Sub 3 2} 2}}
+      fun {Add First Second}
+         AddInt
+      in
+         fun {AddInt}
+            First+Second
+         end
+      end
+
+      fun {Sub First Second}
+         SubInt
+      in
+         fun {SubInt}
+            First-Second
+         end
+      end
+
+      {Show {{Add {{Sub 3 2}} {{Add 1 {{Sub 3 2}}}}}}}
    end
    '
 
@@ -85,7 +100,7 @@ Code ='local
 %   {System.showInfo '--------------------------------------------------------------------------------'}
 %    _={DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST  {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}}}
 %
-   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
+   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {Compile.unnester {DumpAST.dumpAST {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
    {System.showInfo '--------------------------------------------------------------------------------'}
    %{Show 'Generate OpCodes:'}
    %{ForAll OpCodes Show}
