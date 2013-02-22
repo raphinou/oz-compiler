@@ -423,7 +423,19 @@ define
             else
                FApplyAST=fApply(Op _ Pos)
             in
-               fApply(Op {List.reverse NewArgsList} Pos)
+               case Op
+               of fApply(_ _ _) then
+                  NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+               in
+                  {UnnesterInt fLocal( NewSymbol
+                                       fAnd( fEq(NewSymbol {UnnestFApply Op Params} Pos)
+                                             fApply(NewSymbol {List.reverse NewArgsList} Pos))
+                                       Pos)
+                               Params}
+               else
+                  fApply(Op {List.reverse NewArgsList} Pos)
+               end
+
             end
          end
       in
@@ -994,6 +1006,8 @@ define
                                        end
                                     [] fConst(V _) then
                                        R:={List.append @R [move(k(V) x(Index-1))]}
+                                    else
+                                       AST
                                     end
                                  end}
             case Sym

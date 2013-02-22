@@ -38,16 +38,19 @@ define
   %          {Show V}
   %       end'
 
-  Code = 'local
-  F R
-  in
-  fun {F A B}
-     A+B
-     end
-     R = {F 2 3}
-     {Show R}
-     end
-     '
+Code='
+local
+   proc {MakeAdder X ?P}
+      proc {P Y ?R}
+         R = X + Y
+      end
+   end
+in
+   {Show 1}
+   {Show {{MakeAdder 3} 4}}
+   {Show 2}
+end'
+
 
   %Code ='local
   %          A = 8
@@ -73,28 +76,28 @@ define
 %   _={DumpAST.dumpAST AST.1 }
 %   {System.showInfo '--------------------------------------------------------------------------------'}
 %   {System.showInfo '--------------------------------------------------------------------------------'}
-    _={DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST  {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}}}
+%    _={DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST  {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}}}
 %
-%   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
-%   {System.showInfo '--------------------------------------------------------------------------------'}
-%   %{Show 'Generate OpCodes:'}
-%   %{ForAll OpCodes Show}
-%
-%
-%   Arity = 0
-%   PrintName = 'Q'
-%   DebugData = d(file:'Truc.oz' line:32 column:3)
-%   Switches = switches
-%
-%   CodeArea VS
-%   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
-%   {Wait VS}
-%   {System.showInfo VS}
-%   Abs = {CompilerSupport.newAbstraction CodeArea [6]}
-%   {System.showInfo '--END DEBUG--'}
-%   {Abs}
-%
-%   {System.showInfo '################################################################################'}
+   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
+   {System.showInfo '--------------------------------------------------------------------------------'}
+   %{Show 'Generate OpCodes:'}
+   %{ForAll OpCodes Show}
+
+
+   Arity = 0
+   PrintName = 'Q'
+   DebugData = d(file:'Truc.oz' line:32 column:3)
+   Switches = switches
+
+   CodeArea VS
+   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
+   {Wait VS}
+   {System.showInfo VS}
+   Abs = {CompilerSupport.newAbstraction CodeArea [6]}
+   {System.showInfo '--END DEBUG--'}
+   {Abs}
+
+   {System.showInfo '################################################################################'}
 
 end
 
