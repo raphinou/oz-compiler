@@ -497,8 +497,8 @@ define
          %---
          else
          %---
-            {Show 'AST received by NamerForDecls:'}
-            {DumpAST.dumpAST AST}
+            %{Show 'AST received by NamerForDecls:'}
+            %{DumpAST.dumpAST AST _}
             raise flattenerLeftOtherThingsThanFVarInDecls end
          end
       end
@@ -974,8 +974,6 @@ define
             %L is the arguments list
             % first move arguments in x registers
             _={List.mapInd Args fun {$ Index AST}
-                                    {Show 'working on:'}
-                                    {DumpAST.dumpAST AST _}
                                     case AST
                                     of fSym(S _) then
                                        SymbolType = {S get(type $)}

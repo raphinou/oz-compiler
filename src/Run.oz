@@ -72,34 +72,29 @@ define
 
 %   _={DumpAST.dumpAST AST.1 }
 %   {System.showInfo '--------------------------------------------------------------------------------'}
-%   %_={DumpAST.dumpAST {Compile.desugar {Compile.declsFlattener AST.1 }}}
-%   _={DumpAST.dumpAST {Compile.namer {Compile.desugar {Compile.declsFlattener AST.1 }}}}
 %   {System.showInfo '--------------------------------------------------------------------------------'}
-%   _={DumpAST.dumpAST {Compile.unnester {Compile.namer {Compile.desugar {Compile.declsFlattener AST.1 }}}}}
-   {System.showInfo '--------------------------------------------------------------------------------'}
-   %{DumpAST.dumpAST {Compile.globaliser {Compile.unnester {Compile.namer {Compile.declsFlattener AST.1 }}}}}
-   {System.showInfo '--------------------------------------------------------------------------------'}
-
-   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
-   {System.showInfo '--------------------------------------------------------------------------------'}
-   %{Show 'Generate OpCodes:'}
-   %{ForAll OpCodes Show}
-
-
-   Arity = 0
-   PrintName = 'Q'
-   DebugData = d(file:'Truc.oz' line:32 column:3)
-   Switches = switches
-
-   CodeArea VS
-   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
-   {Wait VS}
-   {System.showInfo VS}
-   Abs = {CompilerSupport.newAbstraction CodeArea [6]}
-   {System.showInfo '--END DEBUG--'}
-   {Abs}
-
-   {System.showInfo '################################################################################'}
+    _={DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST  {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}}}
+%
+%   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
+%   {System.showInfo '--------------------------------------------------------------------------------'}
+%   %{Show 'Generate OpCodes:'}
+%   %{ForAll OpCodes Show}
+%
+%
+%   Arity = 0
+%   PrintName = 'Q'
+%   DebugData = d(file:'Truc.oz' line:32 column:3)
+%   Switches = switches
+%
+%   CodeArea VS
+%   {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
+%   {Wait VS}
+%   {System.showInfo VS}
+%   Abs = {CompilerSupport.newAbstraction CodeArea [6]}
+%   {System.showInfo '--END DEBUG--'}
+%   {Abs}
+%
+%   {System.showInfo '################################################################################'}
 
 end
 

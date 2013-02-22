@@ -135,6 +135,12 @@ fApply(
            |fInt( 3 _))))
 \end{verbatim}
 
+\subsection{Functions}                                                         
+Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
+\subsubsection{Definitions}
+Function definitions are found in records fFun(Name Arguments Body Flags Pos). The features are identical to the procedure definition.
+\subsubsection{Calls}
+The calls of functions are identical to the call of procedures as they are found in fApply.
 \subsection{Arithmetic operators}
 Arithmetic operators are parsed as the operator application to arguments being the operands. For example
 5+2 is parsed as:
@@ -165,12 +171,12 @@ These functions all have the same structure:
    fun {Transform AST}
       fun {TransformInt AST Params}
          case AST
-         of \ldots then
+         of ... then
          else
             {DefaultPass AST TransformInt Params}
          end
       end
-      InitialParams = \ldots
+      InitialParams = ...
    in
       {TransformInt AST InitialParams}
    end
@@ -201,7 +207,8 @@ end
 
 \subsection{Desugar}
 The desugar pass handles the transformation of syntactic sugar code in its canonical form.
-For example, infix arithmetic operators are transformed in the call of their respective function.
+\subsubsection{Arithmetic operators}
+Infix arithmetic operators are transformed in the call of their respective function.
 The operators are parsed as fOpApply( Operator ArgsList)
 
 This code
@@ -215,13 +222,13 @@ is parsed as
       fOpApply(
          '+'
          |(
-            fInt(5 pos("test2.oz" 1 3 "test2.oz" 1 4) )
+            fInt(5 _ )
             |(
-               fInt(2 pos("test2.oz" 1 5 "test2.oz" 1 6) )
+               fInt(2 _ )
                
             )
          )
-         \_
+         _
       )
 \end{verbatim}
 and must be transformed in:
@@ -229,16 +236,88 @@ and must be transformed in:
       fApply(
          Number.'+'
          |(
-            fInt(5 pos("test2.oz" 1 3 "test2.oz" 1 4) )
+            fInt(5 _ )
             |(
-               fInt(2 pos("test2.oz" 1 5 "test2.oz" 1 6) )
+               fInt(2 _ )
                
             )
          )
-         \_
+         _
       )
 \end{verbatim}
 
+\subsubsection{Functions}
+Functions are transformed in their canonical procedure form. This is done simply by replacing the function by a procedure with exactly the same characteristics, except that it takes one additional argument (the return value), and the body of this procedure is the unification of this new argument with the original body of the function. This resulting AST is itself recursively ``desugared''.
+
+For example, the code
+\begin{lstlisting}
+   fun {F A B}
+      A+B
+   end
+
+\end{lstlisting} 
+is parsed as (in a redacted form to be readable):
+\begin{verbatim}
+      fFun(
+         fSym(F _)
+         |(
+            fSym(A _)
+            |(
+               fSym(B _)
+               
+            )
+         )
+         fOpApply(
+            '+'
+            |(
+               fSym(A)
+               |(
+                  fSym(B)
+                  
+               )
+            )
+            _
+         )
+         
+         _
+      )
+\end{verbatim}
+and transformed by the desugar pass to become:
+\begin{verbatim}
+     fProc(     
+         fSym(F)
+         |(    
+            fSym(A)
+            |(
+               fSym(B)
+               |(
+                  fSym(R)
+                  
+               )
+            )
+         )
+         fEq(
+            fSym(R)
+            fApply(
+               fConst('+' _)
+               |(
+                  fSym(A _)
+                  |(
+                     fSym(B _)
+
+                  )
+               )
+               _
+            )
+            _
+         )
+
+         _
+      )
+
+\end{verbatim}
+
+We see that a new symbol, that we denoted R for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
 
 \subsection{Unnester}            
 The unnester will result in an AST in which there are only elementary instructions. The possible instructions are
@@ -485,6 +564,11 @@ All these files are put under the tests/definitions directory.
 A TestRunner script in oz loads the code found in the file whose path is passed as argument, parses it, gives the AST to the compiler which returns the opcodes which are assembled and executed. 
 A shell script iterates over all tests and for each execute the TestRunner, puts the stdout and stderr in result files under the tests/results directory, compares their content with the expected results and in case of difference can open a diffviewer (like vimdiff).
 All test code has a preamble comment describing what case this test covers.
+If the test code contains the comment line
+\begin{lstlisting}
+%-- SKIP TEST-- 
+\end{lstlisting}
+the test is skipped. This was implemented to be able to run tests even if one of them was temporarily not passing.
 
 Adding a test is very simple:
 \begin{enumerate}
