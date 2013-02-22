@@ -437,11 +437,10 @@ define
             % elementaty passed as first argument
             {BindVarToExpr RHS LHS Params}
          else
-            LHSSymbol={New SyntheticSymbol init(Pos)}
-            RHSSymbol={New SyntheticSymbol init(Pos)}
+            NewSymbol={New SyntheticSymbol init(Pos)}
          in
-            fAnd( {UnnesterInt fEq(LHSSymbol LHS Pos) Params}
-                   {UnnesterInt fEq(RHSSymbol RHS Pos) Params})
+            fAnd( {UnnesterInt fEq(NewSymbol LHS Pos) Params}
+                   {UnnesterInt fEq(NewSymbol RHS Pos) Params})
          end
       end
       fun {UnnesterInt AST Params}
