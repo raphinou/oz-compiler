@@ -411,8 +411,10 @@ define
          [] fLocal(Decls Body Pos) then
             % the value of a local..in..end is the value of the last expression in the body
             {UnnesterInt fLocal(Decls fEq(FSym Body Pos) Pos) Params}
-         [] fProc(_ Args Body Flags Pos) then
-            {UnnesterInt fProc(FSym Args Body Flags Pos) Params}
+         % Wrong!! if there is a symbol on fProc, it is not an expression!
+         % Left here in case it helps with handling the $. FIXME: remove it eventually
+         %[] fProc(_ Args Body Flags Pos) then
+         %   {UnnesterInt fProc(FSym Args Body Flags Pos) Params}
          else
             {DumpAST.dumpAST AST _}
             raise unexpectedASTForBidVarToExpr end
