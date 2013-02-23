@@ -370,6 +370,10 @@ define
             ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             {DesugarInt fProc(FSym {List.append Args [ReturnSymbol]} fEq(ReturnSymbol Body Pos) Flags Pos) Params}
+         [] fProc(fDollar(DollarPos) Args Body Flags Pos) then
+            DollarSymbol = fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            {DesugarInt fLocal( DollarSymbol fAnd( fProc(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
          else
             {DefaultPass AST DesugarInt Params}
          end
@@ -413,11 +417,13 @@ define
             {UnnesterInt fLocal(Decls fEq(FSym Body Pos) Pos) Params}
          % Wrong!! if there is a symbol on fProc, it is not an expression!
          % Left here in case it helps with handling the $. FIXME: remove it eventually
-         %[] fProc(_ Args Body Flags Pos) then
-         %   {UnnesterInt fProc(FSym Args Body Flags Pos) Params}
+         [] fProc(ProcSym Args Body Flags Pos) then
+            {UnnesterInt fAnd(fProc(ProcSym Args Body Flags Pos)
+                              fEq(ProcSym FSym Pos))
+                         Params}
          else
             {DumpAST.dumpAST AST _}
-            raise unexpectedASTForBidVarToExpr end
+            raise unexpectedASTForBindVarToExpr end
          end
       end
 
