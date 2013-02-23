@@ -188,6 +188,7 @@ Params if a record with label params, and features are added according to use. F
 \subsection{Namer}
 replaces fVar by fSym. In declarations, creates a new symbol for declared variables, in body, looks at already defined symbols.
 fLocal introduces a new environment, in which the variables declared in its first feature are added to the environment, possibly erasing variables with the same name coming from the parent environment.
+fProc and fFun do the same, because they implicitely declare their formal parameters % see test 029
 It is this manipulation of the environments that make that the code in Figure~\ref{fig:namer_nested_locals} does not throws an error of impossible unification and shows 6.
 \begin{figure}
 \begin{lstlisting}
@@ -319,6 +320,9 @@ and transformed by the desugar pass to become:
 
 We see that a new symbol, that we denoted R for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
 
+\subsubsection{Transformation in an expression}
+A statement can be transformed in an expression of the value assigned to the variable in which place a \$ was placed.
+Currently only the form fun \{\$ Args\} is supported
 \subsection{Unnester}            
 The unnester will result in an AST in which there are only elementary instructions. The possible instructions are
 \begin{description}
@@ -327,14 +331,42 @@ The unnester will result in an AST in which there are only elementary instructio
 \end{description}
 \subsection{Unification}
 If both sides are elementary, no change is done.
-If no side is elementary, a new synthetic variable is declared and unified with each side respectively.
+
+If no side is elementary, one new synthetic variable is declared and unified with each side sequentialy, first with the left-hand side, then with the right-hand side. 
+
 If only one side is elementary a new, we look at what the none elementary side is, and act accordingly:
 \begin{description}
   \item[Procedure call] the unification is removed, and the variable target of the assignation is put as last argument of the call
   \item[local D in E end] gets replaced by local D in X=E end
   \item[fAnd(S1 E2)] replaced by fAnd(S1 X=E2)
 \end{description}
-We need recursive calls
+We need recursive calls, as is illustrated by the following example, also showing why this code works
+\begin{lstlisting}
+  3+4 = {Show}
+\end{lstlisting}
+It is transformed due to both sides being non-elementary, in this form in a first step:
+\begin{lstlisting}
+  local
+     T
+  in
+     T = 3+4
+     T = {Show}
+  end
+\end{lstlisting}
+and finally in this form by the transformation of the assignment of a procedure call in the samem procedure call with the return variable passed as additional argument:
+\begin{lstlisting}
+  local
+     T
+  in
+     T = 3+4
+     {Show T}
+  end
+\end{lstlisting}
+The order of the assignments of the first step explains why this doesn't work:
+\begin{lstlisting}
+  {Show} = 3+4
+\end{lstlisting}
+
 
 \subsection{Globaliser}            
 This pass handles the global variables of a procedure, that is, variables used by a procedure that does not declare it (implying that the declaration is done at an upper level. It is interesting to note that the concept of global variables is only defined for procedures.
@@ -577,6 +609,7 @@ Adding a test is very simple:
   \item put the expected error output in a file with same name but with extension .err
 \end{enumerate}
 Once this is done, the new test will be included in the next run.
+It is also possible to run one individual test. In this case, the test is run even if it is maked as to be skipped when running the full test suite. This helps writing tests for cases needed to be supported in the future, but that should not make the full test suite fail.
 \section{Performance}
 Possibly include some measure?
 
