@@ -561,6 +561,11 @@ define
 
 
       fun {NamerForBody AST Params}
+         %for fLocal, fFun, fProc, we backup the environment when we enter and
+         %restore it when we get out.
+         % for fFun and fProc, this is necessary or formal parameters could
+         % erase variables with the same name in the parent environment when
+         % used after the fun/proc definition (see test 029)
          case AST
          %-----------------------
          of fLocal(Decl Body Pos) then
@@ -670,6 +675,7 @@ define
 
 
    % List helper functions
+   %Returns the index of Y in list Xs, 0 if not found
    fun {IndexOf Xs Y}
       fun {IndexOfInt Xs Y I}
          case Xs
@@ -688,6 +694,8 @@ define
          0
       end
    end
+   % Gives the index of and the first item itself for which the predicate P is
+   % true. If not found, index is 0 and item is unit
    proc {FirstOfP Xs P ?Index ?Item}
       fun {FirstOfPInt Xs P I}
          case Xs
@@ -712,7 +720,10 @@ define
    %###################
    fun {Globaliser AST}
    %###################
+      % Class to help manage the globals and their respective locals.
+      %-------------------
       class GlobalsManager
+      %-------------------
          attr
             globals
             newlocals
@@ -721,9 +732,15 @@ define
             newlocals:=nil  % list of locals created for the global with same index
          end
 
+         % gives the index of the Global variable in the list of globals known
+         % by this instance
          meth indexOfGlobal(Global ?Ind)
             Ind={IndexOf @globals Global}
          end
+
+         % if a known local with ProcId references Global, B it set to true and
+         % Local is bound to said local
+         % else B is false and Local bound to unit
          meth hasLocalForGlobalInProcId(Global ProcId ?B ?Local)
             GlobalInd
             Locals
@@ -743,6 +760,8 @@ define
             % search for local with ProcId
          end
 
+         % Creates and new symbol in ProcId referencing Global, and binds Local
+         % to it.
          meth createLocalForGlobalInProcId(Global ProcId ?Local)
             GlobalInd
             L
@@ -760,7 +779,8 @@ define
             {List.forAllInd @globals proc {$ Ind Global} {P Global @{List.nth @newlocals Ind } } end }
          end
 
-         % Add Local to Global's locals. If global was not yet present, initilise it first with an empty list of locals.
+         % Add Local to Global's locals. If global was not yet present,
+         % initialise it first with an empty list of locals.
          meth addPair(Global Local)
             GlobalInd
          in
@@ -779,7 +799,12 @@ define
             end
          end
       end
+
+      % Internal function for Globaliser.
+      % Takes the additional Params argument
+      %-----------------------------
       fun {GlobaliserInt AST Params}
+      %-----------------------------
          % Assign ProcId to all symbols found in AST
          fun {AssignScope AST ProcId}
             case AST
@@ -796,6 +821,11 @@ define
 
       in
          case AST
+
+         % An fProc creates a new procId, which is assigned to the variables it declares.
+         % It recursively goes in its children, from which it receives the new locals they had to create.
+         % It then looks if these new locals reference a variable it declares. If yes, do nothing. Else
+         % create a new local symbol, which in its turn will be passed the the proc's parent.
          %-------------------
          of fProc(FSym Args ProcBody Flags Pos) then
          %-------------------
@@ -805,15 +835,12 @@ define
             NewProcId = {OS.rand} mod 1000
             NewParams={Record.adjoin Params params( currentProcId:NewProcId gm:{New GlobalsManager init()})}
             (NewParams.setter):={FSym.1 get(name $)}
-            DeclaredLocals
             NewBody
             NewLocals={NewCell nil}
          in
             % Assign scope to the formal parameters (Args)
-            {Show 'assign scope to arguments of fProc'}
             {AssignScope Args NewProcId _}
-            %Extract the list of variables declared
-            DeclaredLocals = {UnWrapFAnd Args}
+            % Recursive call on body
             NewBody = {GlobaliserInt ProcBody NewParams}
 
             % Work on each global and its respective list of locals.
@@ -869,16 +896,22 @@ define
             {List.forAllInd @NewLocals proc {$ Ind Sym} {Sym set(gindex Ind-1)} end }
             fDefineProc(FSym Args NewBody Flags Pos @NewLocals)
 
+
+         %Assign current procId to declared variable
+         %Recursively call globaliser on body
+         %------------------------
          [] fLocal(Decls Body Pos) then
-            DeclaredLocals
+         %------------------------
             NewBody
             NewLocals
          in
             {Show 'assign scope in fLocal'}
             {AssignScope Decls Params.currentProcId _}
-            DeclaredLocals = {UnWrapFAnd Decls}
             NewBody = {GlobaliserInt Body Params}
             fLocal(Decls NewBody Pos)
+
+         % if the Symbol has the current procId, do nothing.
+         % else it is a global, and we replace it by a localised symbol referencing the global
          %-------------
          []fSym(Sym Pos) then
          %-------------
