@@ -1,5 +1,4 @@
 % The argument of a proc has the same name as a locally declared variable.
-% --SKIP TEST--
 local
    A = 5
    ShowPlusOne

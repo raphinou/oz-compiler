@@ -579,7 +579,10 @@ define
          %---------------------------------
          [] fFun(Name Args Body Flags Pos) then
          %---------------------------------
-            fFun(
+            Res
+         in
+            {Params.env backup()}
+            Res=fFun(
                % The procedure's variable has to be declared explicitely
                {NamerForBody Name Params}
                {List.map Args fun {$ I} {NamerForDecls I Params} end }
@@ -587,11 +590,16 @@ define
                Flags
                Pos
             )
+            {Params.env restore()}
+            Res
 
          %---------------------------------
          [] fProc(Name Args Body Flags Pos) then
          %---------------------------------
-            fProc(
+            Res
+         in
+            {Params.env backup()}
+            Res=fProc(
                % The procedure's variable has to be declared explicitely
                {NamerForBody Name Params}
                {List.map Args fun {$ I} {NamerForDecls I Params} end }
@@ -599,6 +607,8 @@ define
                Flags
                Pos
             )
+            {Params.env restore()}
+            Res
 
 
          %----------------
