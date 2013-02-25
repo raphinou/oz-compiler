@@ -6,9 +6,9 @@ import
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
-   DumpAST at '../lib/DumpAST.ozf'
+   DumpAST at './DumpAST.ozf'
    Debug at 'x-oz://boot/Debug'
-   Compile at '../lib/Compile.ozf'
+   Compile at './Compile.ozf'
 define
    {Debug.setRaiseOnBlock {Thread.this} true}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -72,7 +72,7 @@ define
 
 Code = '
 local
-   A = ~5
+   A = ~6
    ShowPlusOne
 in
    proc {ShowPlusOne A}
