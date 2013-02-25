@@ -1112,17 +1112,7 @@ define
          %----------------
          [] fEq(LHS RHS _) then
          %----------------
-            fun {WorkAroundVMBug Code=unify(First Second)}
-               case {Label First}#{Label Second}
-               of y#y then
-                  move(First x(0))|unify(x(0)Second)|nil
-               else
-                  Code
-               end
-            end
-         in
-            % no recursive call needed because everything is atomic at this stage (fSym of fConst)
-            {WorkAroundVMBug unify({F LHS  Params} {F RHS  Params}) }
+            unify({F LHS  Params} {F RHS  Params})
 
          %-----------------
          [] fConst(Value _) then
