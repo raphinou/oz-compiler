@@ -1,7 +1,7 @@
 local
 F R
 in
-fun {F A B}
+F=fun {$ A B}
    A+B
 end
 R = {F 2 3}

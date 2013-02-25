@@ -51,29 +51,50 @@ define
 %   {Show 2}
 %end'
 
-Code ='local
-      Add Sub
-   in
-      fun {Add First Second}
-         AddInt
-      in
-         fun {AddInt}
-            First+Second
-         end
-      end
+%Code ='local
+%      Add Sub
+%   in
+%      fun {Add First Second}
+%         fun {$}
+%            First+Second
+%         end
+%      end
+%
+%      fun {Sub First Second}
+%         fun {$}
+%            First-Second
+%         end
+%      end
+%
+%      {Show {{Add {{Sub 3 2}} {{Add 1 {{Sub 3 2}}}}}}}
+%   end
+%   '
 
-      fun {Sub First Second}
-         SubInt
-      in
-         fun {SubInt}
-            First-Second
-         end
-      end
-
-      {Show {{Add {{Sub 3 2}} {{Add 1 {{Sub 3 2}}}}}}}
+Code = '
+local
+   A = ~5
+   ShowPlusOne
+in
+   proc {ShowPlusOne A}
+     {Show A+1}
    end
-   '
+   {Show A}
+   {ShowPlusOne A}
+end
+'
 
+%Code = '
+%import
+%BootValue at \'x-oz://boot/Value\'
+%local
+%   C = {NewCell 5}
+%   in
+%      {Show {Access C}}
+%         {Assign C 42}
+%            {Show {Access C}}
+%            {BootValue.catAccess C}
+%            %{Show @C}
+%            end'
   %Code ='local
   %          A = 8
   %          B = 2
@@ -100,7 +121,7 @@ Code ='local
 %   {System.showInfo '--------------------------------------------------------------------------------'}
 %    _={DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST  {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}}}
 %
-   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {Compile.unnester {DumpAST.dumpAST {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
+   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST {Compile.desugar {DumpAST.dumpAST {Compile.namer {DumpAST.dumpAST {Compile.declsFlattener AST.1} }}}}}}}}} params() }
    {System.showInfo '--------------------------------------------------------------------------------'}
    %{Show 'Generate OpCodes:'}
    %{ForAll OpCodes Show}

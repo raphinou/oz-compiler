@@ -57,3 +57,11 @@ function display_skipped_test_warning()
     printf '%s%s%s\n' "$RED" "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" "$NORMAL"
     echo "Remove the line '% --SKIP TEST--' from the test definition file to re-enable it"
 }
+
+function describe_test()
+{
+  echo $basename
+  sed -e '/^[^%]/,$d' $f
+  echo
+
+}

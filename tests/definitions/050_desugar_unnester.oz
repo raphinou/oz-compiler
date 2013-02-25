@@ -1,7 +1,8 @@
 % Simple desugar of + - * / and unnesting of that operation's result assignment
+% Uses a negative number too
 local
    A = 8
-   B = 2
+   B = ~2
    Add Sub Mult Div
 in
    Add = A + B
