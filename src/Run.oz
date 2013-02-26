@@ -72,14 +72,23 @@ define
 
 Code = '
 local
-   A = ~6
-   ShowPlusOne
+   A={NewCell 0}
+   B={NewCell 0}
+   C={NewCell 2}
+   D={NewCell {NewCell 3}}
+   I
+   V
 in
-   proc {ShowPlusOne A}
-     {Show A+1}
-   end
-   {Show A}
-   {ShowPlusOne A}
+   B:=1
+   {Show @A}
+   {Show @B}
+   {Show @C}
+   {Show @@D}
+   V=(B:=4)
+   {Show @A}
+   {Show @B}
+   {Show @C}
+   {Show @@D}
 end
 '
 

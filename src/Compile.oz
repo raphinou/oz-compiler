@@ -8,6 +8,7 @@ import
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
    DumpAST at '../lib/DumpAST.ozf'
+   BootValue at 'x-oz://boot/Value'
    % for nested environments debugging
    OS
 
@@ -374,6 +375,10 @@ define
             DollarSymbol = fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             {DesugarInt fLocal( DollarSymbol fAnd( fProc(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+         [] fAt(Cell Pos) then
+            fApply( fConst(BootValue.catAccess Pos) [{DesugarInt Cell Params}] Pos)
+         [] fColonEquals(Cell Val Pos) then
+            fApply( fConst(BootValue.catAssign Pos) [{DesugarInt Cell Params} {DesugarInt Val Params}] Pos)
          else
             {DefaultPass AST DesugarInt Params}
          end
@@ -403,10 +408,20 @@ define
       fun {BindVarToExpr FSym AST Params}
          % Handles the binding of a variables to a complex expression
          case AST
+         %of fApply( fConst(BootValue.catAssign ConstPos) Args Pos) then
+         %   {UnnesterInt fApply( fConst(BootValue.catExchangeFun ConstPos) {List.append Args [FSym]} Pos) Params}
          of fApply(Proc Args Pos) then
             % enters the assignation target in the proc call
             % Res = {P Arg} -> {P Arg Res}
-            {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
+               ConstPos
+               Op
+            in
+               Proc=fConst(Op ConstPos)
+            if Op==BootValue.catAssign then
+               {UnnesterInt fApply( fConst(BootValue.catExchange ConstPos) {List.append Args [FSym]} Pos) Params}
+            else
+               {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
+            end
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
             % Recursive call to get to the end of the sequence
