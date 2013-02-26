@@ -14,3 +14,4 @@ run: lib/Run.ozf
 	ozengine lib/Run.ozf	
 clean:
 	rm lib/*
+.PHONY : clean run tests
