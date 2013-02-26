@@ -16,5 +16,5 @@ lib/Run.ozf: src/Run.oz lib/Compile.ozf
 run: lib/Run.ozf
 	ozengine lib/Run.ozf	
 clean:
-	rm lib/*
+	rm -f lib/* tests/*ozf
 .PHONY : clean run tests
