@@ -358,33 +358,93 @@ define
             fConst(Int.Op Pos)
          [] '/' then
             fConst(Float.Op Pos)
+         else
+            Op
+         end
+      end
+      % Expression/statements:
+      % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
+      fun {DesugarExpr AST Params}
+         % Desugar expressions
+         case AST
+         of fProc(fDollar(DollarPos) Args Body Flags Pos) then
+            DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
+         in
+            % FIXME: is the recursive call on the top level really useful?
+            % Wouldn't is be better to only do the recursive calls on args and body?
+            {DesugarStat fLocal( DollarSymbol fAnd( fProc(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+
+         [] fFun(fDollar(DollarPos) Args Body Flags Pos) then
+            DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
+         in
+            % FIXME: is the recursive call on the top level really useful?
+            % Wouldn't is be better to only do the recursive calls on args and body?
+            {DesugarStat fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+         [] fLocal(Decls Body Pos) then
+            % for fLocal, declarations are always statements.
+            % if the fLocal is a statement, its body must be a statement and is handled as such
+            fLocal({DesugarStat Decls Params} {DesugarExpr Body Params} Pos)
+         [] fAnd(First Second) then
+            % if the fAnd is an expression, only the second part is treated as expression
+            fAnd({DesugarStat First Params} {DesugarExpr Second Params})
+         [] fAt(Cell Pos) then
+            fApply( fConst(BootValue.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
+
+         [] fOpApply(Op Args Pos) then
+            % both Op and Args must be expression and expressions list respectively
+            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
+
+         [] fApply(Op Args Pos) then
+            % both Op and Args must be expression and expressions list respectively
+            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
+
+         [] fColonEquals(Cell Val Pos) then
+            fApply( fConst(BootValue.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+
+         [] fSym(_ _) then
+            AST
+         [] fConst(_ _) then
+            AST
          end
       end
 
-      fun {DesugarInt AST Params}
+      fun {DesugarStat AST Params}
          % Desugar function. Direct translation from sugared to desugared.
          case AST
-         of fOpApply(Op Args Pos) then
-            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarInt I Params} end } Pos)
+         of fAnd(First Second) then
+            % if the fAnd is a statement, both parts are treated as statements
+            fAnd({DesugarStat First Params} {DesugarStat Second Params})
 
+         [] fLocal(Decls Body Pos) then
+            % for fLocal, declarations are always statements.
+            % if the fLocal is a statement, its body must be a statement and is handled as such
+            fLocal({DesugarStat Decls Params} {DesugarStat Body Params} Pos)
+
+         [] fApply(Op Args Pos) then
+            % both Op and Args must be expression and expressions list respectively
+            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
+
+         [] fEq(LHS RHS Pos) then
+            fEq({DesugarExpr LHS Params} {DesugarExpr RHS Params} Pos)
+
+         [] fProc(FSym Args Body Flags Pos) then
+            fProc({DesugarExpr FSym Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } {DesugarStat Body Params} Flags Pos)
          [] fFun(FSym Args Body Flags Pos) then
             ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            {DesugarInt fProc(FSym {List.append Args [ReturnSymbol]} fEq(ReturnSymbol Body Pos) Flags Pos) Params}
-         [] fProc(fDollar(DollarPos) Args Body Flags Pos) then
-            DollarSymbol = fSym({New SyntheticSymbol init(Pos)} Pos)
-         in
-            {DesugarInt fLocal( DollarSymbol fAnd( fProc(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
-         [] fAt(Cell Pos) then
-            fApply( fConst(BootValue.catAccess Pos) [{DesugarInt Cell Params}] Pos)
+            % Need to Desugar the top-level fProc, eg in the case of a statement function (fun {$ ..}),
+            % so that the $ also gets desugared
+            {DesugarStat fProc(FSym {List.append Args [ReturnSymbol]} fEq(ReturnSymbol Body Pos) Flags Pos) Params}
          [] fColonEquals(Cell Val Pos) then
-            fApply( fConst(BootValue.catAssign Pos) [{DesugarInt Cell Params} {DesugarInt Val Params}] Pos)
-         else
-            {DefaultPass AST DesugarInt Params}
+            fApply( fConst(BootValue.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+         [] fSym(_ _) then
+            AST
+         %else
+         %   {DefaultPass AST DesugarInt Params}
          end
       end
    in
-      {DesugarInt AST params}
+      {DesugarStat AST params}
    end
 
    fun {Unnester AST}
@@ -413,15 +473,7 @@ define
          of fApply(Proc Args Pos) then
             % enters the assignation target in the proc call
             % Res = {P Arg} -> {P Arg Res}
-               ConstPos
-               Op
-            in
-               Proc=fConst(Op ConstPos)
-            if Op==BootValue.catAssign then
-               {UnnesterInt fApply( fConst(BootValue.catExchange ConstPos) {List.append Args [FSym]} Pos) Params}
-            else
-               {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
-            end
+            {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
             % Recursive call to get to the end of the sequence
