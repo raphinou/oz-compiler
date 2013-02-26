@@ -8,6 +8,9 @@ tests/HelpersTests.ozf: tests/HelpersTests.oz lib/DumpAST.ozf lib/Compile.ozf
 	ozc -c tests/HelpersTests.oz -o tests/HelpersTests.ozf
 tests: tests/TestRunner.ozf tests/HelpersTests.ozf
 	cd tests && ./run_all_tests.sh
+test: tests/TestRunner.ozf
+#Pass test prefix in variable test
+	cd tests && ./run_one_test_definition.sh definitions/${test}*oz
 lib/Run.ozf: src/Run.oz lib/Compile.ozf
 	ozc -c src/Run.oz -o lib/Run.ozf
 run: lib/Run.ozf
