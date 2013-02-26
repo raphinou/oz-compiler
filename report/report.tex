@@ -46,7 +46,7 @@ Describe virtual machine. I think to put it first so all concepts are introduced
 Y are locals(y(index)), X are work registers (x(index)), G are globals filled sequentially with arrayFill (g(index)), k are constants (k(value))
 \subsection{Abstractions}
 Abstraction (with G regs)  -> CodeArea (with K regs) -> Code
-\section{Compiler input}
+\section{Compiler input}\label{section:compilerinput}
 Describe records received from parser.
 Not all will be described here as an exhaustive list is available at %http://www.mozart-oz.org/home/doc/compiler/node7.html#appendix.syntax. 
 \subsection{Position in source code}
@@ -158,8 +158,17 @@ Arithmetic operators are parsed as the operator application to arguments being t
       )
 
 \end{lstlisting}
+\subsection{Expression marker \$}
+In Oz, statements can be transformed in expressions by the use of the \$ marker. This marker is found in the AST as a record fDollar() with a unique feature: it position.
+
+\subsection{Cells}
+\subsubsection{Assignation}
+fColonEquals(Cell Val Pos) %FIXME
+\subsubsection{Read}
+fAt(Cell Pos) % FIXME
 \section{Compiler output}
 Describe opcodes.
+
 
 
 \chapter{Compiler}
@@ -206,8 +215,91 @@ end
 \label{fig:namer_nested_locals}
 \end{figure}
 
-\subsection{Desugar}
+\subsection{Desugar}\label{section:desugar}
 The desugar pass handles the transformation of syntactic sugar code in its canonical form.
+The desugar function has two local functions defined, one for handling expressions, one for handling statements.
+\subsubsection{On statements and expressions}
+Oz distinguishes two groups of instructions: statements and expressions. An expression is ``syntactic sugar for a sequence of operations that return a value'' . Statements do not return a value.
+%FIXME: Give references: Concepts, Techniques and Models of Computer Programming, p81.
+Handling expressions and statements is often very similar, but sometime require significant differences of treatment. Hence the use two different local functions in the Desugar pass: one for each type of instruction.
+
+From this raises the question of categorising an instruction as a statement or an expression. And this is not as straightforward as one may think, as the context in which the instruction is used can change the character from statement to expression. This is illustrated by this example.
+% FIXME: storage element?? Find better name.
+In Oz, a cell is a mutable storage element which is created with an initial value (\lstinline!C={NewCell 0}!), it can be given a new value (\lstinline!C:=NewValue!) and its value can be read (\lstinline!@C!). There's also an exchange operation \lstinline!{Exchange C Old New}! which ``atomically binds Old with the old content of the cell, and set New to be the new content''.%FIXME: reference pvr book page 415.
+Assigning a new value to a cell is usually a statement returning no value, but when used as the right hand side of an assignment, it becomes an expression, whose value is the Old value of the cell !
+\begin{figure}[h]
+\begin{lstlisting}
+local
+  C={NewCell 0}
+  Old
+in
+  C:=1        % statement
+  Old=(C:=2)  % expression, whose value is assigned to Old
+  {Show Old}  % displays 1
+end
+
+\end{lstlisting}
+\caption{Cell assignment as statement and as expression}
+\label{fig:statement_and_expression1}
+\end{figure}
+Another illustration is the instruction \lstinline!local ... in ... end! which can be a statement as in Figure \ref{fig:statement_and_expression1}, but also an expression as in the code snippet in Figure \ref{fig:statement_and_expression2}
+
+\begin{figure}[h]
+\begin{lstlisting}
+   A = local C=2 in 2*C end
+   {Show A}
+\end{lstlisting}
+\caption{local \ldots in \ldots end as an expression}
+\label{fig:statement_and_expression2}
+\end{figure}
+
+Determining if an instruction is a statement or and expression is done
+recursively from top to bottom, the starting case being that the program is a
+statement, the ending case being that variables, constants, base operators,
+\ldots are expressions.  In Figure \ref{fig:statement_and_expression1}, the
+whole code snippet which we consider in this case as a complete program is a
+statement. This \lstinline!local...in...end! instruction is thus a statement.
+The declaration part of this instruction is always a statement. The body is
+also a statement because the whole local...in...end is a statement. If it were
+an expression (as in Figure \ref{fig:statement_and_expression2}), the body
+would have been an expression! In our case, the body is a sequence of
+instructions, resulting in a hierarchy of fAnd records in the AST. A sequence
+can be a statement, as in this case, or an expression, in which case the value
+of the whole sequence is the value of the last expression. This illustrates the
+need of distinct functions when statement and expressions must be handled
+differently. The fact is that the character (statement or
+expression) of a sequence of instructions is determined at the start of the
+sequence, the top of the fAnd hierarchy in the AST. But the impact of this
+distinction is found at the very bottom of this hierarchy: the last
+instruction, the end of the sequence. To be able to distingish both cases, we
+need to branch as soon as we determine the instruction's character.
+
+If we note F the pass of the compiler, FExpr the locally defined function handling expressions, and fStat corresponding function for statements, we can ensure that the right function is applied to each instructions'AST as defined in section \ref{section:compilerinput} by following these rules of identification, and call FStat on statements and FExpr on expressions:
+
+\begin{description}
+  \item[program] the program is a statement
+  \item[fLocal] 
+    \begin{itemize}
+      \item declarations are always statements
+      \item the body has the same character as its fLocal
+    \end{itemize}
+  \item[fAnd] 
+    \begin{itemize}
+      \item the first feature is a statement
+      \item same character as the fAnd
+    \end{itemize}
+  \item[fEq] both sides are expressions
+  \item[fProc] if the proc is an expression, its identifier must be the marker \$, else its identifier is an expression. The arguments are expressions, and the body is a statement.
+  \item[fFun] are similar to fProc
+  \item[fApply] calls can be statements or expressions, but in both cases the callee and its arguments are all expressions. 
+  \item[fColonEquals] can be statement or expression, but Cell and Val are in both cases expressions.
+  \item[fAt(Cell Pos)] is an expression. Its Cell is an expression
+  \item[fSym] can be statements (eg in declarations) and expressions (outside of declarations)
+  \item[fConst] are expressions
+\end{description}
+
+
+
 \subsubsection{Arithmetic operators}
 Infix arithmetic operators are transformed in the call of their respective function.
 The operators are parsed as fOpApply( Operator ArgsList)

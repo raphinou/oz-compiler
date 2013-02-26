@@ -89,6 +89,8 @@ in
    {Show @B}
    {Show @C}
    {Show @@D}
+   {Show hereComesV}
+   {Show V}
 end
 '
 
