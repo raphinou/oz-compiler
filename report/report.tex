@@ -276,6 +276,7 @@ need to branch as soon as we determine the instruction's character.
 
 If we note F the pass of the compiler, FExpr the locally defined function handling expressions, and fStat corresponding function for statements, we can ensure that the right function is applied to each instructions'AST as defined in section \ref{section:compilerinput} by following these rules of identification, and call FStat on statements and FExpr on expressions:
 
+%FIXME possibly replace the AST record by the Oz instruction they represent
 \begin{description}
   \item[program] the program is a statement
   \item[fLocal] 
