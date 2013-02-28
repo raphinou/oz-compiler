@@ -370,6 +370,8 @@ define
             fConst(Value.Op Pos)
          [] '.' then
             fConst(Value.Op Pos)
+         [] '\\=' then
+            fConst(Value.Op Pos)
          else
             Op
          end
