@@ -358,6 +358,18 @@ define
             fConst(Int.Op Pos)
          [] '/' then
             fConst(Float.Op Pos)
+         [] '==' then
+            fConst(Value.Op Pos)
+         [] '>' then
+            fConst(Value.Op Pos)
+         [] '<' then
+            fConst(Value.Op Pos)
+         [] '>=' then
+            fConst(Value.Op Pos)
+         [] '=<' then
+            fConst(Value.Op Pos)
+         [] '.' then
+            fConst(Value.Op Pos)
          else
             Op
          end
@@ -401,6 +413,11 @@ define
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(BootValue.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
+         [] fBoolCase( Cond TrueCode FalseCode Pos) then
+            % Cond is a value, hence an expression.
+            % Both branches are statements because the if itself is a statement
+            fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} {DesugarExpr FalseCode Params} Pos)
+
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -438,6 +455,10 @@ define
             {DesugarStat fProc(FSym {List.append Args [ReturnSymbol]} fEq(ReturnSymbol Body Pos) Flags Pos) Params}
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(BootValue.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+         [] fBoolCase( Cond TrueCode FalseCode Pos) then
+            % Cond is a value, hence an expression.
+            % Both branches are statements because the if itself is a statement
+            fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} {DesugarStat FalseCode Params} Pos)
          %else
          %   {DefaultPass AST DesugarInt Params}
          end
@@ -487,6 +508,11 @@ define
             {UnnesterInt fAnd(fProc(ProcSym Args Body Flags Pos)
                               fEq(ProcSym FSym Pos))
                          Params}
+         [] fBoolCase(Cond TrueCode FalseCode Pos) then
+         % A = if Cond then TrueCode else FalseCode end
+         % become
+         % if Cond then A=TrueCode else A=FalseCode end
+            {UnnesterInt fBoolCase(Cond fEq(FSym TrueCode Pos) fEq(FSym FalseCode Pos) Pos) Params}
          else
             {DumpAST.dumpAST AST _}
             raise unexpectedASTForBindVarToExpr end
@@ -569,6 +595,21 @@ define
                          Params}
          end
       end
+      fun {UnnestFBoolCase AST=fBoolCase(Cond TrueCode FalseCode Pos) Params}
+         if {IsElementary Cond} then
+            fBoolCase(Cond {UnnesterInt TrueCode Params} {UnnesterInt FalseCode Params} Pos)
+         else
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            % FIXME: can as well call unnester on body alone, as this is what this call will do
+            {UnnesterInt fLocal( NewSymbol
+                                 fAnd( fEq( NewSymbol Cond Pos)
+                                       fBoolCase(NewSymbol TrueCode FalseCode Pos))
+                                 Pos)
+                         Params}
+         end
+      end
+
       fun {UnnesterInt AST Params}
          %{Show 'UnnesterInt works on:'}
          %{DumpAST.dumpAST AST _}
@@ -579,6 +620,8 @@ define
             fLocal(Decls {UnnesterInt Body Params} Pos)
          [] fApply(Op Args Pos) then
             {UnnestFApply AST Params}
+         [] fBoolCase(Cond TrueCode FalseCode Pos) then
+            {UnnestFBoolCase AST Params}
          else
             {DefaultPass AST UnnesterInt Params}
          end
@@ -1179,6 +1222,27 @@ define
          [] fEq(LHS RHS _) then
          %----------------
             unify({F LHS  Params} {F RHS  Params})
+
+         [] fBoolCase(FSym TrueCode FalseCode Pos) then
+            ErrorLabel={NewName}
+            ElseLabel={NewName}
+            EndLabel={NewName}
+         in
+            move({GenCodeInt FSym Params} x(0))|
+            condBranch(x(0) ElseLabel ErrorLabel)|
+            %---- true ----
+            {GenCodeInt TrueCode Params}|
+            branch(EndLabel)|
+            %---- error ----
+            lbl(ErrorLabel)|
+            move(k(badBooleanInIf) x(0))|
+            tailCall(k(Exception.raiseError) 1)|
+            %---- else ----
+            lbl(ElseLabel)|
+            {GenCodeInt FalseCode Params}|
+            % ---- end ----
+            lbl(EndLabel)|nil
+
 
          %-----------------
          [] fConst(Value _) then
