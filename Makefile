@@ -2,13 +2,13 @@ lib/Compile.ozf: src/Compile.oz lib/DumpAST.ozf
 	ozc -c src/Compile.oz -o lib/Compile.ozf
 lib/DumpAST.ozf: src/DumpAST.oz
 	ozc -c src/DumpAST.oz -o lib/DumpAST.ozf
-tests/TestRunner.ozf: tests/TestRunner.oz
+tests/TestRunner.ozf: tests/TestRunner.oz lib/Compile.ozf
 	ozc -c tests/TestRunner.oz -o tests/TestRunner.ozf
 tests/HelpersTests.ozf: tests/HelpersTests.oz lib/DumpAST.ozf lib/Compile.ozf
 	ozc -c tests/HelpersTests.oz -o tests/HelpersTests.ozf
-tests: tests/TestRunner.ozf tests/HelpersTests.ozf
+tests: tests/TestRunner.ozf tests/HelpersTests.ozf lib/Compile.ozf
 	cd tests && ./run_all_tests.sh
-test: tests/TestRunner.ozf
+test: tests/TestRunner.ozf lib/Compile.ozf
 #Pass test prefix in variable test
 	cd tests && ./run_one_test_definition.sh definitions/${test}*oz
 lib/Run.ozf: src/Run.oz lib/Compile.ozf
