@@ -281,7 +281,7 @@ If we note F the pass of the compiler, FExpr the locally defined function handli
   \item[program] the program is a statement
   \item[fLocal] 
     \begin{itemize}
-      \item declarations are always statements
+      \item the declarations are all just fSym, since the DeclsFlattener has move all other code to the body. These fSyms are neither expressions nor statement, they are just fSym declarations.
       \item the body has the same character as its fLocal
     \end{itemize}
   \item[fAnd] 
@@ -295,7 +295,7 @@ If we note F the pass of the compiler, FExpr the locally defined function handli
   \item[fApply] calls can be statements or expressions, but in both cases the callee and its arguments are all expressions. 
   \item[fColonEquals] can be statement or expression, but Cell and Val are in both cases expressions.
   \item[fAt(Cell Pos)] is an expression. Its Cell is an expression
-  \item[fSym] can be statements (eg in declarations) and expressions (outside of declarations)
+  \item[fSym] , outside local's declaration part, are expressions
   \item[fConst] are expressions
 \end{description}
 
