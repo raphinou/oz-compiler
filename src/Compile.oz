@@ -418,7 +418,8 @@ define
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
-            fLocal({DesugarStat Decls Params} {DesugarStat Body Params} Pos)
+            % Do not recursively desugar declarations, as there are all fSym thanks for DeclsFlattener.
+            fLocal(Decls {DesugarStat Body Params} Pos)
 
          [] fApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
