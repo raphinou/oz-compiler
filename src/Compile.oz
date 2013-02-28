@@ -366,6 +366,8 @@ define
       % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
       fun {DesugarExpr AST Params}
          % Desugar expressions
+         {Show expr}
+         {DumpAST.dumpAST AST _}
          case AST
          of fProc(fDollar(DollarPos) Args Body Flags Pos) then
             DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
@@ -377,13 +379,13 @@ define
          [] fFun(fDollar(DollarPos) Args Body Flags Pos) then
             DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
          in
-            % FIXME: is the recursive call on the top level really useful?
-            % Wouldn't is be better to only do the recursive calls on args and body?
-            {DesugarStat fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+            % The fLocal we introduce is an expression, handle it as such!
+            {DesugarExpr fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
-            fLocal({DesugarStat Decls Params} {DesugarExpr Body Params} Pos)
+            % Do not recursively desugar declarations, as there are all fSym thanks for DeclsFlattener.
+            fLocal(Decls {DesugarExpr Body Params} Pos)
          [] fAnd(First Second) then
             % if the fAnd is an expression, only the second part is treated as expression
             fAnd({DesugarStat First Params} {DesugarExpr Second Params})
@@ -409,7 +411,9 @@ define
       end
 
       fun {DesugarStat AST Params}
+         {Show stat}
          % Desugar function. Direct translation from sugared to desugared.
+         {DumpAST.dumpAST AST _}
          case AST
          of fAnd(First Second) then
             % if the fAnd is a statement, both parts are treated as statements
@@ -438,8 +442,6 @@ define
             {DesugarStat fProc(FSym {List.append Args [ReturnSymbol]} fEq(ReturnSymbol Body Pos) Flags Pos) Params}
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(BootValue.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
-         [] fSym(_ _) then
-            AST
          %else
          %   {DefaultPass AST DesugarInt Params}
          end
