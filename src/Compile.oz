@@ -366,8 +366,6 @@ define
       % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
       fun {DesugarExpr AST Params}
          % Desugar expressions
-         {Show expr}
-         {DumpAST.dumpAST AST _}
          case AST
          of fProc(fDollar(DollarPos) Args Body Flags Pos) then
             DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
@@ -411,9 +409,7 @@ define
       end
 
       fun {DesugarStat AST Params}
-         {Show stat}
          % Desugar function. Direct translation from sugared to desugared.
-         {DumpAST.dumpAST AST _}
          case AST
          of fAnd(First Second) then
             % if the fAnd is a statement, both parts are treated as statements
