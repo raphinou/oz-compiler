@@ -417,11 +417,38 @@ We see that a new symbol, that we denoted R for convenience, is added to the arg
 A statement can be transformed in an expression of the value assigned to the variable in which place a \$ was placed.
 Currently only the form fun \{\$ Args\} is supported
 \subsection{Unnester}            
-The unnester will result in an AST in which there are only elementary instructions. The possible instructions are
+The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
+\subsubsection{Unification}
+The unnesting result of a unification instruction depends on the elementary character of each side, giving these three cases:
 \begin{description}
-  \item[Unification] of the form $E_1=E_2$
-  \item[Procedure calls] {$E_0$ \ldots $E_n$} \fxnote{Show braces in this code}
+  \item[Both elementary]In this case there is nothing to do
+  \item[One complex, one elementary] The unnesting is done according what the complex instruction is: 
+    \begin{description}
+      \item[Call] This is code of the form \lstinline!V={P E1...En}!, which needs to be transformed in the form \lstinline!{P E1...En V}!, where the variable we assign to is passed as last argument of the call.
+      \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of fAnd records. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
+      \item[Declaration (local)] The value of a \lstinline!local..in..end! in a unification is the value of its body. Hence, the unification \lstinline!V = local declarations in body end! is moved in side the local's body resulting in the code \lstinline!local declarations in V=body end!. This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
+      \item[if then else] The unification is simply moved inside each branch, and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively innested as Is1 and Is2 can be, for example,  sequences of instructions.
+    \end{description}
+  \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with each side, and unnesting the resulting code.
 \end{description}
+\subsubsection{Calls}
+All arguments are unnested one by one. Elementary arguments are left untouched
+Complex arguments are extracted from the arguments list by:
+\begin{itemize}
+  \item declaring a new symbol. This means the call is wrapped in a local..in..end, the declarations part declaring the new symbol, the body part unifying this symbol with the complex expression that was the original argument, followed by the i(to be unnested) function call with the new symbol replacing the complex argument. When a call has multiple complex arguments, this result in a local..in..end hierarchy with the depth corresponding to the number of complex arguments.
+  \item unifying this new symbol with the argument
+  \item replacing the argument by the new symbol in the argument list.
+\end{itemize}
+\subsubsection{Declarations (local)}
+This is done by unnesting the body of the instruction.
+\subsubsection{If then else}
+The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 end! depends on the type of Cond. 
+\begin{itemize}
+  \item If Cond is elementary, the unnesting is done simply by unnesting the two branched.
+  \item If Cond is complex, a new symbol is created and unified with the condition Cond. This is then followed by the if then else instruction in which the complex condition is replace by the symbol newly introduced.
+    \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
+\end{itemize}
+
 \subsection{Unification}
 If both sides are elementary, no change is done.
 
@@ -647,7 +674,26 @@ The globalise handles the following nodes:
 It is CodeGen that allocates registers. For the moment only Y registers.
 When a Symbol of type global is found, it is handled differently than local symbols.
 For a procedure definition, we initialise the global variables with arrayFill( y(yindex)). \fxnote{handle multiple levels of nesting}
-For a local\ldots in \ldots end, a g() is issued in place of a y(). \fxnote{is this working yet?}
+For globals, a g() is issued in place of a y(). \fxnote{is this working yet?}
+\subsubsection{If then else}
+Rather than give convoluted explanations, it is easier to look at the code generating the opcodes for the record \lstinline!fBoolCase(FSym TrueCode FalseCode Pos)! found in the AST for an if..then..else instruction:
+\begin{lstlisting}
+  move({GenCodeInt FSym Params} x(0))|
+  condBranch(x(0) ElseLabel ErrorLabel)|
+  %---- true ----
+  {GenCodeInt TrueCode Params}|
+  branch(EndLabel)|
+  %---- error ----
+  lbl(ErrorLabel)|
+  move(k(badBooleanInIf) x(0))|
+  tailCall(k(Exception.raiseError) 1)|
+  %---- else ----
+  lbl(ElseLabel)|
+  {GenCodeInt FalseCode Params}|
+  % ---- end ----
+  lbl(EndLabel)|nil
+\end{lstlisting}
+It first moves the symbol containing the boolean to be tested in a X register, which is then used in a condBranch opcode, takin gas additional arguments the labels identifying the start of the else branch, and the start of the error handling code. The ``then'' branch directly follows the condBranch. After that come the error code and the else branch. Note that at the end of the ``then'' branch, a branch opcode is needed to jump over the code corresponding to the else branch and the error handling.
 
 \section{Tests}
 \subsection{Helper functions tests}
