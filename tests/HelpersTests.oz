@@ -6,8 +6,8 @@ import
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
-   DumpAST at '../lib/DumpAST.ozf'
-   Debug at 'x-oz://boot/Debug'
+   %DumpAST at '../lib/DumpAST.ozf'
+   %Debug at 'x-oz://boot/Debug'
    Compile at '../lib/Compile.ozf'
 define
    proc {Equals Result Expected}
@@ -27,7 +27,7 @@ define
    end
    PrivateNarratorO
    NarratorO = {New Narrator.'class' init(?PrivateNarratorO)}
-   ListenerO = {New ErrorListener.'class' init(NarratorO)}
+   _ = {New ErrorListener.'class' init(NarratorO)}
 
    fun {GetSwitch Switch}
       false

@@ -8,28 +8,13 @@ import
    CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
    Application(getArgs)
    DumpAST at '../lib/DumpAST.ozf'
-   Debug at 'x-oz://boot/Debug'
+   %Debug at 'x-oz://boot/Debug'
    Compile at '../lib/Compile.ozf'
 define
    AST
-   proc {Equals Result Expected}
-      if Result\=Expected then
-         {Show '-------------------'}
-         {Show 'Unexpected Result !'}
-         {Show '-------------------'}
-         {Show 'Expected :'}
-         {Show Expected}
-         {Show '...................'}
-         {Show 'But got:'}
-         {Show Result}
-         {Show '*******************'}
-         raise unexpectedResult end
-      end
-      {System.printInfo '.'}
-   end
    PrivateNarratorO
    NarratorO = {New Narrator.'class' init(?PrivateNarratorO)}
-   ListenerO = {New ErrorListener.'class' init(NarratorO)}
+   _ = {New ErrorListener.'class' init(NarratorO)}
 
    fun {GetSwitch Switch}
       false

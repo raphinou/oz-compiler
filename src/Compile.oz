@@ -28,27 +28,28 @@ define
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Support classes
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-   class ListBuilder
-      attr
-         head
-         tail
-
-      meth init(Head)
-         head:=Head
-         tail:=Head
-      end
-
-      meth append(V)
-         NewTail
-      in
-        @tail=V|NewTail
-        tail:=NewTail
-      end
-
-      meth close()
-         @tail=nil
-      end
-   end
+% Left here in case it becomes useful in the future
+%   class ListBuilder
+%      attr
+%         head
+%         tail
+%
+%      meth init(Head)
+%         head:=Head
+%         tail:=Head
+%      end
+%
+%      meth append(V)
+%         NewTail
+%      in
+%        @tail=V|NewTail
+%        tail:=NewTail
+%      end
+%
+%      meth close()
+%         @tail=nil
+%      end
+%   end
    class Accessors
       meth set(Attr Value)
          Attr:=Value
@@ -233,7 +234,7 @@ define
             {Record.subtractList {PVSInt Body}  {Record.arity {PVSInt Decls}}}
          [] fProc(E _ _ _ _ ) then
             {PVE E}
-         [] fEq(LHS RHS _) then
+         [] fEq(LHS _ _) then
             {PVE LHS}
          else
             pv()
@@ -305,12 +306,8 @@ define
          of fLocal(Decls Body Pos) then
          %------------------------
 
-            Acc=params(acc:{NewCell nil})
-            FinalAcc
             NewDecls
             NewBody
-            Res
-            Tmp
             CodeInDeclarations
             CodeInDeclatationsAST
 
@@ -329,7 +326,7 @@ define
             end
 
             % Put all transformed parts in the new fLocal
-            Res = fLocal(
+            fLocal(
                NewDecls
                NewBody
                Pos
@@ -543,8 +540,6 @@ define
             else
                % All unnested arguments are now found in NewArgsList
                % We can now work on the fApply itself
-               FApplyAST=fApply(Op _ Pos)
-            in
                case Op
                of fApply(_ _ _) then
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
@@ -592,7 +587,7 @@ define
                          Params}
          end
       end
-      fun {UnnestFBoolCase AST=fBoolCase(Cond TrueCode FalseCode Pos) Params}
+      fun {UnnestFBoolCase fBoolCase(Cond TrueCode FalseCode Pos) Params}
          if {IsElementary Cond} then
             fBoolCase(Cond {UnnesterInt TrueCode Params} {UnnesterInt FalseCode Params} Pos)
          else
@@ -615,9 +610,9 @@ define
             {UnnestFEq AST Params}
          [] fLocal(Decls Body Pos) then
             fLocal(Decls {UnnesterInt Body Params} Pos)
-         [] fApply(Op Args Pos) then
+         [] fApply(_ _ _) then
             {UnnestFApply AST Params}
-         [] fBoolCase(Cond TrueCode FalseCode Pos) then
+         [] fBoolCase(_ _ _ _) then
             {UnnestFBoolCase AST Params}
          else
             {DefaultPass AST UnnesterInt Params}
@@ -869,9 +864,6 @@ define
          % Creates and new symbol in ProcId referencing Global, and binds Local
          % to it.
          meth createLocalForGlobalInProcId(Global ProcId ?Local)
-            GlobalInd
-            L
-         in
             %FIXME handle position!! Need to get
             Local = {New Symbol init({Global get(name $)} {Global get(pos $)})}
             {Local set(type localised)}
@@ -963,7 +955,6 @@ define
             %     level).
             {NewParams.gm forAllPairs(proc {$ Global Locals}
                                        FoundLocal
-                                       NewLocal
                                     in
                                        if {Global get(procId $)}==NewParams.currentProcId then
                                           % this is a variable we declare, don't pass it to the parent
@@ -1009,7 +1000,6 @@ define
          [] fLocal(Decls Body Pos) then
          %------------------------
             NewBody
-            NewLocals
          in
             {Show 'assign scope in fLocal'}
             {AssignScope Decls Params.currentProcId _}
@@ -1097,11 +1087,7 @@ define
             %FIXME: the name of the proc can not be available, eg in the case { {GetProc 2} arg1 arg2}
 
             CA
-            VS
-            NamedBody
-            YCount
             OpCodes={NewCell nil}
-            NewBody
             % Number of globals, ie variables comint from parent's environment
             GlobalsCount = {List.length NewLocals}
             ArrayFills
@@ -1110,7 +1096,7 @@ define
             {Show '##############'}
             {System.showInfo 'Procedure '#{Sym get(name $)} }
             {Show '##############'}
-            {GenAndAssemble Body Args 'test' d(file:Pos.1 line:Pos.2 column:Pos.3) switches ?CA ?VS}
+            {GenAndAssemble Body Args 'test' d(file:Pos.1 line:Pos.2 column:Pos.3) switches ?CA _} %last argument is ?VS, the virtual string is set by GenAndAssemble.
 
 
             OpCodes:={List.append @OpCodes  [createAbstractionUnify(k(CA) GlobalsCount  y({Sym get(yindex $)}))]}
@@ -1170,7 +1156,7 @@ define
             end
 
          %---------------
-         [] fApply(Sym Args Pos) then
+         [] fApply(Sym Args _) then
          %---------------
             R={NewCell nil}
          in
@@ -1204,7 +1190,7 @@ define
                                  end}
             case Sym
             of fConst(Const _) then
-               {List.append @R [call(k(Sym.1) {List.length Args})] }
+               {List.append @R [call(k(Const) {List.length Args})] }
             % FIXME: find better naming for Sym2 ?
             [] fSym(Sym2 _) then
                {List.append @R [call(y({Sym2 get(yindex $)}) {List.length Args})] }
@@ -1220,7 +1206,7 @@ define
          %----------------
             unify({F LHS  Params} {F RHS  Params})
 
-         [] fBoolCase(FSym TrueCode FalseCode Pos) then
+         [] fBoolCase(FSym TrueCode FalseCode _) then
             ErrorLabel={NewName}
             ElseLabel={NewName}
             EndLabel={NewName}

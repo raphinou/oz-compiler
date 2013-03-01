@@ -72,25 +72,18 @@ define
 
 Code = '
 local
-   A={NewCell 0}
-   B={NewCell 0}
-   C={NewCell 2}
-   D={NewCell {NewCell 3}}
-   I
-   V
+   R A=0 B=1 C=2
+   F = fun {$ P1 P2}
+         P1*P2
+       end
 in
-   B:=1
-   {Show @A}
-   {Show @B}
-   {Show @C}
-   {Show @@D}
-   V=(B:=4)
-   {Show @A}
-   {Show @B}
-   {Show @C}
-   {Show @@D}
-   {Show hereComesV}
-   {Show V}
+
+R=if {F B C}+2>={F A B}*2 then
+   t
+else
+   f
+end
+{Show R}
 end
 '
 
@@ -129,9 +122,9 @@ end
 
 %   _={DumpAST.dumpAST AST.1 }
 %   {System.showInfo '--------------------------------------------------------------------------------'}
-%   {System.showInfo '--------------------------------------------------------------------------------'}
+%%   {System.showInfo '--------------------------------------------------------------------------------'}
 %    _={DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST  {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}}}
-%
+
    OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST {Compile.desugar {DumpAST.dumpAST {Compile.namer {DumpAST.dumpAST {Compile.declsFlattener AST.1} }}}}}}}}} params() }
    {System.showInfo '--------------------------------------------------------------------------------'}
    %{Show 'Generate OpCodes:'}
