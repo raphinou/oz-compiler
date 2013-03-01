@@ -500,20 +500,15 @@ define
             % the result of a sequence of instructions is the value of the last one
             % Recursive call to get to the end of the sequence
             %FIXME: set Pos
+            %FIXME: place the recursive call depper in the subtree (on the fEq)?
             {UnnesterInt fAnd(First fEq(FSym Second pos)) Params}
          [] fLocal(Decls Body Pos) then
             % the value of a local..in..end is the value of the last expression in the body
             {UnnesterInt fLocal(Decls fEq(FSym Body Pos) Pos) Params}
-         % Wrong!! if there is a symbol on fProc, it is not an expression!
-         % Left here in case it helps with handling the $. FIXME: remove it eventually
-         [] fProc(ProcSym Args Body Flags Pos) then
-            {UnnesterInt fAnd(fProc(ProcSym Args Body Flags Pos)
-                              fEq(ProcSym FSym Pos))
-                         Params}
          [] fBoolCase(Cond TrueCode FalseCode Pos) then
-         % A = if Cond then TrueCode else FalseCode end
-         % become
-         % if Cond then A=TrueCode else A=FalseCode end
+            % A = if Cond then TrueCode else FalseCode end
+            % become
+            % if Cond then A=TrueCode else A=FalseCode end
             {UnnesterInt fBoolCase(Cond fEq(FSym TrueCode Pos) fEq(FSym FalseCode Pos) Pos) Params}
          else
             {DumpAST.dumpAST AST _}
@@ -528,7 +523,7 @@ define
             % Elementary arguments are left untouched
             % Complex arguments are extracted from the arguments list by:
             % - declaring a new symbol
-            % - unifyind this new symbol with the argument
+            % - unifying this new symbol with the argument
             % - replacing the argument by the new symbol in the argument list.
 
             case ArgsRest
