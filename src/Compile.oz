@@ -416,7 +416,10 @@ define
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} {DesugarExpr FalseCode Params} Pos)
-
+         [] fRecord( Label Features) then
+            fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarExpr I Params} end })
+         [] fColon(Feature Value) then
+            fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -475,6 +478,8 @@ define
             of fConst then
                true
             [] fSym then
+               true
+            [] fRecord then
                true
             else
                false
@@ -1225,6 +1230,21 @@ define
             {GenCodeInt FalseCode Params}|
             % ---- end ----
             lbl(EndLabel)|nil
+         [] fRecord(fConst(Label _) Features) then
+            Rec
+         in
+            Rec={List.foldL Features fun{$ A I}
+                                       case I
+                                       of fColon(fConst(L _) fConst(F _)) then
+                                          {Record.adjoin A Label(L:F)}
+                                       [] fColon(fSym(FSym Val _)  fConst(F _)) then
+                                          {Record.adjoin A {GenCodeInt FSym Params}(L:F)}
+                                       else
+                                          A
+                                       end
+                                   end Label()}
+            k(Rec)
+
 
 
          %-----------------
