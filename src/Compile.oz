@@ -120,6 +120,9 @@ define
          Symbol, init('' Pos)
          type:=synthetic
       end
+      meth toVS(?R)
+         R="'SSym"#@id#"y:"#@yindex#"g:"#@gindex#" type: "#@type#" procId "#@procId#"'"
+      end
    end
 
    class Environment
@@ -380,9 +383,9 @@ define
          of fColon(F V) then
             fColon({DesugarExpr F Params} {DesugarExpr V Params})
          else
-            % Feature.1 is position. Check this is always the case!
+            % Feature.2 is position. Check this is always the case!
             (Params.featureIndex):=@(Params.featureIndex)+1
-            fColon( fConst(@(Params.featureIndex) Feature.1) {DesugarExpr Feature Params})
+            fColon( fConst(@(Params.featureIndex) Feature.2) {DesugarExpr Feature Params})
          end
       end
       % Expression/statements:
@@ -496,9 +499,6 @@ define
                true
             [] fSym then
                true
-            % FIXME RECORD
-            [] fRecord then
-               true
             else
                false
             end
@@ -530,6 +530,10 @@ define
             % become
             % if Cond then A=TrueCode else A=FalseCode end
             {UnnesterInt fBoolCase(Cond fEq(FSym TrueCode Pos) fEq(FSym FalseCode Pos) Pos) Params}
+         [] fRecord(_ _) then
+            % record has already been unnested before the call to BindToVar, just return the fEq
+            %FIXME: set pos!
+            fEq(FSym AST pos)
          else
             {DumpAST.dumpAST AST _}
             raise unexpectedASTForBindVarToExpr end
@@ -625,18 +629,106 @@ define
          end
       end
 
+
+      fun {UnnestFRecord AST=fRecord(Op Args) Params}
+         % does not use Params
+         fun {UnnestFRecordInt FRecordAST NewArgsList ArgsRest}
+            % Unnest all arguments one by one.
+            % Elementary arguments are left untouched
+            % Complex arguments are extracted from the arguments list by:
+            % - declaring a new symbol
+            % - unifying this new symbol with the argument
+            % - replacing the argument by the new symbol in the argument list.
+
+            % FIXME: set Pos!
+            % fRecords do not have a position feature, so currently no position is set!
+            % -------------------------------------------------------------------------
+            case ArgsRest
+            of X|Xs then
+               F V
+            in
+               % The recursive calls haven't reached the end of the argument list.
+               % Handle the head of the remaining list, and make a recursive call
+               X = fColon(F V)
+               if {IsElementary V} then
+                 {UnnestFRecordInt FRecordAST X|NewArgsList Xs}
+               else
+                  NewSymbol={New SyntheticSymbol init(pos)}
+               in
+                  {UnnesterInt fLocal(fSym(NewSymbol pos)
+                                      fAnd( fEq(fSym(NewSymbol pos) V pos)
+                                            {UnnestFRecordInt FRecordAST fColon(F fSym(NewSymbol pos))|NewArgsList Xs}) pos)
+                               Params}
+               end
+            else
+               % All unnested arguments are now found in NewArgsList
+               % We can now work on the fRecord itself
+               % otherwise no recursive call
+               % all fLocal introduced by complex arguments have been directly place out of fRecord when traversing ArgsRest
+               % and all what's left in the argument list are Symbols.
+               fRecord(Op {List.reverse NewArgsList})
+            end
+         end
+         R
+      in
+
+         R={UnnestFRecordInt AST nil Args}
+         {Show '################################################################################'}
+         {Show '################################################################################'}
+         {Show '################################################################################'}
+         {DumpAST.dumpAST R _}
+         {Show '################################################################################'}
+         {Show '################################################################################'}
+         {Show '################################################################################'}
+         R
+      end
+
+      fun {IsConstantRecord fRecord(L Fs)}
+         if {Label L}\=fConst then
+            false
+         else
+            {List.all Fs fun{$ I} case I of fColon(fConst(_ _) fConst(_ _)) then true else false end end}
+         end
+      end
+
+
+
       fun {UnnesterInt AST Params}
-         %{Show 'UnnesterInt works on:'}
-         %{DumpAST.dumpAST AST _}
+         {Show 'UnnesterInt works on:'}
+         {DumpAST.dumpAST AST _}
          case AST
-         of fEq(_ _ _) then
-            {UnnestFEq AST Params}
+         of fEq(LHS RHS Pos) then
+            % Call Unnester on both parts, so that if it is a constant record, it is constantized when we unnest the fEq
+            % FIXME: This does not feel the cleanest, as it is not the expected flow.
+            {UnnestFEq fEq({UnnesterInt LHS Params} {UnnesterInt RHS Params} Pos) Params}
          [] fLocal(Decls Body Pos) then
             fLocal(Decls {UnnesterInt Body Params} Pos)
          [] fApply(_ _ _) then
             {UnnestFApply AST Params}
          [] fBoolCase(_ _ _ _) then
             {UnnestFBoolCase AST Params}
+         [] fRecord(Label Features) then
+            % FIXME:  is this really the place to constantise the record.
+            % This requires the unnest function to be called on both sides of fEq before it gets treated....
+            if {IsConstantRecord AST} then
+               Rec
+               RecordLabel
+            in
+               Label=fConst(RecordLabel _)
+               {Show 'Constant Record!'}
+               Rec={List.foldL Features fun{$ A I}
+                                          case I
+                                          of fColon(fConst(L _) fConst(F _)) then
+                                             {Record.adjoin A RecordLabel(L:F)}
+                                          else
+                                             A
+                                          end
+                                      end RecordLabel()}
+               % FIXME: set pos!
+               fConst(Rec pos)
+            else
+               {UnnestFRecord AST Params}
+            end
          else
             {DefaultPass AST UnnesterInt Params}
          end
@@ -1249,22 +1341,7 @@ define
             % ---- end ----
             lbl(EndLabel)|nil
          [] fRecord(fConst(Label _) Features) then
-            Rec
-         in
-            Rec={List.foldL Features fun{$ A I}
-                                       case I
-                                       of fColon(fConst(L _) fConst(F _)) then
-                                          {Record.adjoin A Label(L:F)}
-                                       %[] fColon(fSym(FSym Val _)  fConst(F _)) then
-                                       %   {Record.adjoin A {GenCodeInt FSym Params}(L:F)}
-                                       else
-                                          A
-                                       end
-                                   end Label()}
-            k(Rec)
-
-
-
+            raise unhandledRecordType end
          %-----------------
          [] fConst(Value _) then
          %-----------------
