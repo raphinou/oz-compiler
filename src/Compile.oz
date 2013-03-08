@@ -373,6 +373,18 @@ define
             Op
          end
       end
+
+      fun {DesugarRecordFeatures Feature Params}
+         % Assign features if not specified, starting with index 1
+         case Feature
+         of fColon(F V) then
+            fColon({DesugarExpr F Params} {DesugarExpr V Params})
+         else
+            % Feature.1 is position. Check this is always the case!
+            (Params.featureIndex):=@(Params.featureIndex)+1
+            fColon( fConst(@(Params.featureIndex) Feature.1) {DesugarExpr Feature Params})
+         end
+      end
       % Expression/statements:
       % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
       fun {DesugarExpr AST Params}
@@ -416,10 +428,15 @@ define
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} {DesugarExpr FalseCode Params} Pos)
+
          [] fRecord( Label Features) then
-            fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarExpr I Params} end })
+            NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
+         in
+            fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end })
+
          [] fColon(Feature Value) then
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
+
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -479,6 +496,7 @@ define
                true
             [] fSym then
                true
+            % FIXME RECORD
             [] fRecord then
                true
             else
@@ -1237,8 +1255,8 @@ define
                                        case I
                                        of fColon(fConst(L _) fConst(F _)) then
                                           {Record.adjoin A Label(L:F)}
-                                       [] fColon(fSym(FSym Val _)  fConst(F _)) then
-                                          {Record.adjoin A {GenCodeInt FSym Params}(L:F)}
+                                       %[] fColon(fSym(FSym Val _)  fConst(F _)) then
+                                       %   {Record.adjoin A {GenCodeInt FSym Params}(L:F)}
                                        else
                                           A
                                        end
