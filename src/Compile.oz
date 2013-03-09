@@ -390,6 +390,38 @@ define
       end
       % Expression/statements:
       % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
+
+      fun {IsConstantRecord AST=fRecord(L Fs)}
+         % Returns triplet of bools indicating if label, features and values of record all are constants or not.
+         % This will go through the list once, and set all components to correct boolean value.
+         {List.foldL Fs fun {$ LB#FB#VB I} F V in I=fColon(F V) LB#(FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true#true}
+      end
+
+      fun {TransformRecord AST=fRecord(Label Features)}
+         % Called to transform record just *after* it has been desugared:
+         % - replace constant record by a constant (fConst)
+
+         case {IsConstantRecord AST}
+         of true#true#true then
+            Rec
+            RecordLabel
+         in
+            Label=fConst(RecordLabel _)
+            Rec={List.foldL Features fun{$ A I}
+                                       case I
+                                       of fColon(fConst(L _) fConst(F _)) then
+                                          {Record.adjoin A RecordLabel(L:F)}
+                                       else
+                                          A
+                                       end
+                                   end RecordLabel()}
+            % FIXME: set pos!
+            fConst(Rec pos)
+         else
+            AST
+         end
+      end
+
       fun {DesugarExpr AST Params}
          % Desugar expressions
          case AST
@@ -435,7 +467,7 @@ define
          [] fRecord( Label Features) then
             NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
-            fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end })
+            {TransformRecord fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end }) }
 
          [] fColon(Feature Value) then
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
@@ -683,13 +715,6 @@ define
          R
       end
 
-      fun {IsConstantRecord fRecord(L Fs)}
-         if {Label L}\=fConst then
-            false
-         else
-            {List.all Fs fun{$ I} case I of fColon(fConst(_ _) fConst(_ _)) then true else false end end}
-         end
-      end
 
 
 
@@ -700,7 +725,7 @@ define
          of fEq(LHS RHS Pos) then
             % Call Unnester on both parts, so that if it is a constant record, it is constantized when we unnest the fEq
             % FIXME: This does not feel the cleanest, as it is not the expected flow.
-            {UnnestFEq fEq({UnnesterInt LHS Params} {UnnesterInt RHS Params} Pos) Params}
+            {UnnestFEq fEq(LHS RHS Pos) Params}
          [] fLocal(Decls Body Pos) then
             fLocal(Decls {UnnesterInt Body Params} Pos)
          [] fApply(_ _ _) then
@@ -710,25 +735,7 @@ define
          [] fRecord(Label Features) then
             % FIXME:  is this really the place to constantise the record.
             % This requires the unnest function to be called on both sides of fEq before it gets treated....
-            if {IsConstantRecord AST} then
-               Rec
-               RecordLabel
-            in
-               Label=fConst(RecordLabel _)
-               {Show 'Constant Record!'}
-               Rec={List.foldL Features fun{$ A I}
-                                          case I
-                                          of fColon(fConst(L _) fConst(F _)) then
-                                             {Record.adjoin A RecordLabel(L:F)}
-                                          else
-                                             A
-                                          end
-                                      end RecordLabel()}
-               % FIXME: set pos!
-               fConst(Rec pos)
-            else
-               {UnnestFRecord AST Params}
-            end
+            {UnnestFRecord AST Params}
          else
             {DefaultPass AST UnnesterInt Params}
          end
