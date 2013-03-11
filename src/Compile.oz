@@ -760,9 +760,9 @@ define
          {DumpAST.dumpAST AST _}
          case AST
          of fEq(LHS RHS Pos) then
-            % Call Unnester on both parts, so that if it is a constant record, it is constantized when we unnest the fEq
+            % Call Unnester on both parts, so that if it is a record, it is unnested.
             % FIXME: This does not feel the cleanest, as it is not the expected flow.
-            {UnnestFEq fEq(LHS RHS Pos) Params}
+            {UnnestFEq fEq({UnnesterInt LHS Params} {UnnesterInt RHS Params} Pos) Params}
          [] fLocal(Decls Body Pos) then
             fLocal(Decls {UnnesterInt Body Params} Pos)
          [] fApply(_ _ _) then
