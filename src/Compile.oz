@@ -8,6 +8,7 @@ import
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction makeArity) at 'x-oz://system/CompilerSupport.ozf'
    Boot_CompilerSupport at 'x-oz://boot/CompilerSupport'
+   Boot_Record at 'x-oz://boot/Record'
    DumpAST at '../lib/DumpAST.ozf'
    BootValue at 'x-oz://boot/Value'
    % for nested environments debugging
@@ -402,6 +403,21 @@ define
          % Called to transform record just *after* it has been desugared:
          % - replace constant record by a constant (fConst)
 
+         fun {Features2Record Features}
+            fun{Features2RecordInt Features I}
+               case Features
+               of fColon(F V)|Fs then
+                  % FIXME: set pos!
+                  fColon(fConst(I pos) F)|fColon(fConst(I+1 pos) V)|{Features2RecordInt Fs I+2}
+               [] nil then
+                  nil
+               end
+            end
+         in
+            %FIXME: set pos!
+            fRecord( fConst('#' pos) {Features2RecordInt Features 1} )
+         end
+      in
          case {IsConstantRecord AST}
          of true#true#true then
             Rec
@@ -419,14 +435,22 @@ define
             % FIXME: set pos!
             fConst(Rec pos)
          [] true#true#false then
-            % will use makeArityDynamic
+            % will use makeArity in CodeGen, leave as is
             AST
          [] false#_#_ then
-            %makeDynamic
-            AST
+            %Need to change it in a call to makeDynamic, so that the arity is constant for later phases, including CodeGen
+            L Features
+         in
+            AST=fRecord(L Features)
+            % FIXME: set pos!
+            fApply( fConst(Boot_Record.makeDynamic pos) {List.append [L] {Features2Record Features}|nil} pos)
          [] _#false#_ then
-            %makeDynamic
-            AST
+            %Need to change it in a call to makeDynamic, so that the arity is constant for later phases, including CodeGen
+            L Features
+         in
+            AST=fRecord(L Features)
+            % FIXME: set pos!
+            fApply( fConst(Boot_Record.makeDynamic pos) {List.append [L] {Features2Record Features}|nil} pos)
          else
             AST
          end
@@ -508,7 +532,6 @@ define
 
          [] fEq(LHS RHS Pos) then
             fEq({DesugarExpr LHS Params} {DesugarExpr RHS Params} Pos)
-
          [] fProc(FSym Args Body Flags Pos) then
             fProc({DesugarExpr FSym Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } {DesugarStat Body Params} Flags Pos)
          [] fFun(FSym Args Body Flags Pos) then
@@ -557,6 +580,10 @@ define
          of fApply(Proc Args Pos) then
             % enters the assignation target in the proc call
             % Res = {P Arg} -> {P Arg Res}
+            {Show 'BindToVar:'}
+            {DumpAST.dumpAST AST _}
+            {Show 'Args:'}
+            {DumpAST.dumpAST Args _}
             {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
@@ -1351,8 +1378,16 @@ define
                                     end
                                     nil }
                OrderedFeaturesList = {List.sort FeaturesList fun {$ L1#_ L2#_} {Boot_CompilerSupport.featureLess L1 L2} end }
+               {Show 'OrderedFeaturesList:'}
+               {Show OrderedFeaturesList}
                Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#V} L end } }
-               OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+               if Arity\=false then
+                  % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
+                  OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+               else
+                  % if makeArity returned false, it means we need to create a tuple, because the feature was all numeric
+                  OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+               end
                Fills={List.map OrderedFeaturesList fun{$ L#V} arrayFill({GenCodeInt V Params}) end }
                R={List.append [OpCodes] Fills}
                {Show 'R:'}
