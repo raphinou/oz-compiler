@@ -1,7 +1,7 @@
 % Records where values are results of function call
 % --SKIP TEST--
 local
-   R
+   A B R R2
    fun{F I}
       I*2
    end
