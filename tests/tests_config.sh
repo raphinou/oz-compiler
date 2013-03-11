@@ -60,8 +60,7 @@ function display_skipped_test_warning()
 
 function describe_test()
 {
-  echo $basename
-  sed -e '/^[^%]/,$d' $f
-  echo
+  echo ${basename%%_*}:
+  sed -e '/^[^%]/,$d' -e 's/%//' -e '/SKIP TEST/d' -e'/^$/d' $f
 
 }
