@@ -17,4 +17,6 @@ run: lib/Run.ozf
 	ozengine lib/Run.ozf	
 clean:
 	rm -f lib/* tests/*ozf
-.PHONY : clean run tests
+desc:
+	cd tests && ./describe_tests.sh
+.PHONY : clean run tests desc
