@@ -6,7 +6,8 @@ import
    Compiler(parseOzVirtualString)
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
-   CompilerSupport(newAbstraction) at 'x-oz://system/CompilerSupport.ozf'
+   CompilerSupport(newAbstraction makeArity) at 'x-oz://system/CompilerSupport.ozf'
+   Boot_CompilerSupport at 'x-oz://boot/CompilerSupport'
    DumpAST at '../lib/DumpAST.ozf'
    BootValue at 'x-oz://boot/Value'
    % for nested environments debugging
@@ -417,6 +418,15 @@ define
                                    end RecordLabel()}
             % FIXME: set pos!
             fConst(Rec pos)
+         [] true#true#false then
+            % will use makeArityDynamic
+            AST
+         [] false#_#_ then
+            %makeDynamic
+            AST
+         [] _#false#_ then
+            %makeDynamic
+            AST
          else
             AST
          end
@@ -1326,7 +1336,32 @@ define
          %----------------
          [] fEq(LHS RHS _) then
          %----------------
-            unify({F LHS  Params} {F RHS  Params})
+            if {Record.label RHS}==fRecord then
+               FeaturesList OrderedFeaturesList Arity Label Features OpCodes
+               Fills R
+            in
+               RHS = fRecord(fConst(Label _) Features)
+               FeaturesList = {List.foldL Features fun{$ A I}
+                                       case I
+                                       of fColon(fConst(L _) V) then
+                                          L#V|A
+                                       else
+                                          raise constantFeatureExpectedforFRecordInCodeGen end
+                                       end
+                                    end
+                                    nil }
+               OrderedFeaturesList = {List.sort FeaturesList fun {$ L1#_ L2#_} {Boot_CompilerSupport.featureLess L1 L2} end }
+               Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#V} L end } }
+               OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+               Fills={List.map OrderedFeaturesList fun{$ L#V} arrayFill({GenCodeInt V Params}) end }
+               R={List.append [OpCodes] Fills}
+               {Show 'R:'}
+               {Show {List.is R}}
+               {ForAll R Show}
+               R
+            else
+               unify({F LHS  Params} {F RHS  Params})
+            end
 
          [] fBoolCase(FSym TrueCode FalseCode _) then
             ErrorLabel={NewName}
@@ -1361,7 +1396,6 @@ define
    in
       % append return
       OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} ['return'()]}
-      %OpCodes={List.flatten {GenCodeInt AST InitialParams}}
 
       % prefix with allocateY
       %FIXME: keep prefix in Params?
