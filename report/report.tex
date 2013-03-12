@@ -166,6 +166,51 @@ In Oz, statements can be transformed in expressions by the use of the \$ marker.
 fColonEquals(Cell Val Pos) %FIXME
 \subsubsection{Read}
 fAt(Cell Pos) % FIXME
+\subsection{Records}
+Without describing the whole syntax, here is a reminder of the record syntax in Oz code. A record is refined by \lstinline!Label(F1:V1 F2:V2)! where the label and features ($F_i$) can be an atom or a variable, and the values ($V_i$) can in addition to this be the result of a function call. Features can be left out, in which case they are implicitly assigned increasing values from 1.
+
+Records are present in the AST in records with label fRecord. Its label is the first feature, and the second feature is the list of feature/value pairs. If no feature was specified, the entry in the list is simply the value. If a feature was specified, the entry in the list is a record fColon, with the first feature being the feature and second feature being the value. All this will become much clearer with the following examples.
+
+Here is the AST corresponding to the record definition \lstinline!rec(f1:v1 f2:v2)!. We see that the label (rec) is an atom located in an fAtom record. The pairs of features and their respective values are wrapped in fColon.
+
+\begin{lstlisting}
+   fRecord(
+      fAtom(rec pos)
+      |(
+         fColon(
+            fAtom(f1 pos)
+            fAtom(v1 pos)
+         )
+         |(
+            fColon(
+               fAtom(f2 pos)
+               fAtom(v2 pos)
+            )
+            nil
+         )
+      )
+   )
+\end{lstlisting}
+
+When the feature is not explicitely given, the item in the list of features and their respective values is simply the value. Here is the AST of this record \lstinline!rec(v1 f2:V2)!. The first item in the list is simply an atom, the value of the first feature. Note that the value of the feature f2 is a variable in this case.
+
+\begin{lstlisting}
+   fRecord(
+      fAtom(rec pos)
+      |(
+         fAtom(v1 pos)
+         |(
+            fColon(
+               fAtom(f2 pos)
+               fVar(V2 pos)
+            )
+            nil
+         )
+      )
+   )
+\end{lstlisting}
+
+
 \section{Compiler output}
 Describe opcodes.
 
@@ -297,6 +342,7 @@ If we note F the pass of the compiler, FExpr the locally defined function handli
   \item[fAt(Cell Pos)] is an expression. Its Cell is an expression
   \item[fSym] , outside local's declaration part, are expressions
   \item[fConst] are expressions
+  \item[fRecord] are expressions
 \end{description}
 
 
@@ -416,6 +462,37 @@ We see that a new symbol, that we denoted R for convenience, is added to the arg
 \subsubsection{Transformation in an expression}
 A statement can be transformed in an expression of the value assigned to the variable in which place a \$ was placed.
 Currently only the form fun \{\$ Args\} is supported
+\subsubsection{Records}
+As mentioned in the description of records, the features can be left out, and are in that case implicit, with increasing integer values starting at 1.
+In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in \lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the programmer to avoid conflict, as implicit feature assignment does not check for explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is coherent with Mozart 1. %FIXME: check this is all ok.
+An additional action was added in the desugar step for records: transforming records that are constants or records that have non-constant label or features. This transformation replaces fRecord that have all label, features and values constant by a fConst with as value the record reconstructed. This greatly simplifies the AST for these records, and can be done because the value of the record can be used as is in later steps, notably the opcodes generation. 
+Records with non constant labels and/or features are replaced by a call to \lstinline!Boot_Record.makeDynamic!. The goal here is to leave in the AST only records with constant label and features. MakeDynamic takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by \lstinline!{makeDynamic Rec '#'(1:F1 2:V1 3:F2 4:V2)}! .
+In the AST, this replaces 
+\begin{lstlisting}
+  fRecord(Label 
+          fColon(Feature1 Value1)|
+            fColon(Feature2 Value2)|
+            nil
+  )
+\end{lstlisting}
+where Label, Feature1 and Feature2 can be fSyms, by
+\begin{lstlisting}
+  fApply(
+         fConst(makeDynamic pos) 
+         Label|
+           fRecord(fConst('#' pos) 
+                        Label|
+                          fColon(1 Feature1)|
+                          fColon(2 Value1)|
+                          fColon(3 Feature2)|
+                          fColon(4 Value2)|
+                          nil 
+           )|
+           nil
+  )
+\end{lstlisting}
+We see that we end up with a AST that only contains records with constant label and features.
+Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
 \subsection{Unnester}            
 The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}
@@ -430,36 +507,6 @@ The unnesting result of a unification instruction depends on the elementary char
       \item[if then else] The unification is simply moved inside each branch, and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively innested as Is1 and Is2 can be, for example,  sequences of instructions.
     \end{description}
   \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with each side, and unnesting the resulting code.
-\end{description}
-\subsubsection{Calls}
-All arguments are unnested one by one. Elementary arguments are left untouched
-Complex arguments are extracted from the arguments list by:
-\begin{itemize}
-  \item declaring a new symbol. This means the call is wrapped in a local..in..end, the declarations part declaring the new symbol, the body part unifying this symbol with the complex expression that was the original argument, followed by the i(to be unnested) function call with the new symbol replacing the complex argument. When a call has multiple complex arguments, this result in a local..in..end hierarchy with the depth corresponding to the number of complex arguments.
-  \item unifying this new symbol with the argument
-  \item replacing the argument by the new symbol in the argument list.
-\end{itemize}
-\subsubsection{Declarations (local)}
-This is done by unnesting the body of the instruction.
-\subsubsection{If then else}
-The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 end! depends on the type of Cond. 
-\begin{itemize}
-  \item If Cond is elementary, the unnesting is done simply by unnesting the two branched.
-  \item If Cond is complex, a new symbol is created and unified with the condition Cond. This is then followed by the if then else instruction in which the complex condition is replace by the symbol newly introduced.
-    \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
-\end{itemize}
-
-\subsection{Unification}
-If both sides are elementary, no change is done.
-
-If no side is elementary, one new synthetic variable is declared and unified with each side sequentialy, first with the left-hand side, then with the right-hand side. 
-
-If only one side is elementary a new, we look at what the none elementary side is, and act accordingly:
-\begin{description}
-  \item[Procedure call] the unification is removed, and the variable target of the assignation is put as last argument of the call
-  \item[local D in E end] gets replaced by local D in X=E end
-  \item[fAnd(S1 E2)] replaced by fAnd(S1 X=E2)
-\end{description}
 We need recursive calls, as is illustrated by the following example, also showing why this code works
 \begin{lstlisting}
   3+4 = {Show}
@@ -486,6 +533,78 @@ The order of the assignments of the first step explains why this doesn't work:
 \begin{lstlisting}
   {Show} = 3+4
 \end{lstlisting}
+
+\end{description}
+\subsubsection{Calls}
+All arguments are unnested one by one. Elementary arguments are left untouched
+Complex arguments are extracted from the arguments list by:
+\begin{itemize}
+  \item declaring a new symbol. This means the call is wrapped in a local..in..end, the declarations part declaring the new symbol, the body part unifying this symbol with the complex expression that was the original argument, followed by the i(to be unnested) function call with the new symbol replacing the complex argument. When a call has multiple complex arguments, this result in a local..in..end hierarchy with the depth corresponding to the number of complex arguments.
+  \item unifying this new symbol with the argument
+  \item replacing the argument by the new symbol in the argument list.
+\end{itemize}
+Here is an example of unnesting in Oz code:
+\begin{lstlisting}
+  {F {F2 A} B}
+\end{lstlisting}
+will be transformed in:
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    NewVar={F2 A}
+    {F NewVar B}
+  end
+\end{lstlisting}
+
+Of course, the function called can itself be the result of a function call, and this is handled too:
+\begin{lstlisting}
+  { {F1 A} B }
+\end{lstlisting}
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    NewVar = {F1 A}
+    { NewVar B }
+  end
+\end{lstlisting}
+
+\subsubsection{Declarations (local)}
+This is done by unnesting the body of the instruction.
+\subsubsection{If then else}
+The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 end! depends on the type of Cond. 
+\begin{itemize}
+  \item If Cond is elementary, the unnesting is done simply by unnesting the two branched.
+  \item If Cond is complex, a new symbol is created and unified with the condition Cond. This is then followed by the if then else instruction in which the complex condition is replace by the symbol newly introduced.
+    \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
+\end{itemize}
+
+\subsubsection{Records}
+The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
+Here is an example where the value of a feature is an if expression.
+\begin{lstlisting}
+   R=rec(a:if B then 2 else V end b:2)
+\end{lstlisting}
+will be transformed in
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    NewVar=if B then 2 else V end
+    R=rec(a:NewVar b:2)
+  end
+\end{lstlisting}
+And this requires a new unnesting step (see the unnesting of unifications) resulting in 
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    if B then NewVar=2 else NewVar=V end
+    R=rec(a:NewVar b:2)
+  end
+\end{lstlisting}
+
 
 
 \subsection{Globaliser}            
@@ -694,6 +813,46 @@ Rather than give convoluted explanations, it is easier to look at the code gener
   lbl(EndLabel)|nil
 \end{lstlisting}
 It first moves the symbol containing the boolean to be tested in a X register, which is then used in a condBranch opcode, takin gas additional arguments the labels identifying the start of the else branch, and the start of the error handling code. The ``then'' branch directly follows the condBranch. After that come the error code and the else branch. Note that at the end of the ``then'' branch, a branch opcode is needed to jump over the code corresponding to the else branch and the error handling.
+
+\subsubsection{Records}
+At this step, the only place we can find records are in the right hand side of unifications, i.e. the second features of fEq. If the arity is made of numbers only, i.e. we have the arity of a tuple, we need to issue a makeTupleUnify(k(Label) FeaturesList DestReg) instruction. If not, we need to issue a makeRecordUnify(k(Arity) FeaturesList DestReg) instruction. 
+The function CompilerSupport.makeArity is used to build the arity for use in makeRecordUnify. It takes as argument the label and a list of pairs \lstinline!Label#Value!. If the labels passed in the list are labels of a tuple, it returns false, else it returns the constructed arity. It is based on the value returned by makeArity that the compiler decides which instruction is issued.
+The featuresList has to be ordered according to the features. This is important, as the makeTupleUnify/makeRecordUnify instructions have to be followed by arrayFill instructions, one for each value, in the same order as the features passed to the instruction.
+
+As an illustration, this unification of a variable with a record having one value not constant:
+\begin{lstlisting}
+R=rec(a:A b:2)
+\end{lstlisting}
+results in this AST
+\begin{lstlisting}
+   fEq(
+      fSym('R' pos)
+      fRecord(
+         fAtom(rec pos)
+         |(
+            fColon(
+               fAtom(a pos)
+               fSym('A' pos)
+            )
+            |(
+               fColon(
+                  fAtom(b pos)
+                  fInt(2 pos)
+               )
+               nil
+            )
+         )
+      )
+      pos
+   )
+\end{lstlisting}
+and, if we note y(VAR) the register assigned to VAR by the compile, it results in these opcodes being generated:
+
+\begin{lstlisting}
+   makeRecordUnify( k(<Arity rec(a b)>) 2 y(R) )
+   arrayFill(y(A))
+   arrayFill(k(2)) 
+\end{lstlisting}
 
 \section{Tests}
 \subsection{Helper functions tests}
