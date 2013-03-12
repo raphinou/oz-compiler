@@ -74,6 +74,7 @@ define
          type
          ref
       meth clone(?NewSym)
+         % Create new symbole with same properties as this one.
          NewSym={New Symbol init(@name @pos)}
          {NewSym set(yindex @yindex)}
          {NewSym set(gindex @gindex)}
@@ -82,6 +83,7 @@ define
          {NewSym set(type @type)}
       end
       meth init(Name Pos)
+         % Initialises attributes
          id:={OS.rand} mod 100
          name:=Name
          pos:=Pos
@@ -91,6 +93,7 @@ define
          type:=localProcId
       end
       meth toVS(?R)
+         % Gives a string representation of this symbole, including the symbol it references if it's a localised one.
          pos(File Line Col _ _ _)=@pos
          Ref
       in
@@ -108,7 +111,7 @@ define
          B=(@yindex\=nil)
       end
       meth setProcId(ProcId)
-
+         % Set the procId, but raises an error if there was already one
          if @procId\=0 then
             {Show 'Trying to override procId value to '#ProcId}
             {System.showInfo {self toVS($)}}
@@ -118,16 +121,27 @@ define
       end
    end
    class SyntheticSymbol from Symbol
+      % A synthetic symbol is a symbol introduces by the compiler, eg when unnesting.
+      % As such, it has no corresponding variable name, and its type is set to synthetic.
       meth init(Pos)
          Symbol, init('' Pos)
          type:=synthetic
       end
       meth toVS(?R)
+         % Override this method to avoid problems with irrelevant attributes
          R="'SSym"#@id#"y:"#@yindex#"g:"#@gindex#" type: "#@type#" procId "#@procId#"'"
       end
    end
 
    class Environment
+      % The class Environment is used by the namer to keep track of variables
+      % defined at each step.
+      % The environment maps the variable name to its symbol. That way, all
+      % occurences of a variable in an environment are replaced by the same
+      % symbol.
+      % An new environment is created when entering an fProc, but that new
+      % environment keeps all definitions of the parent. That's what creates
+      % the closure.
       attr
          dict
          backups
@@ -137,6 +151,8 @@ define
       end
 
       meth addOrGetSymbol(Name Pos ?Res)
+         % If the variable Name is already mapped to a symbol, assign it to Res.
+         % If not, first create a new symbol, map it to the variable name, and assign it to Res.
          if {Dictionary.member @dict Name} then
             Res={Dictionary.get @dict Name}
          else
@@ -146,20 +162,28 @@ define
             Res=NewSymbol
          end
       end
+
       meth getSymbol(Name ?R)
+         % Assigns to R the symbol mapped to variable Name
          R={Dictionary.get @dict Name}
       end
       meth hasSymbol(Name ?R)
         {Dictionary.member @dict Name R}
       end
       meth setSymbol(Name Pos ?NewSymbol)
+         % create a new symbol and map it to variable Name.
+         % This method is used when we need to override an already defined mapping,
+         % eg when a variable local to a proc override a variable captured from the parent environment.
          NewSymbol = { New Symbol init(Name Pos)}
          {Dictionary.put @dict Name NewSymbol}
       end
       meth backup()
+         % Backup environment so it can be restored later.
+         % Simply push a clone of the dictionary on a list
          backups:={Dictionary.clone @dict}|@backups
       end
       meth restore()
+         % Restore a backed up environment. Simply pop from the backups list.
          dict:=@backups.1
          backups:=@backups.2
       end
@@ -186,7 +210,9 @@ define
          end
       end
    end
+
    fun {UnWrapFAnd AST}
+      %Get a list of records wrapped in a fAnd hierarchy.
       fun {UnWrapFAndInt AST }
          case AST
          of fAnd(First Second) then
@@ -197,6 +223,49 @@ define
       end
    in
       {List.flatten {UnWrapFAndInt AST }}
+   end
+
+   % List helper functions
+   %Returns the index of Y in list Xs, 0 if not found
+   fun {IndexOf Xs Y}
+      fun {IndexOfInt Xs Y I}
+         case Xs
+         of nil then notFound
+         [] X|Xr then
+            if X == Y then found(I)
+            else {IndexOfInt Xr Y I+1}
+            end
+         end
+      end
+   in
+      case {IndexOfInt Xs Y 1}
+      of found(I) then
+         I
+      else
+         0
+      end
+   end
+   % Gives the index of and the first item itself for which the predicate P is
+   % true. If not found, index is 0 and item is unit
+   proc {FirstOfP Xs P ?Index ?Item}
+      fun {FirstOfPInt Xs P I}
+         case Xs
+         of nil then notFound
+         [] X|Xr then
+            if {P X} then found(I X)
+            else {FirstOfPInt Xr P I+1}
+            end
+         end
+      end
+   in
+      case {FirstOfPInt Xs P 1}
+      of found(I R) then
+         Index=I
+         Item=R
+      else
+         Index=0
+         Item=unit
+      end
    end
 
 
@@ -283,6 +352,7 @@ define
 
       F = DeclsFlattenerInt
       fun {DeclsFlattenerInt AST Params}
+         % Returns the list of instructions found in the declarations passed in AST.
          fun {CodeInDecls AST}
             proc {CodeInDeclsInt AST Acc}
                case AST
@@ -312,6 +382,10 @@ define
          %------------------------
          of fLocal(Decls Body Pos) then
          %------------------------
+            % Extract code from the declarations.
+            % Extract variables to be defined from declarations with the pattern variable functions PVS
+            % Move the code from the declarations to the body, wrapping all in fAnds
+            % Leave only the variables to be declared in the declaration part.
 
             NewDecls
             NewBody
@@ -349,8 +423,15 @@ define
       {DeclsFlattenerInt AST unit}
    end
 
+   %################
    fun {Desugar AST}
+   %################
+      % Simply transform syntactic sugar in its basic form.
+      % Expressions and Statements are handled differently.
+      % Eg an if as statement has both its branches handled as statement, but
+      % when it is an expression, both branches are treated as expressions too.
       fun {DesugarOp Op Args Pos}
+      %--------------------------
          case Op
          of '+' then %orelse '-' orelse '/' orelse '*' then
             fConst(Number.Op Pos)
@@ -382,6 +463,7 @@ define
       end
 
       fun {DesugarRecordFeatures Feature Params}
+      %-----------------------------------------
          % Assign features if not specified, starting with index 1
          case Feature
          of fColon(F V) then
@@ -396,16 +478,26 @@ define
       % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
 
       fun {IsConstantRecord fRecord(L Fs)}
+      %-----------------------------------
          % Returns triplet of bools indicating if label, features and values of record all are constants or not.
          % This will go through the list once, and set all components to correct boolean value.
          {List.foldL Fs fun {$ LB#FB#VB I} F V in I=fColon(F V) LB#(FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true#true}
       end
 
       fun {TransformRecord AST=fRecord(Label Features)}
+      %------------------------------------------------
          % Called to transform record just *after* it has been desugared:
          % - replace constant record by a constant (fConst)
+         % - replace records with non const label or feature by a call to Boot_Record.makeDynamic
 
          fun {Features2Record Features}
+            % Builds a record with label #, features are increasing integer
+            % values, and the values are alternatively the feature and its
+            % corresponding value of the record definition found in the AST.
+            % rec(A:1 B:2 C:3)
+            % will be transformed in (in AST form):
+            % #(1:A 2:1 3:B 4:2 5:C 6:3)
+            % This is done because we need records with constant features in CodeGen.
             fun{Features2RecordInt Features I}
                case Features
                of fColon(F V)|Fs then
@@ -422,6 +514,9 @@ define
       in
          case {IsConstantRecord AST}
          of true#true#true then
+            % All parts of the record are constants. Build the record and put
+            % it in the AST as a constant (under a fConst)
+
             Rec
             RecordLabel
          in
@@ -459,6 +554,7 @@ define
       end
 
       fun {DesugarExpr AST Params}
+      %---------------------------
          % Desugar expressions
          case AST
          of fProc(fDollar(DollarPos) Args Body Flags Pos) then
@@ -476,7 +572,7 @@ define
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
-            % Do not recursively desugar declarations, as there are all fSym thanks for DeclsFlattener.
+            % Do not recursively desugar declarations, as they are all fSym thanks for DeclsFlattener.
             fLocal(Decls {DesugarExpr Body Params} Pos)
          [] fAnd(First Second) then
             % if the fAnd is an expression, only the second part is treated as expression
@@ -516,7 +612,8 @@ define
       end
 
       fun {DesugarStat AST Params}
-         % Desugar function. Direct translation from sugared to desugared.
+      %---------------------------
+         % Desugar Statements.
          case AST
          of fAnd(First Second) then
             % if the fAnd is a statement, both parts are treated as statements
@@ -556,10 +653,12 @@ define
       {DesugarStat AST params}
    end
 
+   %#################
    fun {Unnester AST}
+   %#################
       fun {IsElementary AST}
-         % Records are elementary if of the form fConst or fSym.
-         % All other types are elementary
+      %---------------------
+         % Only fConst and fSym are elementary
          if {Record.is AST} then
             case {Label AST}
             of fConst then
@@ -575,17 +674,12 @@ define
       end
 
       fun {BindVarToExpr FSym AST Params}
+      %----------------------------------
          % Handles the binding of a variables to a complex expression
          case AST
-         %of fApply( fConst(BootValue.catAssign ConstPos) Args Pos) then
-         %   {UnnesterInt fApply( fConst(BootValue.catExchangeFun ConstPos) {List.append Args [FSym]} Pos) Params}
          of fApply(Proc Args Pos) then
             % enters the assignation target in the proc call
             % Res = {P Arg} -> {P Arg Res}
-            {Show 'BindToVar:'}
-            {DumpAST.dumpAST AST _}
-            {Show 'Args:'}
-            {DumpAST.dumpAST Args _}
             {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
@@ -602,7 +696,7 @@ define
             % if Cond then A=TrueCode else A=FalseCode end
             {UnnesterInt fBoolCase(Cond fEq(FSym TrueCode Pos) fEq(FSym FalseCode Pos) Pos) Params}
          [] fRecord(_ _) then
-            % record has already been unnested before the call to BindToVar, just return the fEq
+            % record has already been unnested before the call to BindVarToExpr (see call to BindVarToExpr for fRecord), just return the fEq
             %FIXME: set pos!
             fEq(FSym AST pos)
          else
@@ -612,6 +706,10 @@ define
       end
 
       fun {UnnestFApply AST=fApply(Op Args Pos) Params}
+      %------------------------------------------------
+         % Transforms the AST such that fApply args are all elementary (fSym or
+         % fConst). Creates new symbols unified with complex arguments. Wraps
+         % the fApply in fLocals for each new symbol created.
          % does not use Params
          fun {UnnestFApplyInt FApplyAST NewArgsList ArgsRest}
             % Unnest all arguments one by one.
@@ -663,6 +761,7 @@ define
       end
 
       fun {UnnestFEq AST=fEq(LHS RHS Pos) Params}
+      %------------------------------------------
          case {IsElementary LHS}#{IsElementary RHS}
          of true#true then
             AST
@@ -673,6 +772,7 @@ define
             % elementaty passed as first argument
             {BindVarToExpr RHS LHS Params}
          else
+            % Both sides are complex expressions.
             % declare a new symbol (hence the fLocal) and
             % unify it first with the LHS, then with RHS.
             % Then recursively unnest
@@ -686,6 +786,9 @@ define
          end
       end
       fun {UnnestFBoolCase fBoolCase(Cond TrueCode FalseCode Pos) Params}
+      %------------------------------------------------------------------
+         % if the condition is elementary, simply unnest both branches
+         % if the condition is non elementary, create a new symbol to be used as the condition.
          if {IsElementary Cond} then
             fBoolCase(Cond {UnnesterInt TrueCode Params} {UnnesterInt FalseCode Params} Pos)
          else
@@ -702,6 +805,11 @@ define
 
 
       fun {UnnestFRecord AST=fRecord(Op Args) Params}
+      %----------------------------------------------
+         % Similar reasoning as UnnestFApply
+         % Transforms the AST such that fRecord values are all elementary (fSym or
+         % fConst). Creates new symbols unified with complex values. Wraps
+         % the fRecord in fLocals for each new symbol created.
          % does not use Params
          fun {UnnestFRecordInt FRecordAST NewArgsList ArgsRest}
             % Unnest all arguments one by one.
@@ -740,26 +848,17 @@ define
                fRecord(Op {List.reverse NewArgsList})
             end
          end
-         R
       in
-
-         R={UnnestFRecordInt AST nil Args}
-         {Show '################################################################################'}
-         {Show '################################################################################'}
-         {Show '################################################################################'}
-         {DumpAST.dumpAST R _}
-         {Show '################################################################################'}
-         {Show '################################################################################'}
-         {Show '################################################################################'}
-         R
+         {UnnestFRecordInt AST nil Args}
       end
 
 
 
 
       fun {UnnesterInt AST Params}
-         {Show 'UnnesterInt works on:'}
-         {DumpAST.dumpAST AST _}
+      %---------------------------
+         %{Show 'UnnesterInt works on:'}
+         %{DumpAST.dumpAST AST _}
          case AST
          of fEq(LHS RHS Pos) then
             % Call Unnester on both parts, so that if it is a record, it is unnested.
@@ -783,13 +882,6 @@ define
       {UnnesterInt AST params}
    end
 
-   % The namer replaces variable names with a Symbol instance, all identical
-   % variable instances referencing the same symbol.
-   % The environment is a dictionary, the keys being variable names, the value being their respective symbol instance
-   % AST = the record
-   % Params is a record with 2 features:
-   %   env = mapping of var names to symbols built in parents
-   %   indecls = should new vars be mapped to new symbols, ie are we in declarations?
 
    % FIXME : we add Show manually to the base environment.
    AugmentedBase={AdjoinAt Base 'Show' Show}
@@ -797,7 +889,19 @@ define
    %##############
    fun {Namer AST}
    %##############
+      % The namer replaces variable names with a Symbol instance, all identical
+      % variable instances referencing the same symbol.
+      % The environment is a dictionary, the keys being variable names, the value
+      % being their respective symbol instance
+      % AST = the record
+      % Params is a record with 1 features:
+      %   env = mapping of var names to symbols built in parents
+      % Body and declarations are handled by 2 distinct functions: NamerForDecls
+      % and NamerForBody.
+
       fun {NamerForDecls AST Params}
+      %-----------------------------
+         % In declarations, we create a new symbol.
          case AST
          %----------------
          of fVar(Name Pos) then
@@ -809,7 +913,9 @@ define
                % assign symbol in declarations
                Sym={Params.env setSymbol(Name Pos $)}
                fSym( Sym Pos)
+         %--------------------
          [] fAnd(First Second) then
+         %--------------------
             fAnd( {NamerForDecls First Params} {NamerForDecls Second Params})
          %---
          else
@@ -823,8 +929,9 @@ define
 
 
       fun {NamerForBody AST Params}
-         %for fLocal, fFun, fProc, we backup the environment when we enter and
-         %restore it when we get out.
+      %----------------------------
+         % for fLocal, fFun, fProc, we backup the environment when we enter and
+         % restore it when we get out.
          % for fFun and fProc, this is necessary or formal parameters could
          % erase variables with the same name in the parent environment when
          % used after the fun/proc definition (see test 029)
@@ -850,8 +957,10 @@ define
          in
             {Params.env backup()}
             Res=fFun(
-               % The procedure's variable has to be declared explicitely
+               % The function's variable has to be declared explicitely in the declaration part.
+               % That's why we call NamerForBody on the Name
                {NamerForBody Name Params}
+               % Formal parameters are declarations, that's why we call NameForDecls
                {List.map Args fun {$ I} {NamerForDecls I Params} end }
                {NamerForBody Body Params}
                Flags
@@ -867,8 +976,10 @@ define
          in
             {Params.env backup()}
             Res=fProc(
-               % The procedure's variable has to be declared explicitely
+               % The procedure's variable has to be declared explicitely in the declaration part.
+               % That's why we call NamerForBody on the Name
                {NamerForBody Name Params}
+               % Formal parameters are declarations, that's why we call NameForDecls
                {List.map Args fun {$ I} {NamerForDecls I Params} end }
                {NamerForBody Body Params}
                Flags
@@ -935,49 +1046,6 @@ define
    end
 
 
-
-   % List helper functions
-   %Returns the index of Y in list Xs, 0 if not found
-   fun {IndexOf Xs Y}
-      fun {IndexOfInt Xs Y I}
-         case Xs
-         of nil then notFound
-         [] X|Xr then
-            if X == Y then found(I)
-            else {IndexOfInt Xr Y I+1}
-            end
-         end
-      end
-   in
-      case {IndexOfInt Xs Y 1}
-      of found(I) then
-         I
-      else
-         0
-      end
-   end
-   % Gives the index of and the first item itself for which the predicate P is
-   % true. If not found, index is 0 and item is unit
-   proc {FirstOfP Xs P ?Index ?Item}
-      fun {FirstOfPInt Xs P I}
-         case Xs
-         of nil then notFound
-         [] X|Xr then
-            if {P X} then found(I X)
-            else {FirstOfPInt Xr P I+1}
-            end
-         end
-      end
-   in
-      case {FirstOfPInt Xs P 1}
-      of found(I R) then
-         Index=I
-         Item=R
-      else
-         Index=0
-         Item=unit
-      end
-   end
 
    %###################
    fun {Globaliser AST}
@@ -1068,8 +1136,8 @@ define
          fun {AssignScope AST ProcId}
             case AST
             of fSym(Sym _) then
-               {Show 'assigning procId '#ProcId#' to '}
-               {System.showInfo {Sym toVS($)}}
+               %{Show 'assigning procId '#ProcId#' to '}
+               %{System.showInfo {Sym toVS($)}}
                {Sym setProcId(ProcId)}
                AST
             else
@@ -1162,7 +1230,7 @@ define
          %------------------------
             NewBody
          in
-            {Show 'assign scope in fLocal'}
+            %{Show 'assign scope in fLocal'}
             {AssignScope Decls Params.currentProcId _}
             NewBody = {GlobaliserInt Body Params}
             fLocal(Decls NewBody Pos)
@@ -1176,11 +1244,12 @@ define
             NewLocalSymbol
             Found
          in
-            {Show '------------------------------fSym--------------------------'}
-            {System.showInfo {Sym toVS($)}}
+            %{Show '------------------------------fSym--------------------------'}
+            %{System.showInfo {Sym toVS($)}}
             % If the Symbol's procId is different from the current proc's
             % procId, it means that it is a global for the current proc.
             if {Sym get(procId $)}\=Params.currentProcId then
+               % First check if we already have a local symbol for this global, so we can reuse it.
                {Params.gm hasLocalForGlobalInProcId(Sym Params.currentProcId ?Found ?LocalSymbolFound)}
                if Found then
                   if LocalSymbolFound==unit then raise localClaimedToExistNotReturned end end
@@ -1227,9 +1296,9 @@ define
       end
    end
 
-   %################
+   %###########################
    fun {GenCode AST CallParams}
-   %################
+   %###########################
 
       fun {GenCodeInt AST Params}
          F = GenCodeInt
@@ -1367,9 +1436,12 @@ define
          %----------------
             if {Record.label RHS}==fRecord then
                FeaturesList OrderedFeaturesList Arity Label Features OpCodes
-               Fills R
+               Fills
             in
                RHS = fRecord(fConst(Label _) Features)
+               % Build feature list with elements being pairs feature#value.
+               % This will let us order the list according to the features, and
+               % then access the values in the same order (for arrayFill)
                FeaturesList = {List.foldL Features fun{$ A I}
                                        case I
                                        of fColon(fConst(L _) V) then
@@ -1379,9 +1451,9 @@ define
                                        end
                                     end
                                     nil }
+               % The features can be compared with the builtin FeatureLess
                OrderedFeaturesList = {List.sort FeaturesList fun {$ L1#_ L2#_} {Boot_CompilerSupport.featureLess L1 L2} end }
-               {Show 'OrderedFeaturesList:'}
-               {Show OrderedFeaturesList}
+
                Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#_} L end } }
                if Arity\=false then
                   % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
@@ -1390,12 +1462,9 @@ define
                   % if makeArity returned false, it means we need to create a tuple, because the feature was all numeric
                   OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
                end
+               % after create...Unify, we need to pass values through arrayFills, ordered according to the features.
                Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({GenCodeInt V Params}) end }
-               R={List.append [OpCodes] Fills}
-               {Show 'R:'}
-               {Show {List.is R}}
-               {ForAll R Show}
-               R
+               {List.append [OpCodes] Fills}
             else
                unify({F LHS  Params} {F RHS  Params})
             end

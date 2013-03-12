@@ -1,0 +1,3 @@
+lab(a:1 b:2)
+rec(1:a b:b c:3)
+rec(a:1 b:2)
