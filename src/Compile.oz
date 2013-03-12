@@ -481,7 +481,7 @@ define
       %-----------------------------------
          % Returns triplet of bools indicating if label, features and values of record all are constants or not.
          % This will go through the list once, and set all components to correct boolean value.
-         {List.foldL Fs fun {$ LB#FB#VB I} F V in I=fColon(F V) LB#(FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true#true}
+         {List.foldL Fs fun {$ FB#VB I} F V in I=fColon(F V) (FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true}
       end
 
       fun {TransformRecord AST=fRecord(Label Features)}
@@ -531,23 +531,16 @@ define
                                    end RecordLabel()}
             % FIXME: set pos!
             fConst(Rec pos)
-         [] true#true#false then
+         [] true#false then
             % will use makeArity in CodeGen, leave as is
             AST
-         [] false#_#_ then
+         [] false#_ then
             %Need to change it in a call to makeDynamic, so that the arity is constant for later phases, including CodeGen
             L Features
          in
-            AST=fRecord(L Features)
+            fRecord(L Features)=AST
             % FIXME: set pos!
-            fApply( fConst(Boot_Record.makeDynamic pos) {List.append [L] {Features2Record Features}|nil} pos)
-         [] _#false#_ then
-            %Need to change it in a call to makeDynamic, so that the arity is constant for later phases, including CodeGen
-            L Features
-         in
-            AST=fRecord(L Features)
-            % FIXME: set pos!
-            fApply( fConst(Boot_Record.makeDynamic pos) {List.append [L] {Features2Record Features}|nil} pos)
+            fApply( fConst(Boot_Record.makeDynamic pos) [L {Features2Record Features}] pos)
          else
             AST
          end
@@ -1432,42 +1425,50 @@ define
             [{F First  Params} {F Second  Params}]
 
          %----------------
-         [] fEq(LHS RHS _) then
+         [] fEq(LHS fRecord(fConst(Label _)  Features) _) then
          %----------------
-            if {Record.label RHS}==fRecord then
-               FeaturesList OrderedFeaturesList Arity Label Features OpCodes
-               Fills
-            in
-               RHS = fRecord(fConst(Label _) Features)
-               % Build feature list with elements being pairs feature#value.
-               % This will let us order the list according to the features, and
-               % then access the values in the same order (for arrayFill)
-               FeaturesList = {List.foldL Features fun{$ A I}
-                                       case I
-                                       of fColon(fConst(L _) V) then
-                                          L#V|A
-                                       else
-                                          raise constantFeatureExpectedforFRecordInCodeGen end
-                                       end
-                                    end
-                                    nil }
-               % The features can be compared with the builtin FeatureLess
-               OrderedFeaturesList = {List.sort FeaturesList fun {$ L1#_ L2#_} {Boot_CompilerSupport.featureLess L1 L2} end }
+            % Due to previous passes, fRecord can only be in RHS, so we only test it.
+            % If we have unification with a record, we need to handle it specifically.
 
-               Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#_} L end } }
-               if Arity\=false then
-                  % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
-                  OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+            FeaturesList OrderedFeaturesList Arity OpCodes
+            Fills
+         in
+            % Build feature list with elements being pairs feature#value.
+            % This will let us order the list according to the features, and
+            % then access the values in the same order (for arrayFill)
+            FeaturesList = {List.foldL Features fun{$ A I}
+                                    case I
+                                    of fColon(fConst(L _) V) then
+                                       L#V|A
+                                    else
+                                       raise constantFeatureExpectedforFRecordInCodeGen end
+                                    end
+                                 end
+                                 nil }
+            % The features can be compared with the builtin FeatureLess
+            OrderedFeaturesList = {List.sort FeaturesList fun {$ L1#_ L2#_} {Boot_CompilerSupport.featureLess L1 L2} end }
+
+            % Try to make an Arity to use with createRecordUnify
+            Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#_} L end } }
+            if Arity\=false then
+               % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
+               OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+            else
+               if Label=='|' andthen {List.map OrderedFeaturesList fun {$ L#_} L end}==[1 2] then
+                  % in this case we need to create a cons
+                  OpCodes = createConsUnify({GenCodeInt LHS Params})
                else
                   % if makeArity returned false, it means we need to create a tuple, because the feature was all numeric
                   OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
                end
-               % after create...Unify, we need to pass values through arrayFills, ordered according to the features.
-               Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({GenCodeInt V Params}) end }
-               {List.append [OpCodes] Fills}
-            else
-               unify({F LHS  Params} {F RHS  Params})
             end
+            % after create...Unify, we need to pass values through arrayFills, ordered according to the features.
+            Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({GenCodeInt V Params}) end }
+            {List.append [OpCodes] Fills}
+         %----------------
+         [] fEq(LHS RHS _) then
+         %----------------
+               unify({F LHS  Params} {F RHS  Params})
 
          [] fBoolCase(FSym TrueCode FalseCode _) then
             ErrorLabel={NewName}
