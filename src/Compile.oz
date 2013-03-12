@@ -239,6 +239,8 @@ define
             {Record.subtractList {PVSInt Body}  {Record.arity {PVSInt Decls}}}
          [] fProc(E _ _ _ _ ) then
             {PVE E}
+         [] fFun(E _ _ _ _ ) then
+            {PVE E}
          [] fEq(LHS _ _) then
             {PVE LHS}
          else
@@ -393,7 +395,7 @@ define
       % Expression/statements:
       % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
 
-      fun {IsConstantRecord AST=fRecord(L Fs)}
+      fun {IsConstantRecord fRecord(L Fs)}
          % Returns triplet of bools indicating if label, features and values of record all are constants or not.
          % This will go through the list once, and set all components to correct boolean value.
          {List.foldL Fs fun {$ LB#FB#VB I} F V in I=fColon(F V) LB#(FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true#true}
@@ -769,7 +771,7 @@ define
             {UnnestFApply AST Params}
          [] fBoolCase(_ _ _ _) then
             {UnnestFBoolCase AST Params}
-         [] fRecord(Label Features) then
+         [] fRecord(_ _) then
             % FIXME:  is this really the place to constantise the record.
             % This requires the unnest function to be called on both sides of fEq before it gets treated....
             {UnnestFRecord AST Params}
@@ -1380,7 +1382,7 @@ define
                OrderedFeaturesList = {List.sort FeaturesList fun {$ L1#_ L2#_} {Boot_CompilerSupport.featureLess L1 L2} end }
                {Show 'OrderedFeaturesList:'}
                {Show OrderedFeaturesList}
-               Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#V} L end } }
+               Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#_} L end } }
                if Arity\=false then
                   % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
                   OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
@@ -1388,7 +1390,7 @@ define
                   % if makeArity returned false, it means we need to create a tuple, because the feature was all numeric
                   OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
                end
-               Fills={List.map OrderedFeaturesList fun{$ L#V} arrayFill({GenCodeInt V Params}) end }
+               Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({GenCodeInt V Params}) end }
                R={List.append [OpCodes] Fills}
                {Show 'R:'}
                {Show {List.is R}}
@@ -1417,7 +1419,7 @@ define
             {GenCodeInt FalseCode Params}|
             % ---- end ----
             lbl(EndLabel)|nil
-         [] fRecord(fConst(Label _) Features) then
+         [] fRecord(fConst(_ _) _) then
             raise unhandledRecordType end
          %-----------------
          [] fConst(Value _) then

@@ -1,5 +1,4 @@
 % Records where values are results of function call
-% --SKIP TEST--
 local
    A B R R2
    fun{F I}
