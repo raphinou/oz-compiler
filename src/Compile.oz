@@ -1293,15 +1293,47 @@ define
    fun {GenCode AST CallParams}
    %###########################
 
+      fun {GenCodeDecls AST Params}
+      %----------------------------
+         % Generate opcodes for declarations.
+         case AST
+         of fSym(Sym _) then
+         %-------------
+            % In declarations, assign Y register and issue createVar
+            % assign Y register
+            if {Sym get(yindex $)}==nil then
+               {Sym set(yindex @(Params.currentIndex))}
+               (Params.currentIndex):=@(Params.currentIndex)+1
+            end
+            createVar(y({Sym get(yindex $)}))
+         [] fAnd(First Second) then
+            [{GenCodeDecls First Params} {GenCodeDecls Second Params}]
+         end
+      end
+      fun {RegForSym AST Params}
+      %-------------------------
+         % Return register for fSym or fConst
+         case AST
+         of fConst(K _) then
+            k(K)
+         [] fSym(Sym _) then
+            if {Sym get(type $)}==localised then
+               g({Sym get(gindex $)})
+            else
+               y({Sym get(yindex $)})
+            end
+         end
+
+      end
+
       fun {GenCodeInt AST Params}
-         F = GenCodeInt
-      in
+      %--------------------------
          case AST
          %----------------------
          of fLocal(Decls Body _) then
          %----------------------
             % Should create all without recursive call
-            [ {F Decls  {Record.adjoin Params params(indecls: true)}} {F Body  Params}]
+            [ {GenCodeDecls Decls Params} {GenCodeInt Body Params}]
 
          %---------------------------------
          [] fDefineProc(fSym(Sym _) Args Body Flags Pos NewLocals) then
@@ -1355,29 +1387,6 @@ define
 
             @OpCodes
 
-
-
-
-         %-------------
-         [] fSym(Sym _) then
-         %-------------
-            % In declarations, assign Y register and issue createVar
-
-            if Params.indecls then
-               % assign Y register
-               if {Sym get(yindex $)}==nil then
-                  {Sym set(yindex @(Params.currentIndex))}
-                  (Params.currentIndex):=@(Params.currentIndex)+1
-               end
-               createVar(y({Sym get(yindex $)}))
-            % In body, use the Y register
-            %CHECKME:  don't we need this global case?
-            elseif {Sym get(type $)}==localised then
-               g({Sym get(gindex $)})
-            else
-               y({Sym get(yindex $)})
-            end
-
          %---------------
          [] fApply(Sym Args _) then
          %---------------
@@ -1422,7 +1431,7 @@ define
          %--------------------
          [] fAnd(First Second) then
          %--------------------
-            [{F First  Params} {F Second  Params}]
+            [{GenCodeInt First  Params} {GenCodeInt Second  Params}]
 
          %----------------
          [] fEq(LHS fRecord(fConst(Label _)  Features) _) then
@@ -1452,30 +1461,30 @@ define
             Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#_} L end } }
             if Arity\=false then
                % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
-               OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+               OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
             else
                if Label=='|' andthen {List.map OrderedFeaturesList fun {$ L#_} L end}==[1 2] then
                   % in this case we need to create a cons
-                  OpCodes = createConsUnify({GenCodeInt LHS Params})
+                  OpCodes = createConsUnify({RegForSym LHS Params})
                else
                   % if makeArity returned false, it means we need to create a tuple, because the feature was all numeric
-                  OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {GenCodeInt LHS Params})
+                  OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
                end
             end
             % after create...Unify, we need to pass values through arrayFills, ordered according to the features.
-            Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({GenCodeInt V Params}) end }
+            Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({RegForSym V Params}) end }
             {List.append [OpCodes] Fills}
          %----------------
          [] fEq(LHS RHS _) then
          %----------------
-               unify({F LHS  Params} {F RHS  Params})
+            unify({RegForSym LHS  Params} {RegForSym RHS  Params})
 
          [] fBoolCase(FSym TrueCode FalseCode _) then
             ErrorLabel={NewName}
             ElseLabel={NewName}
             EndLabel={NewName}
          in
-            move({GenCodeInt FSym Params} x(0))|
+            move({RegForSym FSym Params} x(0))|
             condBranch(x(0) ElseLabel ErrorLabel)|
             %---- true ----
             {GenCodeInt TrueCode Params}|
@@ -1491,11 +1500,6 @@ define
             lbl(EndLabel)|nil
          [] fRecord(fConst(_ _) _) then
             raise unhandledRecordType end
-         %-----------------
-         [] fConst(Value _) then
-         %-----------------
-            % should never happen
-            k(Value)
          end
       end
       InitialParams = {Record.adjoin params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0}) CallParams}
