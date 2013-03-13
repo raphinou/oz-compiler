@@ -815,9 +815,10 @@ Rather than give convoluted explanations, it is easier to look at the code gener
 It first moves the symbol containing the boolean to be tested in a X register, which is then used in a condBranch opcode, takin gas additional arguments the labels identifying the start of the else branch, and the start of the error handling code. The ``then'' branch directly follows the condBranch. After that come the error code and the else branch. Note that at the end of the ``then'' branch, a branch opcode is needed to jump over the code corresponding to the else branch and the error handling.
 
 \subsubsection{Records}
-At this step, the only place we can find records are in the right hand side of unifications, i.e. the second features of fEq. If the arity is made of numbers only, i.e. we have the arity of a tuple, we need to issue a makeTupleUnify(k(Label) FeaturesList DestReg) instruction. If not, we need to issue a makeRecordUnify(k(Arity) FeaturesList DestReg) instruction. 
+At this step, the only place we can find records are in the right hand side of unifications, i.e. the second features of fEq. 
+If that record is a cons, i.e. a record with label '|' and with exactly two features with values 1 and 2, we need to issue a makeConsUnify(DestReg). If the arity is made of numbers only, i.e. we have the arity of a tuple, we need to issue a makeTupleUnify(k(Label) FeaturesList DestReg) instruction. Else we need to issue a makeRecordUnify(k(Arity) FeaturesList DestReg) instruction.
 The function CompilerSupport.makeArity is used to build the arity for use in makeRecordUnify. It takes as argument the label and a list of pairs \lstinline!Label#Value!. If the labels passed in the list are labels of a tuple, it returns false, else it returns the constructed arity. It is based on the value returned by makeArity that the compiler decides which instruction is issued.
-The featuresList has to be ordered according to the features. This is important, as the makeTupleUnify/makeRecordUnify instructions have to be followed by arrayFill instructions, one for each value, in the same order as the features passed to the instruction.
+The featuresList has to be ordered according to the features. This is important, as the makeConsUnify/makeTupleUnify/makeRecordUnify instructions have to be followed by arrayFill instructions, one for each value, in the same order as the features passed to the instruction.
 
 As an illustration, this unification of a variable with a record having one value not constant:
 \begin{lstlisting}
