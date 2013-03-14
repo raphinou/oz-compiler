@@ -548,59 +548,73 @@ define
 
       fun {DesugarExpr AST Params}
       %---------------------------
+         fun{HandleDollar AST Params}
+            % If there was a dollar nesting marker in a child, declare the
+            % symbol by which the $ was replaced.
+            if @(Params.hasDollar) then
+               {DesugarExpr fLocal(@(Params.dollarSym) fAnd(AST @(Params.dollarSym)) pos) Params}
+            else
+               AST
+            end
+         end
+         % Create a new params record, in which the children will let their
+         % parent know if there was a dollar nesting marker.
+         NewParams={Record.adjoin Params params(hasDollar:{NewCell false} dollarSym:{NewCell unit})}
+         in
          % Desugar expressions
          case AST
-         of fProc(fDollar(DollarPos) Args Body Flags Pos) then
-            DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
-         in
-            % FIXME: is the recursive call on the top level really useful?
-            % Wouldn't is be better to only do the recursive calls on args and body?
-            {DesugarStat fLocal( DollarSymbol fAnd( fProc(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+         of fProc(P Args Body Flags Pos) then
+            {HandleDollar fProc({DesugarExpr P NewParams} Args Body Flags Pos) NewParams}
 
-         [] fFun(fDollar(DollarPos) Args Body Flags Pos) then
-            DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
-         in
-            % The fLocal we introduce is an expression, handle it as such!
-            {DesugarExpr fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+         [] fFun(F Args Body Flags Pos) then
+            {HandleDollar fFun({DesugarExpr F NewParams} Args Body Flags Pos) NewParams}
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
             % Do not recursively desugar declarations, as they are all fSym thanks for DeclsFlattener.
-            fLocal(Decls {DesugarExpr Body Params} Pos)
+            {HandleDollar fLocal(Decls {DesugarExpr Body NewParams} Pos) NewParams}
+
          [] fAnd(First Second) then
             % if the fAnd is an expression, only the second part is treated as expression
-            fAnd({DesugarStat First Params} {DesugarExpr Second Params})
+            {HandleDollar fAnd({DesugarStat First NewParams} {DesugarExpr Second NewParams}) NewParams}
          [] fAt(Cell Pos) then
-            fApply( fConst(BootValue.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
+            {HandleDollar fApply( fConst(BootValue.catAccess Pos) [{DesugarExpr Cell NewParams}] Pos) NewParams}
 
          [] fOpApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
-            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
+            {HandleDollar fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I NewParams} end } Pos) NewParams}
 
          [] fApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
-            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
+            {HandleDollar fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I NewParams} end } Pos) NewParams}
 
          [] fColonEquals(Cell Val Pos) then
-            fApply( fConst(BootValue.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+            {HandleDollar fApply( fConst(BootValue.catExchange Pos) [{DesugarExpr Cell NewParams} {DesugarExpr Val NewParams}] Pos) NewParams}
 
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
-            fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} {DesugarExpr FalseCode Params} Pos)
+            {HandleDollar fBoolCase( {DesugarExpr Cond NewParams} {DesugarExpr TrueCode NewParams} {DesugarExpr FalseCode NewParams} Pos) NewParams}
 
          [] fRecord( Label Features) then
-            NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
+            NewRecordParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
-            {TransformRecord fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end }) }
+            {HandleDollar {TransformRecord fRecord({DesugarExpr Label NewParams} {List.map Features fun {$ I} {DesugarRecordFeatures I NewRecordParams} end }) } NewParams}
 
          [] fColon(Feature Value) then
-            fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
+            {HandleDollar fColon({DesugarExpr Feature NewParams} {DesugarExpr Value NewParams}) NewParams}
 
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
             AST
+         [] fDollar(Pos) then
+            DollarSymbol = fSym({New SyntheticSymbol init(Pos)} Pos)
+            %Use Params (and not NewParams) to pass info to parent!
+            (Params.hasDollar):=true
+            (Params.dollarSym):=DollarSymbol
+         in
+            DollarSymbol
          end
       end
 
