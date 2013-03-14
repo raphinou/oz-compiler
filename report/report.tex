@@ -36,8 +36,15 @@ Old compiler patched, boot compiler in scala.
 Need for a new Oz compiler, written in OZ
 
 \section{Goal and Scope}
-Flexible documented and tested compiler taking as input the AST in the form of Oz records, and generating opcodes send to the assembler.
-Document as much as possible the whole compilation chain from parser through AST to opcodes and virtual machine.
+The compiler takes as input the AST in the form of Oz records, and generates opcodes sent to the assembler. 
+There were four goals set for the compiler:
+\begin{enumerate}
+  \item compile the whole language so that it can replace the current compiler in Mozart 2
+  \item generate quality code, exploiting the capabilities of the virtual machine
+  \item easy to understand and modular code
+  \item the compiler should also be extensible so that, for example, support for a new instruction can be added without the recompilation of the compiler.
+\end{enumerate}
+Although the code is extensively commented, this report contributes to the third goal.
 
 \chapter{Infrastructure}
 \section{Virtual Machine}
@@ -816,7 +823,8 @@ It first moves the symbol containing the boolean to be tested in a X register, w
 
 \subsubsection{Records}
 At this step, the only place we can find records are in the right hand side of unifications, i.e. the second features of fEq. 
-If that record is a cons, i.e. a record with label '|' and with exactly two features with values 1 and 2, we need to issue a makeConsUnify(DestReg). If the arity is made of numbers only, i.e. we have the arity of a tuple, we need to issue a makeTupleUnify(k(Label) FeaturesList DestReg) instruction. Else we need to issue a makeRecordUnify(k(Arity) FeaturesList DestReg) instruction.
+The virtual machine requires, for performance reasons, the compiler to generate different opcodes for cons, tuples and records.
+If the record is a cons, i.e. a record with label '|' and with exactly two features with values 1 and 2, we need to issue a makeConsUnify(DestReg). If the arity is made of numbers only, i.e. we have the arity of a tuple, we need to issue a makeTupleUnify(k(Label) FeaturesList DestReg) instruction. Else we need to issue a makeRecordUnify(k(Arity) FeaturesList DestReg) instruction.
 The function CompilerSupport.makeArity is used to build the arity for use in makeRecordUnify. It takes as argument the label and a list of pairs \lstinline!Label#Value!. If the labels passed in the list are labels of a tuple, it returns false, else it returns the constructed arity. It is based on the value returned by makeArity that the compiler decides which instruction is issued.
 The featuresList has to be ordered according to the features. This is important, as the makeConsUnify/makeTupleUnify/makeRecordUnify instructions have to be followed by arrayFill instructions, one for each value, in the same order as the features passed to the instruction.
 
