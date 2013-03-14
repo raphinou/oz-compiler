@@ -548,73 +548,65 @@ define
 
       fun {DesugarExpr AST Params}
       %---------------------------
-         fun{HandleDollar AST Params}
-            % If there was a dollar nesting marker in a child, declare the
-            % symbol by which the $ was replaced.
-            if @(Params.hasDollar) then
-               {DesugarExpr fLocal(@(Params.dollarSym) fAnd(AST @(Params.dollarSym)) pos) Params}
-            else
-               AST
-            end
-         end
-         % Create a new params record, in which the children will let their
-         % parent know if there was a dollar nesting marker.
-         NewParams={Record.adjoin Params params(hasDollar:{NewCell false} dollarSym:{NewCell unit})}
-         in
          % Desugar expressions
          case AST
-         of fProc(P Args Body Flags Pos) then
-            {HandleDollar fProc({DesugarExpr P NewParams} Args Body Flags Pos) NewParams}
+         of fProc(Dollar Args Body Flags Pos) then
+         %   DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
+         %in
+            % FIXME: is the recursive call on the top level really useful?
+            % Wouldn't is be better to only do the recursive calls on args and body?
+            %{DesugarStat fLocal( DollarSymbol fAnd( fProc(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+            fProc(Dollar Args {DesugarStat Body Params} Flags Pos)
 
-         [] fFun(F Args Body Flags Pos) then
-            {HandleDollar fFun({DesugarExpr F NewParams} Args Body Flags Pos) NewParams}
+         [] fFun(Dollar Args Body Flags Pos) then
+            ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+         %   DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
+         %in
+            % The fLocal we introduce is an expression, handle it as such!
+            %{DesugarExpr fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+            fProc(Dollar {List.append Args [ReturnSymbol]} {DesugarStat fEq(ReturnSymbol Body Pos) Params} Flags Pos)
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
             % Do not recursively desugar declarations, as they are all fSym thanks for DeclsFlattener.
-            {HandleDollar fLocal(Decls {DesugarExpr Body NewParams} Pos) NewParams}
-
+            fLocal(Decls {DesugarExpr Body Params} Pos)
          [] fAnd(First Second) then
             % if the fAnd is an expression, only the second part is treated as expression
-            {HandleDollar fAnd({DesugarStat First NewParams} {DesugarExpr Second NewParams}) NewParams}
+            fAnd({DesugarStat First Params} {DesugarExpr Second Params})
          [] fAt(Cell Pos) then
-            {HandleDollar fApply( fConst(BootValue.catAccess Pos) [{DesugarExpr Cell NewParams}] Pos) NewParams}
+            fApply( fConst(BootValue.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
 
          [] fOpApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
-            {HandleDollar fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I NewParams} end } Pos) NewParams}
+            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
 
          [] fApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
-            {HandleDollar fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I NewParams} end } Pos) NewParams}
+            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
 
          [] fColonEquals(Cell Val Pos) then
-            {HandleDollar fApply( fConst(BootValue.catExchange Pos) [{DesugarExpr Cell NewParams} {DesugarExpr Val NewParams}] Pos) NewParams}
+            fApply( fConst(BootValue.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
-            {HandleDollar fBoolCase( {DesugarExpr Cond NewParams} {DesugarExpr TrueCode NewParams} {DesugarExpr FalseCode NewParams} Pos) NewParams}
+            fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} {DesugarExpr FalseCode Params} Pos)
 
          [] fRecord( Label Features) then
-            NewRecordParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
+            NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
-            {HandleDollar {TransformRecord fRecord({DesugarExpr Label NewParams} {List.map Features fun {$ I} {DesugarRecordFeatures I NewRecordParams} end }) } NewParams}
+            {TransformRecord fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end }) }
 
          [] fColon(Feature Value) then
-            {HandleDollar fColon({DesugarExpr Feature NewParams} {DesugarExpr Value NewParams}) NewParams}
+            fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
 
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
             AST
-         [] fDollar(Pos) then
-            DollarSymbol = fSym({New SyntheticSymbol init(Pos)} Pos)
-            %Use Params (and not NewParams) to pass info to parent!
-            (Params.hasDollar):=true
-            (Params.dollarSym):=DollarSymbol
-         in
-            DollarSymbol
+         [] fDollar(_) then
+            AST
          end
       end
 
@@ -672,6 +664,8 @@ define
                true
             [] fSym then
                true
+            [] fDollar then
+               true
             else
                false
             end
@@ -684,10 +678,29 @@ define
       %----------------------------------
          % Handles the binding of a variables to a complex expression
          case AST
-         of fApply(Proc Args Pos) then
-            % enters the assignation target in the proc call
-            % Res = {P Arg} -> {P Arg Res}
-            {UnnesterInt fApply(Proc {List.append Args [FSym]} Pos) Params }
+         of fProc(fDollar(_) Args Body Flags Pos) then
+            {UnnesterInt fProc(FSym Args Body Flags Pos) Params }
+         [] fApply(Proc Args Pos) then
+             %enters the assignation target in the proc call
+             %Res = {P Arg} -> {P Arg Res}
+            fun {InjectSym FSym Args HadDollar}
+               %This function injects the symbol to assign to in the arguments
+               %list, either in the dollar location or as last argument.
+               case Args
+               of fDollar(_)|Rs then
+                  FSym|{InjectSym FSym Rs true}
+               [] R|Rs then
+                  R|{InjectSym FSym Rs HadDollar}
+               [] nil then
+                  if HadDollar then
+                     nil
+                  else
+                     FSym|nil
+                  end
+               end
+            end
+         in
+            {UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params }
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
             % Recursive call to get to the end of the sequence
@@ -733,12 +746,21 @@ define
                if {IsElementary X} then
                  {UnnestFApplyInt FApplyAST X|NewArgsList Xs}
                else
-                  NewSymbol={New SyntheticSymbol init(Pos)}
+                  NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
-                  {UnnesterInt fLocal(fSym(NewSymbol Pos)
-                                      fAnd( fEq(fSym(NewSymbol Pos) X Pos)
-                                            {UnnestFApplyInt FApplyAST fSym(NewSymbol Pos)|NewArgsList Xs}) Pos)
-                               Params}
+                  %case X
+                  %of fDollar(_) then
+                  %   % If the argument is $, replace it by the new sym without adding a unification
+                  %   {UnnesterInt fLocal( NewSymbol
+                  %                        {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs} Pos)
+                  %                Params}
+                  %else
+                     % If the argument is not $, include a unification before
+                     {UnnesterInt fLocal(NewSymbol
+                                         fAnd( fEq(NewSymbol X Pos)
+                                               {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs}) Pos)
+                                  Params}
+                  %end
                end
             else
                % All unnested arguments are now found in NewArgsList
@@ -1491,7 +1513,7 @@ define
          %----------------
          [] fEq(LHS RHS _) then
          %----------------
-            unify({RegForSym LHS  Params} {RegForSym RHS  Params})
+            [unify({RegForSym LHS  Params} {RegForSym RHS  Params})]
 
          [] fBoolCase(FSym TrueCode FalseCode _) then
             ErrorLabel={NewName}
@@ -1520,7 +1542,7 @@ define
       OpCodes
    in
       % append return
-      OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams}} ['return'()]}
+      OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams} } ['return'()]}
 
       % prefix with allocateY
       %FIXME: keep prefix in Params?
