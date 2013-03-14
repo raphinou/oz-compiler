@@ -5,6 +5,7 @@
 \usepackage{pgf}
 \usepackage[margin=false,inline=true]{fixme}
 \usepackage{listings} % DO NOT USE DRAFT DOCUMENT AS IT WILL NOT DISPLAY THE CODE
+\setcounter{secnumdepth}{3} 
 
 
 \fxsetup{theme=color}
@@ -165,8 +166,14 @@ Arithmetic operators are parsed as the operator application to arguments being t
       )
 
 \end{lstlisting}
-\subsection{Expression marker \$}
-In Oz, statements can be transformed in expressions by the use of the \$ marker. This marker is found in the AST as a record fDollar() with a unique feature: it position.
+\subsection{Nesting marker \$}
+In Oz, some statements can be transformed in expressions by the use of the \$ marker. This marker is found in the AST as a record fDollar() with a unique feature: it position.
+The statements that can be transformed in expressions are
+\begin{itemize}
+  \item Function, Procedure, Functor and Class declarations. For example X=fun{\$ A B} .. end
+  \item In the parameters list of a call, in the location of an expression. For example {Foo A..\$..N}
+  \item In a pattern position of a parameter of a call. For example {Foo bar(A..\$..N) baz}
+\end{itemize}
 
 \subsection{Cells}
 \subsubsection{Assignation}
@@ -342,7 +349,7 @@ If we note F the pass of the compiler, FExpr the locally defined function handli
       \item same character as the fAnd
     \end{itemize}
   \item[fEq] both sides are expressions
-  \item[fProc] if the proc is an expression, its identifier must be the marker \$, else its identifier is an expression. The arguments are expressions, and the body is a statement.
+  \item[fProc] if the proc definition is an expression, its identifier must be the nesting marker \$, else its identifier is an expression. The arguments are expressions, and the body is a statement.
   \item[fFun] are similar to fProc
   \item[fApply] calls can be statements or expressions, but in both cases the callee and its arguments are all expressions. 
   \item[fColonEquals] can be statement or expression, but Cell and Val are in both cases expressions.
@@ -502,13 +509,13 @@ We see that we end up with a AST that only contains records with constant label 
 Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
 \subsection{Unnester}            
 The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
-\subsubsection{Unification}
+\subsubsection{Unification}\label{sec:unnester:unification}
 The unnesting result of a unification instruction depends on the elementary character of each side, giving these three cases:
 \begin{description}
   \item[Both elementary]In this case there is nothing to do
   \item[One complex, one elementary] The unnesting is done according what the complex instruction is: 
     \begin{description}
-      \item[Call] This is code of the form \lstinline!V={P E1...En}!, which needs to be transformed in the form \lstinline!{P E1...En V}!, where the variable we assign to is passed as last argument of the call.
+      \item[Call] This is code of the form \lstinline!V={P E1...En}!, which needs to be transformed in the form \lstinline!{P E1...En V}!, where the variable we assign to is passed as last argument of the call. Note this transformation is not done if one if the arguments is the nesting marker (see section \ref{sec:unnester:nestingmarker}).
       \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of fAnd records. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
       \item[Declaration (local)] The value of a \lstinline!local..in..end! in a unification is the value of its body. Hence, the unification \lstinline!V = local declarations in body end! is moved in side the local's body resulting in the code \lstinline!local declarations in V=body end!. This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
       \item[if then else] The unification is simply moved inside each branch, and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively innested as Is1 and Is2 can be, for example,  sequences of instructions.
@@ -542,7 +549,7 @@ The order of the assignments of the first step explains why this doesn't work:
 \end{lstlisting}
 
 \end{description}
-\subsubsection{Calls}
+\subsubsection{Calls}\label{sec:unnester:calls}
 All arguments are unnested one by one. Elementary arguments are left untouched
 Complex arguments are extracted from the arguments list by:
 \begin{itemize}
@@ -613,6 +620,14 @@ And this requires a new unnesting step (see the unnesting of unifications) resul
 \end{lstlisting}
 
 
+
+\subsubsection{Nesting Marker}\label{sec:unnester:nestingmarker}
+It is also the unnester that will transform the nesting marker. There are three cases that are handled.
+\begin{description}
+  \item[Definitions of procedures] At this step, if we found a nesting marker as the identifier of a procedure, it is necessarily in an assignment statement. The unnester needs to transform \lstinline!X=proc{$ A..N}! in \lstinline!proc{X A..N}!.
+  \item[As argument of a call] In this case, the nesting marker has to be replaced by the variable the expression is assigned to. For example, \lstinline!X={P A $ B}! needs to be transformed in  \lstinline!{P A X B}!. Note that this transformation is excluding the unification transformation described earlier in section \ref{sec:unnester:unification}: either there is a nesting marker and the symbol the call expression is assigned to replaces the nesting marker in the arguments list, OR the symbol the call expression is assigned to is added as last argument to the call and in that case no argument may be the nesting marker.
+  \item[In matching an argument] %FIXME: to do
+\end{description}
 
 \subsection{Globaliser}            
 This pass handles the global variables of a procedure, that is, variables used by a procedure that does not declare it (implying that the declaration is done at an upper level. It is interesting to note that the concept of global variables is only defined for procedures.
