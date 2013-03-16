@@ -144,7 +144,8 @@ fApply(
 \end{verbatim}
 
 \subsection{Functions}                                                         
-Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
+Funtion definitions are found in the AST un fFun records, with the same features found in fProc records. Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
+However, only functions can be marked as lazy as in \lstinline!fun lazy {F N} .. end!. This lazy marker is translated in a flag.
 \subsubsection{Definitions}
 Function definitions are found in records fFun(Name Arguments Body Flags Pos). The features are identical to the procedure definition.
 \subsubsection{Calls}
@@ -508,6 +509,18 @@ and transformed by the desugar pass to become:
 \end{verbatim}
 
 We see that a new symbol, that we denoted R for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
+
+Lazy functions have in their flags a lazy atom: \lstinline!fAtom(lazy pos)!.
+The desugar step of lazy function simply revolves in wrapping in a thread a call to the builtin \lstinline!waitNeeded! on the return symbol before unifying it with the body of the function. In Oz notation, this results in transforming \lstinline!fun lazy {F A1..An} Body end! in 
+\begin{lstlisting}
+   proc {F A1..An ReturnSymbol}
+      thread 
+         {WaitNeeded ReturnSymbol}
+         ReturnSymbol=Body
+      end
+   end
+\end{lstlisting}
+
 
 \subsubsection{Transformation in an expression}
 A statement can be transformed in an expression of the value assigned to the variable in which place a \$ was placed.

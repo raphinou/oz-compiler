@@ -10,8 +10,8 @@ import
    Boot_CompilerSupport at 'x-oz://boot/CompilerSupport'
    Boot_Record at 'x-oz://boot/Record'
    Boot_Thread at 'x-oz://boot/Thread'
+   Boot_Value at 'x-oz://boot/Value'
    DumpAST at '../lib/DumpAST.ozf'
-   BootValue at 'x-oz://boot/Value'
    % for nested environments debugging
    OS
 
@@ -546,6 +546,16 @@ define
             AST
          end
       end
+      fun {HandleLazyFlag ReturnSymbol Body Flags Pos}
+         if {List.member lazy {List.map Flags fun{$ fAtom(Flag _)} Flag end}} then
+            fThread( fAnd( fApply(fConst(Boot_Value.waitNeeded Pos) [ReturnSymbol] Pos)
+                           fEq(ReturnSymbol Body Pos)
+                         )
+                     Pos)
+         else
+            fEq(ReturnSymbol Body Pos)
+         end
+      end
 
       fun {DesugarExpr AST Params}
       %---------------------------
@@ -566,7 +576,7 @@ define
          %in
             % The fLocal we introduce is an expression, handle it as such!
             %{DesugarExpr fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
-            fProc(Dollar {List.append Args [ReturnSymbol]} {DesugarStat fEq(ReturnSymbol Body Pos) Params} Flags Pos)
+            fProc(Dollar {List.append Args [ReturnSymbol]} {DesugarStat {HandleLazyFlag ReturnSymbol Body Flags Pos} Params} Flags Pos)
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
@@ -576,7 +586,7 @@ define
             % if the fAnd is an expression, only the second part is treated as expression
             fAnd({DesugarStat First Params} {DesugarExpr Second Params})
          [] fAt(Cell Pos) then
-            fApply( fConst(BootValue.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
+            fApply( fConst(Boot_Value.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
 
          [] fOpApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
@@ -587,7 +597,7 @@ define
             fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
 
          [] fColonEquals(Cell Val Pos) then
-            fApply( fConst(BootValue.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+            fApply( fConst(Boot_Value.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
@@ -646,9 +656,9 @@ define
          in
             % Need to Desugar the top-level fProc, eg in the case of a statement function (fun {$ ..}),
             % so that the $ also gets desugared
-            fProc(FSym {List.append Args [ReturnSymbol]} {DesugarStat fEq(ReturnSymbol Body Pos) Params} Flags Pos)
+            fProc(FSym {List.append Args [ReturnSymbol]} {DesugarStat {HandleLazyFlag ReturnSymbol Body Flags Pos} Params} Flags Pos)
          [] fColonEquals(Cell Val Pos) then
-            fApply( fConst(BootValue.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+            fApply( fConst(Boot_Value.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
