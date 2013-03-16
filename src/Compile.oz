@@ -606,7 +606,10 @@ define
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewSymbol fAnd( {DesugarStat fThread(fEq(NewSymbol Body Pos) Pos) Params} NewSymbol) Pos)
-
+         [] fWildcard(Pos) then
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            fLocal( NewSymbol NewSymbol Pos)
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
