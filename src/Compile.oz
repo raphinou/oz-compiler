@@ -646,7 +646,7 @@ define
          in
             % Need to Desugar the top-level fProc, eg in the case of a statement function (fun {$ ..}),
             % so that the $ also gets desugared
-            {DesugarStat fProc(FSym {List.append Args [ReturnSymbol]} fEq(ReturnSymbol Body Pos) Flags Pos) Params}
+            fProc(FSym {List.append Args [ReturnSymbol]} {DesugarStat fEq(ReturnSymbol Body Pos) Params} Flags Pos)
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(BootValue.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
