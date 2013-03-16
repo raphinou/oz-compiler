@@ -640,7 +640,7 @@ define
          [] fEq(LHS RHS Pos) then
             fEq({DesugarExpr LHS Params} {DesugarExpr RHS Params} Pos)
          [] fProc(FSym Args Body Flags Pos) then
-            fProc({DesugarExpr FSym Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } {DesugarStat Body Params} Flags Pos)
+            fProc({DesugarExpr FSym Params} Args {DesugarStat Body Params} Flags Pos)
          [] fFun(FSym Args Body Flags Pos) then
             ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
