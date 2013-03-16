@@ -9,6 +9,7 @@ import
    CompilerSupport(newAbstraction makeArity) at 'x-oz://system/CompilerSupport.ozf'
    Boot_CompilerSupport at 'x-oz://boot/CompilerSupport'
    Boot_Record at 'x-oz://boot/Record'
+   Boot_Thread at 'x-oz://boot/Thread'
    DumpAST at '../lib/DumpAST.ozf'
    BootValue at 'x-oz://boot/Value'
    % for nested environments debugging
@@ -601,6 +602,11 @@ define
          [] fColon(Feature Value) then
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
 
+         [] fThread(Body Pos) then
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            fLocal(NewSymbol fAnd( {DesugarStat fThread(fEq(NewSymbol Body Pos) Pos) Params} NewSymbol) Pos)
+
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -644,6 +650,10 @@ define
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} {DesugarStat FalseCode Params} Pos)
+         [] fThread(Body Pos) then
+            NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)) Pos)
          %else
          %   {DefaultPass AST DesugarInt Params}
          end
