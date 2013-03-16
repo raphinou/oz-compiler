@@ -225,6 +225,42 @@ When the feature is not explicitely given, the item in the list of features and 
 \end{lstlisting}
 
 
+\subsubsection{Ignored expression: \_}
+Oz syntax allows to put \_ in the location of an value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a record with label fWildcard and with only feature the position of the marker in the code.
+Ignoring the value returned by a function is thus written \lstinline!_={F N}!. In a pattern matching of a record, we might reuse only the first feature of the record, ognoring values of others. This is done like this:
+\begin{lstlisting}
+  case Record 
+  of label(V _ _) then
+    % Use V here, ignoring the other feature values
+    ..
+  end
+\end{lstlisting}
+This allows the user to not declare variables he wouldn't use anyway, which would in addition raise a warning about a variable used only once\ldots
+
+\subsubsection{Threads}
+Thread instructions are present in the AST in the form of records with label fThread, and with twe features: the body of the thread, and its position in the source code.
+%FIXME: is the following correct?
+As expression, threads are present at this stage in the form, in Oz notation, \lstinline!V = thread Body end!, and this is desugared in the resulting statement \lstinline!thread V=Body end!. This statement is then itself desugared.
+Transforming a thread statement is more involved, though still quite simple. The transformation consists in the creation of a procedure with no argument which body is the desugared body (which is a statement) of the thread, and then passing this procedure the internal \lstinline!Thread.create! procedure.
+In Oz notation, \lstinline!thread Body end! is transformed in 
+\begin{lstlisting}
+   local 
+      P 
+   in 
+      proc {P} 
+         DesugaredBody 
+      end 
+      {Thread.create P}!
+   end
+\end{lstlisting}
+This transformation occurs in the AST of course, and here is the AST transformation illustrated. \lstinline!fThread(Body Pos)! is transformed in this AST (taken from the compile source code):
+\begin{lstlisting}
+  fLocal(NewProcSym 
+         fAnd( fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) 
+               fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)
+             ) 
+         Pos)
+\end{lstlisting}
 \section{Compiler output}
 Describe opcodes.
 
@@ -507,6 +543,8 @@ where Label, Feature1 and Feature2 can be fSyms, by
 \end{lstlisting}
 We see that we end up with a AST that only contains records with constant label and features.
 Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
+\subsubsection{Ignored expressions: \_}
+Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \_ is replace by \lstinline!local NewSymbol in NewSymbol end!.
 \subsection{Unnester}            
 The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:unnester:unification}
