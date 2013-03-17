@@ -514,7 +514,7 @@ define
          end
       in
          case {IsConstantRecord AST}
-         of true#true#true then
+         of true#true then
             % All parts of the record are constants. Build the record and put
             % it in the AST as a constant (under a fConst)
 
