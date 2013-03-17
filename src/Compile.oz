@@ -547,6 +547,11 @@ define
          end
       end
       fun {HandleLazyFlag ReturnSymbol Body Flags Pos}
+         % This function returns the body of a function, modified accordingly
+         % if the lazy flag is present.
+         % A lazy function has its body unified with the return symbol in a thread,
+         % with a waitNeeded on this symbol *before* the unification.
+         % An eager function has simply its body unified with the return symbol.
          if {List.member lazy {List.map Flags fun{$ fAtom(Flag _)} Flag end}} then
             fThread( fAnd( fApply(fConst(Boot_Value.waitNeeded Pos) [ReturnSymbol] Pos)
                            fEq(ReturnSymbol Body Pos)
@@ -613,6 +618,9 @@ define
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
 
          [] fThread(Body Pos) then
+            % Create synthetic symbol that will take the value of the thread expression,
+            % and then desugar the fThread statement left.
+            % It is DesugarStat that will replace the fThread by a call to the builtin Thread.create
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewSymbol fAnd( {DesugarStat fThread(fEq(NewSymbol Body Pos) Pos) Params} NewSymbol) Pos)
@@ -664,6 +672,7 @@ define
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} {DesugarStat FalseCode Params} Pos)
          [] fThread(Body Pos) then
+            % Create a wrapping proc taking no argument, and pass it to the builtin Thread.create.
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)) Pos)
