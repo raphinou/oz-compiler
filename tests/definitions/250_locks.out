@@ -1,0 +1,7 @@
+'t3 got lock and waits 1s'
+'t1 and t2 try to get lock, but it is not available'
+3
+'t2 got lock'
+5
+'t1 got lock'
+6

@@ -676,6 +676,11 @@ define
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)) Pos)
+         [] fLockThen(Lock Body Pos) then
+            % Create a wrapping proc taking no argument, and pass it to the builtin Base.lockIn
+            NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(LockIn Pos) [Lock NewProcSym] Pos)) Pos)
          %else
          %   {DefaultPass AST DesugarInt Params}
          end
