@@ -49,10 +49,87 @@ Although the code is extensively commented, this report contributes to the third
 
 \chapter{Infrastructure}
 \section{Virtual Machine}
+The Mozart2 virtual machine was developed from scratch, with extensive support for the Oz language's concepts. 
 Describe virtual machine. I think to put it first so all concepts are introduced by the time I describe the opcodes.
 \subsection{Registers}
+The Mozart2 virtual machine works with four types of registers. The description of the registers uses the concept of abstractions, which is precisely defined in the next section. It is however sufficient for the understanding of this section to equate the concept of abstraction with the concept of procedure.
+\begin{description}
+  \item[X registers]are work registers that should not be used to permanently store values. X registers are used to pass the parameters to calls. However, the values in these registers are lost after the call.
+    %FIXME: combien de registres X disponibles,alloues?
+  \item[Y registers]are locally persisting registers. They all have to be initialised at once at the start of an abstraction's code, before their use, which requires to know how many Y registers are needed.
+  \item[G registers] are holding global variables, i.e. variables that are accessed by the abstraction, but that are not locally declared.
+  \item[K registers] are holding constant values, be it integers, floats or records.
+\end{description}
+
 Y are locals(y(index)), X are work registers (x(index)), G are globals filled sequentially with arrayFill (g(index)), k are constants (k(value))
 \subsection{Abstractions}
+An Oz procedure is represented in the virtual machine by what is called an abstraction. An Oz program itself is implicitely placed in what is called a top level abstraction.
+An abstraction holds references to G registers and to its code area. This code area has references to its K registers and the code itself. 
+\begin{verbatim}
++-----------+
+|Abstraction|
+|-----------|             +--------+
+| CodeArea  |------------>|CodeArea|
+| G0        |             |--------|
+| G1        |             | Code   |------->ByteCode
+| .         |             | K0     |
+| .         |             | K1     |
+| Gn        |             | .      |
++-----------+             | .      |
+                          | Kn     |
+                          +--------+
+\end{verbatim}
+
+Capturing the global variables at the abstraction level is what provides
+closures: a procedure captures the environment it was defined in.
+The CodeArea is not stored in the abstraction itself, but is referenced from
+it, simply because the same CodeArea can be referenced from multiple
+abstractions. Let's illustrate this by an example. 
+
+% reference: http://www.info.ucl.ac.be/~pvr/bookfigures/fig3_8.oz
+
+\begin{lstlisting}
+   fun {Sqrt X}
+      fun {Improve Guess}
+        (Guess + X/Guess) / 2.0
+      end
+      fun {GoodEnough Guess}
+        {Abs X-Guess*Guess}/X < 0.00001
+      end
+      fun {SqrtIter Guess}
+         if {GoodEnough Guess} then Guess
+         else
+            {SqrtIter {Improve Guess}}
+         end
+      end
+      Guess=1.0
+   in
+      {SqrtIter Guess}
+   end
+\end{lstlisting}
+The method Sqrt computes the square root by Newton's method. Each time Sqrt is
+called, it defines three local functions. The two first reference the variable
+X, which is a global variable for them, and which has probably a different
+value at each call of Sqrt. However, the code area for each function is the
+same for every call of Sqrt, and the virtual machine can simply create a new
+abstraction with one global variable referencing the already existing code
+area. 
+
+If we have 2 simultaneaous calls to Sqrt, for example {Sqrt 2} and {Sqrt 5}, we
+would end up with this structure in the virtual machine:
+
+\begin{verbatim}
+Abstr1
+CodeArea -------> CodeArea
+G0=2          /   Code     -------------> Code
+             /    K(2)                     with X registers
+Abstr2      /
+CodeArea --+
+G0=5
+\end{verbatim}
+
+
+
 Abstraction (with G regs)  -> CodeArea (with K regs) -> Code
 \section{Compiler input}\label{section:compilerinput}
 Describe records received from parser.
@@ -226,7 +303,7 @@ When the feature is not explicitely given, the item in the list of features and 
 \end{lstlisting}
 
 
-\subsubsection{Ignored expression: \_}
+\subsection{Ignored expression: \_}
 Oz syntax allows to put \_ in the location of an value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a record with label fWildcard and with only feature the position of the marker in the code.
 Ignoring the value returned by a function is thus written \lstinline!_={F N}!. In a pattern matching of a record, we might reuse only the first feature of the record, ognoring values of others. This is done like this:
 \begin{lstlisting}
@@ -238,30 +315,24 @@ Ignoring the value returned by a function is thus written \lstinline!_={F N}!. I
 \end{lstlisting}
 This allows the user to not declare variables he wouldn't use anyway, which would in addition raise a warning about a variable used only once\ldots
 
-\subsubsection{Threads}
-Thread instructions are present in the AST in the form of records with label fThread, and with twe features: the body of the thread, and its position in the source code.
-%FIXME: is the following correct?
-As expression, threads are present at this stage in the form, in Oz notation, \lstinline!V = thread Body end!, and this is desugared in the resulting statement \lstinline!thread V=Body end!. This statement is then itself desugared.
-Transforming a thread statement is more involved, though still quite simple. The transformation consists in the creation of a procedure with no argument which body is the desugared body (which is a statement) of the thread, and then passing this procedure the internal \lstinline!Thread.create! procedure.
-In Oz notation, \lstinline!thread Body end! is transformed in 
+\subsection{Threads}
+Thread instructions are present in the AST in the form of records with label fThread, and with two features: the body of the thread, and its position in the source code:
 \begin{lstlisting}
-   local 
-      P 
-   in 
-      proc {P} 
-         DesugaredBody 
-      end 
-      {Thread.create P}!
+   thread Body end
+\end{lstlisting}
+results in
+\begin{lstlisting}
+   fThread(Body pos)
+\end{lstlisting}
+\subsection{Locks}
+Oz enables the programmer to protect a critical section with a lock previously create with \lstinline!L={NewLock}!:
+\begin{lstlisting}
+   lock L then
+      % critical section
    end
 \end{lstlisting}
-This transformation occurs in the AST of course, and here is the AST transformation illustrated. \lstinline!fThread(Body Pos)! is transformed in this AST (taken from the compile source code):
-\begin{lstlisting}
-  fLocal(NewProcSym 
-         fAnd( fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) 
-               fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)
-             ) 
-         Pos)
-\end{lstlisting}
+
+This code results in a fLockThen record in the AST, with 3 features: the lock L, the body of the critical section, and the position in the code.
 \section{Compiler output}
 Describe opcodes.
 
@@ -558,6 +629,45 @@ We see that we end up with a AST that only contains records with constant label 
 Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
 \subsubsection{Ignored expressions: \_}
 Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \_ is replace by \lstinline!local NewSymbol in NewSymbol end!.
+
+\subsubsection{Threads}
+%FIXME: is the following correct?
+As expression, threads are present at this stage in the form, in Oz notation, \lstinline!V = thread Body end!, and this is desugared in the resulting statement \lstinline!thread V=Body end!. This statement is then itself desugared.
+Transforming a thread statement is more involved, though still quite simple. The transformation consists in the creation of a procedure with no argument which body is the desugared body (which is a statement) of the thread, and then passing this procedure the internal \lstinline!Thread.create! procedure.
+In Oz notation, \lstinline!thread Body end! is transformed in 
+\begin{lstlisting}
+   local 
+      P 
+   in 
+      proc {P} 
+         DesugaredBody 
+      end 
+      {Thread.create P}
+   end
+\end{lstlisting}
+This transformation occurs in the AST of course, and here is the AST transformation illustrated. \lstinline!fThread(Body Pos)! is transformed in this AST (taken from the compile source code):
+\begin{lstlisting}
+  fLocal(NewProcSym 
+         fAnd( fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) 
+               fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)
+             ) 
+         Pos)
+\end{lstlisting}
+
+\subsubsection{Locks}
+Locks statements are handled very similarly to thread statements: their body is wrapped in a argumentless procedure, which is passed as argument, together with the lock itself, to the base environment's LockIn. In Oz notation, \lstinline!lock L then Body end! is transformed in
+\begin{lstlisting}
+local
+   P
+in
+   proc{P}
+      Body
+   end
+   {LockIn L P}
+end
+\end{lstlisting}
+
+
 \subsection{Unnester}            
 The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:unnester:unification}
@@ -989,3 +1099,6 @@ Possibly include some measure?
 
 
 \end{document}
+
+% vim: set textwidth=80
+% vim: iabbr vm virtual machine
