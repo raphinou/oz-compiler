@@ -628,6 +628,11 @@ define
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal( NewSymbol NewSymbol Pos)
+         [] fCase(Val Clauses Else Pos) then
+            % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            {DesugarStat fLocal(NewSymbol fAnd(fCase(Val {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body)) end} Else Pos) NewSymbol) Pos) Params}
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -681,6 +686,12 @@ define
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(LockIn Pos) [Lock NewProcSym] Pos)) Pos)
+         [] fCase(Val Clauses Else Pos) then
+            fun {DesugarCaseClause fCaseClause(Pattern Body)}
+               fCaseClause({DesugarExpr Pattern Params} {DesugarStat Body Params})
+            end
+         in
+            fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
          %else
          %   {DefaultPass AST DesugarInt Params}
          end
@@ -1571,6 +1582,18 @@ define
             {GenCodeInt FalseCode Params}|
             % ---- end ----
             lbl(EndLabel)|nil
+         [] fCase(Val Clauses Else Pos) then
+            NumberOfClauses={List.length Clauses}
+            EndLabel={NewName}
+         in
+            move({RegForSym Val Params} x(0))|
+            patternMatch(x(0) k({List.foldLInd Clauses fun{$ Ind Acc fCaseClause(fConst(Pattern _) Body) } {Record.adjoin Acc '#'(Ind:Pattern#Ind)}  end '#'()  }))|
+            branch(NumberOfClauses+1)|
+            {List.mapInd Clauses fun{$ Ind fCaseClause(Pattern Body) } lbl(Ind)|{GenCodeInt Body Params}|branch(EndLabel)|nil end}|
+            lbl(NumberOfClauses+1) |
+            {GenCodeInt Else Params}|
+            lbl(EndLabel)|nil
+
          [] fRecord(fConst(_ _) _) then
             raise unhandledRecordType end
          end
