@@ -68,10 +68,15 @@ define
          id
          name
          pos
+         xindex
          yindex
          gindex
          procId
-         %possibilities: localProcId , global, localised (when a global has been replaced by a new local symbol)
+         % type possibilities:
+         %  -localProcId
+         %  -global
+         %  -localised (when a global has been replaced by a new local symbol)
+         %  -patternmatch
          type
          ref
       meth clone(?NewSym)
@@ -79,6 +84,7 @@ define
          NewSym={New Symbol init(@name @pos)}
          {NewSym set(yindex @yindex)}
          {NewSym set(gindex @gindex)}
+         {NewSym set(xindex @xindex)}
          {NewSym set(procId @procId)}
          {NewSym set(ref @ref)}
          {NewSym set(type @type)}
@@ -88,6 +94,7 @@ define
          id:={OS.rand} mod 100
          name:=Name
          pos:=Pos
+         xindex:=nil
          yindex:=nil
          gindex:=nil
          procId:=0
@@ -106,10 +113,16 @@ define
          %FIXME SCOPENAMEISNAME
          %R="'Sym "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#" type: "#@type#"'"
          %for debugging when scope is printable (ie OS.rand and not NewName)
-         R="'Sym"#@id#" "#@name#"@"#File#"("#Line#","#Col#") y:"#@yindex#"g:"#@gindex#" type: "#@type#" procId "#@procId#Ref#"'"
+         R="'Sym"#@id#" "#@name#"@"#File#"("#Line#","#Col#") x:"#@xindex#"y:"#@yindex#"g:"#@gindex#" type: "#@type#" procId "#@procId#Ref#"'"
+      end
+      meth hasXIndex(?B)
+         B=(@xindex\=nil)
       end
       meth hasYIndex(?B)
          B=(@yindex\=nil)
+      end
+      meth hasGIndex(?B)
+         B=(@gindex\=nil)
       end
       meth setProcId(ProcId)
          % Set the procId, but raises an error if there was already one
@@ -290,6 +303,22 @@ define
             AST
          else
             {Record.map AST fun {$ I} {F I Params} end}
+         end
+      else
+         AST
+      end
+   end
+   fun {DefaultPassNoParams AST F}
+      % beware of the order. a record is also a list!
+      if {List.is AST} then
+         {List.map AST F}
+      elseif {Record.is AST} then
+         case AST
+         of pos(_ _ _ _) then
+            % Do not go down into position records
+            AST
+         else
+            {Record.map AST F}
          end
       else
          AST
@@ -639,6 +668,8 @@ define
             AST
          [] fDollar(_) then
             AST
+         [] fAtom(_ _) then
+            raise namerLeftFAtomIntactAtDesugar end
          end
       end
 
@@ -713,6 +744,8 @@ define
             [] fSym then
                true
             [] fDollar then
+               true
+            [] fAtom then
                true
             else
                false
@@ -962,6 +995,26 @@ define
 
    % FIXME : we add Show manually to the base environment.
    AugmentedBase={AdjoinAt Base 'Show' Show}
+   % Key is a name known only by the compiler, and used to protect date, notably in the pattern matching code.
+   Key = {NewName}
+
+   % Helper functions to store and access data stored privately by the compiler.
+   fun {StoreInSafe X}
+      %{NewChunk store(Key:X compiler_internal__:true)}
+      % FIXME : use previous line, this is only to ease debugging
+      store(Key:X compiler_internal__:true)
+   end
+   fun {AccessSafe X}
+      {Show 'LLLLLLLLLLLLLLLLLLLLLLLLLLL'}
+      {Show 'Accessing safe'}
+      {Show X}
+      {Show 'Returns '}
+      {Show X.Key}
+      X.Key
+   end
+   fun {IsSafe X}
+      {HasFeature X Key}
+   end
 
    %##############
    fun {Namer AST}
@@ -1089,6 +1142,57 @@ define
                AST
             end
 
+         [] fCase(Val Clauses Else Pos) then
+            NewParams={Record.adjoin Params params( captures:{NewCell nil})}
+            fun {NamerForCaptures Pattern Params}
+               {Show 'NamerForCaptures begin'}
+               case Pattern
+               of fVar(Name Pos) then
+                  NewSymbol
+               in
+                  NewSymbol={Params.env setSymbol(Name Pos $)}
+                  {NewSymbol set(type patternmatch)}
+                  {Show 'fVar in NamerForCapture'}
+                  % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
+                  (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
+                  % In the fConst, directly plave the 'safe'
+                  fConst( {StoreInSafe NewSymbol} Pos)
+               [] fRecord(Label Features) then
+                  {Show 'fRecord in NamerForCapture'}
+                  fRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
+               [] fColon(Key Val) then
+                  {Show 'fColon in NamerForCapture'}
+                  % Pattern matching on values in records, not on the features
+                  fColon({NamerForBody Key Params} {NamerForCaptures Val Params} )
+               end
+            end
+            NewClauses
+            R
+         in
+            {Show '**********************'}
+            {Show fCase}
+            {Show '**********************'}
+
+            NewClauses={List.map Clauses  fun{$ fCaseClause(Pattern Body)}
+                                             NewPattern NewBody
+                                          in
+                                             {Show 'Working on Pattern:'}
+                                             {DumpAST.dumpAST Pattern _}
+                                             {Show 'Working on Body:'}
+                                             {DumpAST.dumpAST Body _}
+                                             {Params.env backup}
+                                             NewPattern = {NamerForCaptures Pattern NewParams}
+                                             NewBody = {NamerForBody Body NewParams}
+                                             {DumpAST.dumpAST NewPattern _ }
+                                             {DumpAST.dumpAST NewBody _ }
+                                             {Params.env restore}
+                                             fCaseClause(NewPattern NewBody)
+                                          end }
+
+            R=fLocal({WrapInFAnd @(NewParams.captures)} fCase({NamerForBody Val Params} NewClauses {NamerForBody Else Params} Pos) Pos)
+            {Show 'Will return:'}
+            {DumpAST.dumpAST R _}
+            R
          %-----------
          [] fInt(V P) then
          %-----------
@@ -1107,9 +1211,9 @@ define
          %---
          else
          %---
-            %{Show 'Default pass for next ast'}
-            %{Show AST}
-            %{Show '..............................................'}
+            {Show 'Default pass for next ast'}
+            {Show AST}
+            {Show '..............................................'}
             {DefaultPass AST NamerForBody Params}
          end
       end
@@ -1347,7 +1451,7 @@ define
          %-------------
          [] fAtom(_ _) then
          %-------------
-            raise namerLeftFAtomIntact end
+            raise namerLeftFAtomIntactAtGlobaliser end
          %---
          [] fConst(_ _) then
             AST
@@ -1403,6 +1507,8 @@ define
          [] fSym(Sym _) then
             if {Sym get(type $)}==localised then
                g({Sym get(gindex $)})
+            elseif {Sym get(type $)}==patternmatch then
+               x({Sym get(xindex $)})
             else
                y({Sym get(yindex $)})
             end
@@ -1484,7 +1590,7 @@ define
                                     of fSym(S _) then
                                        SymbolType = {S get(type $)}
                                     in
-                                       if SymbolType==localProcId orelse SymbolType==synthetic then
+                                       if SymbolType==localProcId orelse SymbolType==synthetic orelse SymbolType==patternmatch then
                                           if {S get(yindex $)}==nil then
                                              raise missingNeededYIndex end
                                           end
@@ -1563,7 +1669,9 @@ define
          %----------------
             [unify({RegForSym LHS  Params} {RegForSym RHS  Params})]
 
+         %--------------------------------------
          [] fBoolCase(FSym TrueCode FalseCode _) then
+         %--------------------------------------
             ErrorLabel={NewName}
             ElseLabel={NewName}
             EndLabel={NewName}
@@ -1582,14 +1690,154 @@ define
             {GenCodeInt FalseCode Params}|
             % ---- end ----
             lbl(EndLabel)|nil
+
+         %-----------------------------
          [] fCase(Val Clauses Else Pos) then
+         %-----------------------------
             NumberOfClauses={List.length Clauses}
             EndLabel={NewName}
+            %XMap={NewDictionary}
+            %fun {BuildPatternMatchRecord Clauses}
+            %   {Show 'START OF BUILDPATTERNMATCHRECORD'}
+            %   {Show '--------------------------------'}
+            %   { List.foldLInd Clauses fun{$ Ind Acc fCaseClause(Pattern Body) }
+            %                              RegisterIndex={NewCell 0}
+            %                           in
+            %                              {Show 'start fold ext'}
+            %                              case Pattern
+            %                              of fConst(Val _) then
+            %                                 if {IsSafe Val} then
+            %                                    Sym={AccessSafe Val}
+            %                                 in
+            %                                    {Show 'Found safe'}
+            %                                    RegisterIndex:=@RegisterIndex+1
+            %                                    {Dictionary.put XMap Sym RegisterIndex}
+            %                                    {Record.adjoin Acc '#'(Ind:{Boot_CompilerSupport.newPatMatCapture RegisterIndex}#Ind)}
+            %                                 elseif {Record.is Val} then
+            %                                    {Show 'Found record'}
+            %                                    {Record.map Val   fun{$ I}
+            %                                                         if {IsSafe I} then
+            %                                                            Sym={AccessSafe I}
+            %                                                         in
+            %                                                            {Show 'Found safe in record'}
+            %                                                            RegisterIndex:=@RegisterIndex+1
+            %                                                            {Dictionary.put XMap Sym RegisterIndex}
+            %                                                            {Boot_CompilerSupport.newPatMatCapture RegisterIndex}
+            %                                                         else
+            %                                                            {Show 'Found value in record'}
+            %                                                            {Show I}
+            %                                                            I
+            %                                                         end
+            %                                                      end}
+            %                                 else
+            %                                    {Show 'found value'}
+            %                                    {Show {IsSafe Val}}
+            %                                    {Show Val}
+            %                                    Val
+            %                                 end
+            %                              [] fRecord(RecordLabel Features) then
+            %                                    R
+            %                                 in
+            %                                    {Show 'Found record'}
+            %                                    R={Record.adjoin Acc '#'(Ind:{List.foldL Features fun {$ AccInt I}
+            %                                                         case I
+            %                                                         of fColon(fConst(L _) fConst(F _)) then
+            %                                                            if {IsSafe F} then
+            %                                                               Symbol
+            %                                                            in
+            %                                                               Symbol = {AccessSafe F}
+            %                                                               RegisterIndex:=@RegisterIndex+1
+            %                                                               {Dictionary.put XMap Symbol RegisterIndex}
+            %                                                               {Record.adjoin AccInt RecordLabel(L:{Boot_CompilerSupport.newPatMatCapture RegisterIndex})}
+            %                                                            else
+            %                                                               % constant value, just keep it
+            %                                                               {Record.adjoin AccInt RecordLabel(L:F)}
+            %                                                            end
+            %                                                         end
+            %                                                      end
+            %                                                      RecordLabel()}#Ind)}
+            %                                    {Show 'record built:'}
+            %                                    {Show R}
+            %                                    R
+            %                              end
+            %                           end '#'()}
+            %end
+            proc {HandleCase Clauses Params ?PatternMatchRecord ?BranchesCode}
+               fun {TransformPattern Pattern ClauseIndex XIndex UsedSymbols}
+                  {Show 'Called TransformPattern with'}
+                  {DumpAST.dumpAST Pattern _}
+                  %{Show Pattern}
+                  case Pattern
+                  of fConst(Val Pos) then
+                     if {IsSafe Val} then
+                        {Show 'Found Safe with this value:'}
+                        {Show {AccessSafe Val}}
+                        {TransformPattern {AccessSafe Val} ClauseIndex XIndex UsedSymbols}
+                     else
+                        if {Record.is Val} then
+                           {Show 'Found Record, will map:'}
+                           {Show Val}
+                           {Record.map Val fun {$ I} {TransformPattern I ClauseIndex XIndex UsedSymbols} end }
+                        else
+                           {Show 'Found val not safe:'}
+                           {Show Val}
+                           {Show {HasFeature Val Key}}
+                           Val
+                        end
+                     end
+                  [] fSym(Sym Pos) then
+                     {Show 'Found fsym'}
+                     XIndex:=@XIndex+1
+                     {Sym set(xindex @XIndex)}
+                     UsedSymbols:=Sym|@UsedSymbols
+                     {Boot_CompilerSupport.newPatMatCapture ClauseIndex}
+                  else
+                     %{Show 'else branch'}
+                     % Pattern is a record
+                     if {Record.is Pattern} then
+                        if {IsSafe Pattern} then
+                           {Show 'Found Safe in else branch with this value:'}
+                           {Show {AccessSafe Pattern}}
+                           {TransformPattern {AccessSafe Pattern} ClauseIndex XIndex UsedSymbols}
+                        else
+                           %{Show 'We have a record, will map'}
+                           %{Show {Label Pattern}}
+                           %{DumpAST.dumpAST Pattern _}
+                           {Record.map Pattern fun{$ I} {TransformPattern I ClauseIndex XIndex UsedSymbols} end}
+                        end
+                     else
+                        {Show 'Is this s Symbol?'}
+                        % Symbol?
+                        XIndex:=@XIndex+1
+                        {Pattern set(xindex @XIndex)}
+                        UsedSymbols:=Pattern|@UsedSymbols
+                        {Boot_CompilerSupport.newPatMatCapture @XIndex}
+                     end
+                  end
+               end
+               PatternRecord={NewCell '#'()}
+               Code={NewCell nil}
+            in
+               {List.forAllInd Clauses proc{$ Ind fCaseClause(Pattern Body)}
+                                          PatternForRecord
+                                          XIndex={NewCell 0}
+                                          UsedSymbols={NewCell nil}
+                                       in
+                                          PatternForRecord = {TransformPattern Pattern Ind XIndex UsedSymbols}
+                                          PatternRecord:={Record.adjoin @PatternRecord '#'(Ind:PatternForRecord#Ind)}
+                                          Code:=@Code| lbl(Ind)|{List.map @UsedSymbols fun{$ Sym} move(x({Sym get(xindex $)}) y({Sym get(yindex $)})) end } |{GenCodeInt Body Params}|branch(EndLabel)|nil
+                                       end}
+               PatternMatchRecord=@PatternRecord
+               BranchesCode={List.flatten @Code}
+            end
+            PatternMatchRecord BranchesCode
          in
+            {HandleCase Clauses Params ?PatternMatchRecord ?BranchesCode}
             move({RegForSym Val Params} x(0))|
-            patternMatch(x(0) k({List.foldLInd Clauses fun{$ Ind Acc fCaseClause(fConst(Pattern _) Body) } {Record.adjoin Acc '#'(Ind:Pattern#Ind)}  end '#'()  }))|
+            patternMatch(x(0) k(PatternMatchRecord))|
             branch(NumberOfClauses+1)|
-            {List.mapInd Clauses fun{$ Ind fCaseClause(Pattern Body) } lbl(Ind)|{GenCodeInt Body Params}|branch(EndLabel)|nil end}|
+            %{List.mapInd Clauses fun{$ Ind fCaseClause(Pattern Body) } lbl(Ind)|{GenCodeInt Body Params}|branch(EndLabel)|nil end}|
+            BranchesCode|
             lbl(NumberOfClauses+1) |
             {GenCodeInt Else Params}|
             lbl(EndLabel)|nil
@@ -1633,16 +1881,25 @@ define
       Prefix ={NewCell nil}
       YCounter
       Arity = {List.length Args}
-      fun { YAssigner Syms}
+      fun { YAssigner Xs}
          Counter={NewCell 0}
-         proc {YAssignerInt fSym(Sym _)}
-               if {Sym get(yindex $)}==nil then
-                  {Sym set(yindex @Counter)}
-                  Counter:=@Counter+1
+         proc {YAssignerInt X}
+            if {List.is X} then
+               {ForAll X YAssignerInt}
+            else
+               case X
+               of fSym(Sym _) then
+                  if {Sym get(yindex $)}==nil then
+                     {Sym set(yindex @Counter)}
+                     Counter:=@Counter+1
+                  end
+               else
+                  {DefaultPassNoParams X YAssigner _}
                end
+            end
          end
       in
-         {ForAll Syms YAssignerInt}
+         {ForAll Xs YAssignerInt}
          @Counter
       end
    in

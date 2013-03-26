@@ -19,11 +19,14 @@ define
       {IsFloat V} orelse
       {IsCoord V} orelse
       {IsObject V} orelse
-      {IsProcedure V}
+      {IsProcedure V} orelse
+      {IsChunk V}
    end
 
    fun {IsOneLiner AST}
       {IsTrivial AST} orelse
+      {HasFeature AST compiler_internal__ } orelse
+      ({IsChunk AST} andthen {HasFeature AST compiler_internal__})  orelse
       {Record.all AST IsTrivial}
    end
 
@@ -33,6 +36,8 @@ define
          'pos("'#A#'" '#B#' '#C#')'
       [] pos(A B C D E F) then
          'pos("'#A#'" '#B#' '#C#' "'#D#'" '#E#' '#F#')'
+      elseif {IsChunk V} andthen {HasFeature V compiler_internal__} then
+         'chunk'
       elseif {IsLiteral V} then
          {Value.toVirtualString V 1 1}
       elseif {IsObject V} then
