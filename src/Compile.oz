@@ -1000,20 +1000,13 @@ define
 
    % Helper functions to store and access data stored privately by the compiler.
    fun {StoreInSafe X}
-      %{NewChunk store(Key:X compiler_internal__:true)}
-      % FIXME : use previous line, this is only to ease debugging
-      store(Key:X compiler_internal__:true)
+      {NewChunk store(Key:X compiler_internal__:true)}
    end
    fun {AccessSafe X}
-      {Show 'LLLLLLLLLLLLLLLLLLLLLLLLLLL'}
-      {Show 'Accessing safe'}
-      {Show X}
-      {Show 'Returns '}
-      {Show X.Key}
       X.Key
    end
    fun {IsSafe X}
-      {HasFeature X Key}
+      {IsChunk X} andthen {HasFeature X Key}
    end
 
    %##############
@@ -1156,7 +1149,7 @@ define
                   % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
                   (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
                   % In the fConst, directly plave the 'safe'
-                  fConst( {StoreInSafe NewSymbol} Pos)
+                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
                [] fRecord(Label Features) then
                   {Show 'fRecord in NamerForCapture'}
                   fRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
@@ -1164,6 +1157,9 @@ define
                   {Show 'fColon in NamerForCapture'}
                   % Pattern matching on values in records, not on the features
                   fColon({NamerForBody Key Params} {NamerForCaptures Val Params} )
+               else
+                  % CHECKME : is this ok?
+                  {NamerForBody Pattern Params}
                end
             end
             NewClauses
@@ -1769,49 +1765,39 @@ define
                   %{Show Pattern}
                   case Pattern
                   of fConst(Val Pos) then
-                     if {IsSafe Val} then
-                        {Show 'Found Safe with this value:'}
-                        {Show {AccessSafe Val}}
-                        {TransformPattern {AccessSafe Val} ClauseIndex XIndex UsedSymbols}
-                     else
-                        if {Record.is Val} then
-                           {Show 'Found Record, will map:'}
-                           {Show Val}
-                           {Record.map Val fun {$ I} {TransformPattern I ClauseIndex XIndex UsedSymbols} end }
-                        else
-                           {Show 'Found val not safe:'}
-                           {Show Val}
-                           {Show {HasFeature Val Key}}
-                           Val
-                        end
-                     end
+                     {TransformPattern Val ClauseIndex XIndex UsedSymbols}
                   [] fSym(Sym Pos) then
                      {Show 'Found fsym'}
                      XIndex:=@XIndex+1
                      {Sym set(xindex @XIndex)}
                      UsedSymbols:=Sym|@UsedSymbols
-                     {Boot_CompilerSupport.newPatMatCapture ClauseIndex}
+                     {Boot_CompilerSupport.newPatMatCapture @XIndex}
                   else
-                     %{Show 'else branch'}
+                     {Show 'else branch'}
+                     {DumpAST.dumpAST Pattern _}
                      % Pattern is a record
-                     if {Record.is Pattern} then
-                        if {IsSafe Pattern} then
-                           {Show 'Found Safe in else branch with this value:'}
-                           {Show {AccessSafe Pattern}}
-                           {TransformPattern {AccessSafe Pattern} ClauseIndex XIndex UsedSymbols}
-                        else
-                           %{Show 'We have a record, will map'}
-                           %{Show {Label Pattern}}
-                           %{DumpAST.dumpAST Pattern _}
+                     if {IsSafe Pattern} then
+                        {Show 'Is safe!'}
+                        {TransformPattern {AccessSafe Pattern} ClauseIndex XIndex UsedSymbols}
+                     elseif {Record.is Pattern} then
+                           {Show 'We have a record, will map'}
+                           {Show {IsSafe Pattern}}
+                           if {Label Pattern}==store then
+                              {Show 'label is store'}
+                              {Show Pattern.key==Key}
+                              {DumpAST.dumpAST Pattern.Key _}
+                              {Show '.'}
+                              {Show {IsSafe Pattern}}
+                              {Show {IsChunk Pattern}}
+                              {Show {HasFeature Pattern Key}}
+                              {Show '---'}
+                           end
+                           {Show {Label Pattern}}
+                           {DumpAST.dumpAST Pattern _}
                            {Record.map Pattern fun{$ I} {TransformPattern I ClauseIndex XIndex UsedSymbols} end}
-                        end
                      else
-                        {Show 'Is this s Symbol?'}
-                        % Symbol?
-                        XIndex:=@XIndex+1
-                        {Pattern set(xindex @XIndex)}
-                        UsedSymbols:=Pattern|@UsedSymbols
-                        {Boot_CompilerSupport.newPatMatCapture @XIndex}
+                        {Show 'Is this a value?'}
+                        Pattern
                      end
                   end
                end
