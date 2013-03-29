@@ -25,7 +25,6 @@ define
 
    fun {IsOneLiner AST}
       {IsTrivial AST} orelse
-      {HasFeature AST compiler_internal__ } orelse
       ({IsChunk AST} andthen {HasFeature AST compiler_internal__})  orelse
       {Record.all AST IsTrivial}
    end
