@@ -1,5 +1,21 @@
+'Record Match'
 a
+'--------------------'
+'OpenRecord Match'
 b
-openrec
+'--------------------'
+'Other Record Match'
 b
+'--------------------'
+'Integer match'
 2
+'--------------------'
+'Atom match'
+none
+'--------------------'
+'String Match'
+'--------------------'
+'Nested OpenRecord match'
+aa
+c
+'--------------------'

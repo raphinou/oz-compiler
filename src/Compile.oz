@@ -6,7 +6,7 @@ import
    Compiler(parseOzVirtualString)
    System(printInfo showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
-   CompilerSupport(newAbstraction makeArity) at 'x-oz://system/CompilerSupport.ozf'
+   CompilerSupport(newAbstraction makeArity ) at 'x-oz://system/CompilerSupport.ozf'
    Boot_CompilerSupport at 'x-oz://boot/CompilerSupport'
    Boot_Record at 'x-oz://boot/Record'
    Boot_Thread at 'x-oz://boot/Thread'
@@ -741,6 +741,9 @@ define
          end
       end
    in
+      {Show '-------'}
+      {Show 'Desugar'}
+      {Show '-------'}
       {DesugarStat AST params}
    end
 
@@ -814,6 +817,7 @@ define
             %FIXME: set pos!
             fEq(FSym AST pos)
          else
+            {DumpAST.dumpAST FSym _}
             {DumpAST.dumpAST AST _}
             raise unexpectedASTForBindVarToExpr end
          end
@@ -927,7 +931,7 @@ define
       end
 
 
-      fun {UnnestFRecord AST=fRecord(Op Args) Params}
+      fun {UnnestFRecord AST Params}
       %----------------------------------------------
          % Similar reasoning as UnnestFApply
          % Transforms the AST such that fRecord values are all elementary (fSym or
@@ -955,12 +959,18 @@ define
                if {IsElementary V} then
                  {UnnestFRecordInt FRecordAST X|NewArgsList Xs}
                else
-                  NewSymbol={New SyntheticSymbol init(pos)}
-               in
-                  {UnnesterInt fLocal(fSym(NewSymbol pos)
-                                      fAnd( fEq(fSym(NewSymbol pos) V pos)
-                                            {UnnestFRecordInt FRecordAST fColon(F fSym(NewSymbol pos))|NewArgsList Xs}) pos)
-                               Params}
+                  case V
+                  of fOpenRecord(_ _) then
+                     {UnnestFRecordInt FRecordAST fColon(F {UnnestFRecordInt V nil V.2 })|NewArgsList Xs}
+
+                  else
+                     NewSymbol={New SyntheticSymbol init(pos)}
+                  in
+                     {UnnesterInt fLocal(fSym(NewSymbol pos)
+                                         fAnd( fEq(fSym(NewSymbol pos) V pos)
+                                               {UnnestFRecordInt FRecordAST fColon(F fSym(NewSymbol pos))|NewArgsList Xs}) pos)
+                                  Params}
+                  end
                end
             else
                % All unnested arguments are now found in NewArgsList
@@ -968,11 +978,24 @@ define
                % otherwise no recursive call
                % all fLocal introduced by complex arguments have been directly place out of fRecord when traversing ArgsRest
                % and all what's left in the argument list are Symbols.
-               fRecord(Op {List.reverse NewArgsList})
+               case FRecordAST
+               of fRecord(Op Features) then
+                  {Show 'Unnesting returns fRecord'}
+                  fRecord(Op {List.reverse NewArgsList})
+               [] fOpenRecord(Op Features) then
+                  {Show 'Unnesting returns fOpenRecord'}
+                  fOpenRecord(Op {List.reverse NewArgsList})
+               end
+
             end
          end
       in
-         {UnnestFRecordInt AST nil Args}
+         case AST
+         of fRecord(Op Features) then
+            {UnnestFRecordInt AST nil Features}
+         [] fOpenRecord(Op Features) then
+            {UnnestFRecordInt AST nil Features}
+         end
       end
 
 
@@ -1002,6 +1025,9 @@ define
          end
       end
    in
+      {Show '-------'}
+      {Show 'Unnester'}
+      {Show '-------'}
       {UnnesterInt AST params}
    end
 
@@ -1234,6 +1260,9 @@ define
       %{Show 'AST received by Namer:'}
       %{DumpAST.dumpAST AST}
       %{Show '--------------------------------------------------------------------------------'}
+      {Show '-------'}
+      {Show 'Namer'}
+      {Show '-------'}
       {NamerForBody AST InitialParams}
    end
 
@@ -1475,6 +1504,9 @@ define
       end
       InitialParams=params(currentProcId: {OS.rand} mod 1000 gm:{New GlobalsManager init()} setter:{NewCell 'toplevel'})
    in
+      {Show '-------'}
+      {Show 'Globaliser'}
+      {Show '-------'}
       try
          {GlobaliserInt AST InitialParams}
       catch E then
@@ -1732,27 +1764,47 @@ define
                   {List.map UsedSymbols fun{$ Sym} move(x({Sym get(xindex $)}) y({Sym get(yindex $)})) end }
                end
 
-               fun {TransformPattern Pattern ClauseIndex XIndex UsedSymbols}
+               fun {TransformPattern Pattern Body ClauseIndex XIndex UsedSymbols Prefix}
                   {Show 'Called TransformPattern with'}
                   {DumpAST.dumpAST Pattern _}
                   case Pattern
                   of fConst(Val Pos) then
                      % Call TransformPattern on the value in fConst, as it could be a safe holding a capture
-                     {TransformPattern Val ClauseIndex XIndex UsedSymbols}
+                     {TransformPattern Val Body ClauseIndex XIndex UsedSymbols Prefix}
                   [] fSym(Sym Pos) then
                      % If this is a symbol, it is a capture in the pattern match
                      XIndex:=@XIndex+1
                      {Sym set(xindex @XIndex)}
                      UsedSymbols:=Sym|@UsedSymbols
                      {Boot_CompilerSupport.newPatMatCapture @XIndex}
+                  [] fOpenRecord(fConst(RecordLabel _) Features) then
+                     FeaturesList = {List.foldL Features fun{$ A I}
+                                            case I
+                                             of fColon(fConst(L _) V) then
+                                                L#V|A
+                                             else
+                                                raise constantFeatureExpectedforFOpenRecord end
+                                             end
+                                          end
+                                          nil }
+                     OrderedFeaturesList = {List.sort FeaturesList fun {$ L1#_ L2#_} {Boot_CompilerSupport.featureLess L1 L2} end }
+
+                     Arity
+                  in
+                     Arity={Boot_CompilerSupport.makeArityDynamic RecordLabel {List.toTuple '#' {List.map OrderedFeaturesList fun{$ L#_} {TransformPattern L  Body ClauseIndex XIndex UsedSymbols Prefix} end }} true }
+                     {Boot_CompilerSupport.newPatMatOpenRecord Arity {List.toTuple '#' {List.map OrderedFeaturesList fun{$ _#V} {TransformPattern  V Body ClauseIndex XIndex UsedSymbols Prefix} end }}}
+
+                  [] fRecord(fConst(RecordLabel _) Features) then
+                     {List.foldL Features fun{$ Acc I} case I of fColon(fConst(L _) F) then {Record.adjoin Acc RecordLabel(L:{TransformPattern F Body ClauseIndex XIndex UsedSymbols Prefix})} else Acc end end RecordLabel()}
+
                   else
                      % Pattern is a record
                      if {IsSafe Pattern} then
                         % Open safe and transform it
-                        {TransformPattern {AccessSafe Pattern} ClauseIndex XIndex UsedSymbols}
+                        {TransformPattern {AccessSafe Pattern} Body ClauseIndex XIndex UsedSymbols Prefix}
                      elseif {Record.is Pattern} then
                         % Go over all features
-                        {Record.map Pattern fun{$ I} {TransformPattern I ClauseIndex XIndex UsedSymbols} end}
+                        {Record.map Pattern fun{$ I} {TransformPattern I Body ClauseIndex XIndex UsedSymbols Prefix} end}
                      else
                         % value
                         Pattern
@@ -1762,19 +1814,18 @@ define
 
 
                fun {PrefixOfSeq Type PatternMatchRecord NextTestLabel}
+                  % This distinction was needed when the code didn't use the patMatOpenRecord
                   % As we group multiple pattern matches in one instruction, we
                   % need this to build the prefix after we visited all grouped
                   % clauses
-                  if Type==fRecord orelse Type==fConst then
-                     R
-                  in
-                     R=patternMatch(x(0) k(@PatternMatchRecord))|
-                     branch(@NextTestLabel)|nil
-                     {Show R}
-                     R
-                  else
-                     nil
-                  end
+                  %if Type==fRecord orelse Type==fConst then
+                  %   patternMatch(x(0) k(@PatternMatchRecord))|
+                  %   branch(@NextTestLabel)|nil
+                  %else
+                  %   nil
+                  %end
+                  patternMatch(x(0) k(@PatternMatchRecord))|
+                  branch(@NextTestLabel)|nil
                end
 
 
@@ -1805,18 +1856,70 @@ define
                   % Only fRecord and fConst are part of sequences
                   % fRecord are stored in a safe in a fConst
                   % hence we can just test if the label is fConst
-                  if Type==fConst andthen Label==fConst then
-                     false
-                  else
-                     true
-                  end
+                  % Return true to debug and see all clauses generated seperately
+                  % Seems that by using patMatOpenRecord we can put all in one sequence
+                  false
+                  %if Type==fConst andthen Label==fConst then
+                  %   false
+                  %else
+                  %   true
+                  %end
                end
 
+
+               fun {GenOpenRecordCode Pattern Body NextTestLabel ErrorLabel Params}
+                  ClauseCode
+                  RecordLabel
+                  Features
+               in
+                  fOpenRecord(RecordLabel Features)=Pattern
+                  % First build code for the tests of all features present in the open record
+                  ClauseCode={List.map Features    fun{$ fColon(fConst(L _) fConst(Val _))}
+                                                      move(k(L) x(1))|
+                                                      %first : record we test against
+                                                      %second : feature we look at
+                                                      %third : result=found?
+                                                      %fourth: result=value in the feature we looked at
+                                                      callBuiltin(k(Boot_Record.testFeature) [x(0) x(1) x(2) x(3)])|
+                                                      condBranch(x(2) @NextTestLabel ErrorLabel)|
+                                                      % if match and need to store value in register, ie the value of the feature in the open record was a variable
+                                                      if {IsSafe Val} then
+                                                         move(x(3) {PermRegForSym {AccessSafe Val} Params})
+                                                      else
+                                                         nil
+                                                      end|
+                                                      nil
+                                                   end}
+                  % Test label
+                  % x(0) is value we test against
+                  % For an open record, no need to append to CodeBuffer as it is nil, just
+                  % replace the value
+                  move({PermRegForSym RecordLabel Params} x(1))|
+                  % first: value we test against
+                  % second: the label value we need
+                  % third: result of test
+                  callBuiltin(k(Boot_Record.testLabel) [x(0) x(1) x(2)])|
+                  % Go to next test of match not successful
+                  condBranch(x(2) @NextTestLabel ErrorLabel)|
+                  % Else test all features present in the open record
+                  ClauseCode |
+                  % If all pass, execute code in thi clause
+                  {GenCodeInt Body Params}|
+                  % Then jump at the end of this case instruction
+                  branch(EndLabel)|
+                  nil
+               end
             in
 
 
                {List.forAllInd Clauses proc{$ Ind fCaseClause(Pattern Body)}
                                           PatternLabel={Record.label Pattern}
+
+                                             UsedSymbols
+                                             XIndex
+                                             Prefix
+                                             PatternForRecord
+                                             PatternIndex
                                        in
                                           {Show 'Starting work on pattern'}
                                           {Show '************************'}
@@ -1824,9 +1927,10 @@ define
 
                                           ThisLabel:={GenLabel}
 
+                                          % CHECKME: check that this is indeed superfluous when using patMatOpenRecords
+                                          % This shortens the code, but augments the number of y records used, as the y index is not reset for each clause.
                                           if {IsNewSequence PatternLabel @SequenceType} then
                                              {Show 'this is a new sequence, include buffer in code and reset vars'}
-                                             % Close previous sequence
                                              if @ThisTestLabel\=unit then
                                                 Code:=@Code|lbl(@ThisTestLabel)|{PrefixOfSeq @SequenceType PatternMatchRecord NextTestLabel}|@CodeBuffer|nil
                                              end
@@ -1839,65 +1943,22 @@ define
                                              NextTestLabel:={GenLabel}
                                           end
 
-                                          case Pattern
-                                          of fOpenRecord(RecordLabel Features) then
-                                             ClauseCode
-                                          in
-                                             % First build code for the tests of all features present in the open record
-                                             ClauseCode={List.map Features    fun{$ fColon(fConst(L _) fConst(Val _))}
-                                                                                 move(k(L) x(1))|
-                                                                                 %first : record we test against
-                                                                                 %second : feature we look at
-                                                                                 %third : result=found?
-                                                                                 %fourth: result=value in the feature we looked at
-                                                                                 callBuiltin(k(Boot_Record.testFeature) [x(0) x(1) x(2) x(3)])|
-                                                                                 condBranch(x(2) @NextTestLabel ErrorLabel)|
-                                                                                 % if match and need to store value in register, ie the value of the feature in the open record was a variable
-                                                                                 if {IsSafe Val} then
-                                                                                    move(x(3) {PermRegForSym {AccessSafe Val} Params})
-                                                                                 else
-                                                                                    nil
-                                                                                 end|
-                                                                                 nil
-                                                                              end}
-                                             % Test label
-                                             % x(0) is value we test against
-                                             % For an open record, no need to append to CodeBuffer as it is nil, just
-                                             % replace the value
-                                             CodeBuffer:= move({PermRegForSym RecordLabel Params} x(1))|
-                                             % first: value we test against
-                                             % second: the label value we need
-                                             % third: result of test
-                                             callBuiltin(k(Boot_Record.testLabel) [x(0) x(1) x(2)])|
-                                             % Go to next test of match not successful
-                                             condBranch(x(2) @NextTestLabel ErrorLabel)|
-                                             % Else test all features present in the open record
-                                             ClauseCode |
-                                             % If all pass, execute code in thi clause
-                                             {GenCodeInt Body Params}|
-                                             % Then jump at the end of this case instruction
-                                             branch(EndLabel)|
-                                             nil
-                                          %---------------
-                                          else  %fConst
-                                          %---------------
+                                          % Collect symbol used, so that they can be stored in Y regs to
+                                          % keep them accessible in this branch
+                                          UsedSymbols={NewCell nil}
+                                          % Index of last assigned X register.
+                                          % Initialise it with 0 to keep the value we test against in x(0)
+                                          XIndex={NewCell 0}
+                                          % Build record used in the pattern matching instruction
+                                          Prefix={NewCell nil}
+                                          PatternForRecord = {TransformPattern Pattern Body Ind XIndex UsedSymbols Prefix}
+                                          % Needed to avoid a parse error
+                                          % Reminder: SeqLen is the number of clauses completed in the current sequence.
+                                          % Hence this this clause' pattern index is one more.
+                                          PatternIndex=@SeqLen+1
 
-                                             % Collect symbol used, so that they can be stored in Y regs to
-                                             % keep them accessible in this branch
-                                             UsedSymbols={NewCell nil}
-                                             % Index of last assigned X register.
-                                             % Initialise it with 0 to keep the value we test against in x(0)
-                                             XIndex={NewCell 0}
-                                             % Build record used in the pattern matching instruction
-                                             PatternForRecord = {TransformPattern Pattern Ind XIndex UsedSymbols}
-                                             % Needed to avoid a parse error
-                                             % Reminder: SeqLen is the number of clauses completed in the current sequence.
-                                             % Hence this this clause' pattern index is one more.
-                                             PatternIndex=@SeqLen+1
-                                          in
-                                             PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
-                                             CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
-                                          end
+                                          PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
+                                          CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|@Prefix|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
                                           % Update number of clauses visited in current sequence
                                           SeqLen:=@SeqLen+1
                                        end}
