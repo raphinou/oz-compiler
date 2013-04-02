@@ -642,6 +642,11 @@ define
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(Boot_Value.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
+         [] fBoolCase( Cond TrueCode fNoElse(_) Pos) then
+            % Cond is a value, hence an expression.
+            % Both branches are statements because the if itself is a statement
+            fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} fNoElse(pos) Pos)
+
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
@@ -716,6 +721,11 @@ define
             fProc(FSym {List.append Args [ReturnSymbol]} {DesugarStat {HandleLazyFlag ReturnSymbol Body Flags Pos} Params} Flags Pos)
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(Boot_Value.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+         [] fBoolCase( Cond TrueCode fNoElse(_) Pos) then
+            % Cond is a value, hence an expression.
+            % Both branches are statements because the if itself is a statement
+            fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} fNoElse(pos) Pos)
+
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
@@ -1750,9 +1760,14 @@ define
             tailCall(k(Exception.raiseError) 1)|
             %---- else ----
             lbl(ElseLabel)|
-            {GenCodeInt FalseCode Params}|
-            % ---- end ----
-            lbl(EndLabel)|nil
+            case FalseCode
+            of fNoElse(_) then
+               lbl(EndLabel)|nil
+            else
+               {GenCodeInt FalseCode Params}|
+               % ---- end ----
+               lbl(EndLabel)|nil
+            end
 
          %-----------------------------
          [] fCase(Val Clauses Else Pos) then

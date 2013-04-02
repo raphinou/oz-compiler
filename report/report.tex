@@ -333,6 +333,11 @@ Oz enables the programmer to protect a critical section with a lock previously c
 \end{lstlisting}
 
 This code results in a fLockThen record in the AST, with 3 features: the lock L, the body of the critical section, and the position in the code.
+\subsection{If then else}
+The if..then..else construct is put in records:
+fBoolCase( Condition ThenCode ElseCode)
+The form if..then..end, ie with no else branch, gives this AST:
+fBoolCase( Condition ThenCode fNoElse(pos).
 \section{Compiler output}
 Describe opcodes.
 
@@ -668,6 +673,16 @@ end
 \end{lstlisting}
 
 
+\subsubsection{If then else}
+The condition tested is always an expression.
+The instruction if..then..else instruction can be a statement as in 
+\lstinline!if Cond then {DoTrue} else {DoFalse} end!
+, in which case both code branches are desugared as statement
+or an expression as in
+\lstinline!X=if Y>Z then bigger else smallerOrEqual end!
+in which case both code branches are desugared as expression.
+A fNoElse record is left as is and will only be useful for the opcode generation function.
+
 \subsection{Unnester}            
 The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:unnester:unification}
@@ -991,11 +1006,17 @@ Rather than give convoluted explanations, it is easier to look at the code gener
   tailCall(k(Exception.raiseError) 1)|
   %---- else ----
   lbl(ElseLabel)|
-  {GenCodeInt FalseCode Params}|
-  % ---- end ----
-  lbl(EndLabel)|nil
+  case FalseCode
+  of fNoElse(_) then
+     lbl(EndLabel)|nil
+  else
+     {GenCodeInt FalseCode Params}|
+     % ---- end ----
+     lbl(EndLabel)|nil
+  end
 \end{lstlisting}
-It first moves the symbol containing the boolean to be tested in a X register, which is then used in a condBranch opcode, takin gas additional arguments the labels identifying the start of the else branch, and the start of the error handling code. The ``then'' branch directly follows the condBranch. After that come the error code and the else branch. Note that at the end of the ``then'' branch, a branch opcode is needed to jump over the code corresponding to the else branch and the error handling.
+It first moves the symbol containing the boolean to be tested in a X register, which is then used in a condBranch opcode, taking as additional arguments the labels identifying the start of the else branch, and the start of the error handling code. The ``then'' branch directly follows the condBranch. After that come the error code and the else branch. Note that at the end of the ``then'' branch, a branch opcode is needed to jump over the code corresponding to the else branch and the error handling. 
+If no code is present in the else branch, no opcode is generated for that branch.
 
 \subsubsection{Records}
 At this step, the only place we can find records are in the right hand side of unifications, i.e. the second features of fEq. 
