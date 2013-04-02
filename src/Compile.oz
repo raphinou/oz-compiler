@@ -675,11 +675,16 @@ define
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal( NewSymbol NewSymbol Pos)
+         [] fCase(Val Clauses Else=fNoElse(_) Pos) then
+            % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            fLocal(NewSymbol fAnd({DesugarStat fCase(Val {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} Else Pos) Params} NewSymbol) Pos)
          [] fCase(Val Clauses Else Pos) then
             % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            {DesugarStat fLocal(NewSymbol fAnd(fCase(Val {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body)) end} Else Pos) NewSymbol) Pos) Params}
+            fLocal(NewSymbol fAnd({DesugarStat fCase(Val {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} fEq(NewSymbol Else Pos) Pos) Params} NewSymbol) Pos)
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
