@@ -1757,27 +1757,74 @@ define
          %-----------------------------
          [] fCase(Val Clauses Else Pos) then
          %-----------------------------
+            % A case statement is testing a value Val against clauses:
+            %
+            %   case Val
+            %                 -------------------+
+            %                 ---+               |
+            %   of Pattern1 then |->1 clause     |
+            %      Body1         |               |
+            %                 ---+               |
+            %   [] Pattern2 then                 |-> Clauses sequence for Mozart2 VM
+            %      Body                          |
+            %   ...                              |
+            %   [] PatternN then                 |
+            %      BodyN                         |
+            %                --------------------+
+            %   else
+            %      ElseBody
+            %   end
+            %
+            % The Mozart1 VM allowed the compiler to group subsequent clauses of
+            % constant patterns (records, integers, atoms, floats,...), but open
+            % record patterns could only be handled individually.
+            % The first version of this code was doing exactly the same.
+            % The current code uses the possibilities offered by the new VM, but
+            % still uses the same concepts of clause sequences, even if with the
+            % Mozart2 vm, we can only have 1 sequence as all clauses can be grouped
+            % in one sequence.
+            %
+            % A sequence of clauses is a group of subsequent clauses of the same type (constant or open record).
+            % As sequence of clauses are grouped, the opcode generated will not
+            % have one test instruction per clause, but one test instruction
+            % per sequence of clause, and the test result will jump to the corresponding clause' body.
+            % Hence each clause body has to be identified by a label. The label of the currently handled clause is found in the cell ThisLable.
+            % Currently, it is still possible to generate one test per clause. In that case, the code needs to perform a test instruction and jump to the next test if unsuccessful. Hence the code keeps track of the current test label (in ThisTestLabel) and the next test label (NextTestLabel).
+            % The cell Code holds the code generated for all completely visited sequences.
+            % The cell CodeBuffer holds the code for all handled clauses of the current sequence. This does not include the test instruction. When a new sequence is started (tested with IsNewSequence), the test instruction is prepended to the CodeBuffer by PrefixOfSeq and this is then appended to the Code cell.
+            % After execution of the body of a clause, no code of other clauses should be executed, hence the need to have an EndLabel.
+
 
             fun {HandleCase Clauses Params}
 
                fun {UsedSymbolsToYReg UsedSymbols}
+                  % Generate opcode to move symbols used in a pattern to Y registers
                   {List.map UsedSymbols fun{$ Sym} move(x({Sym get(xindex $)}) y({Sym get(yindex $)})) end }
                end
 
-               fun {TransformPattern Pattern Body ClauseIndex XIndex UsedSymbols Prefix}
+               fun {TransformPattern Pattern XIndex UsedSymbols }
+                  % This function will return the value corresponding to this clause in the record passed to patternMatch
+                  % The XIndex cell contains the last assigned X register
+                  % It collects symbols found in the pattern in the UsedSymbols list
                   {Show 'Called TransformPattern with'}
                   {DumpAST.dumpAST Pattern _}
                   case Pattern
                   of fConst(Val Pos) then
                      % Call TransformPattern on the value in fConst, as it could be a safe holding a capture
-                     {TransformPattern Val Body ClauseIndex XIndex UsedSymbols Prefix}
+                     {TransformPattern Val XIndex UsedSymbols }
                   [] fSym(Sym Pos) then
                      % If this is a symbol, it is a capture in the pattern match
+                     % Assign the next X register to that symbol, add it to the list of used symbols, and replace it with a newPatMatCapture.
                      XIndex:=@XIndex+1
                      {Sym set(xindex @XIndex)}
                      UsedSymbols:=Sym|@UsedSymbols
                      {Boot_CompilerSupport.newPatMatCapture @XIndex}
                   [] fOpenRecord(fConst(RecordLabel _) Features) then
+                     % OpenRecords are replaced by a newPatMatOpenRecord.
+                     % Build feature list with elements being pairs feature#value.
+                     % This will let us order the list according to the features, and
+                     % then access the values in the same order.
+                     % Same code as handling of records with createRecordUnify opcode
                      FeaturesList = {List.foldL Features fun{$ A I}
                                             case I
                                              of fColon(fConst(L _) V) then
@@ -1791,22 +1838,26 @@ define
 
                      Arity
                   in
-                     Arity={Boot_CompilerSupport.makeArityDynamic RecordLabel {List.toTuple '#' {List.map OrderedFeaturesList fun{$ L#_} {TransformPattern L  Body ClauseIndex XIndex UsedSymbols Prefix} end }} true }
-                     {Boot_CompilerSupport.newPatMatOpenRecord Arity {List.toTuple '#' {List.map OrderedFeaturesList fun{$ _#V} {TransformPattern  V Body ClauseIndex XIndex UsedSymbols Prefix} end }}}
+                     % Set force to true as we need the arity even if it is a cons or a tuple
+                     % Notice the recursive call on each feature
+                     Arity={Boot_CompilerSupport.makeArityDynamic RecordLabel {List.toTuple '#' {List.map OrderedFeaturesList fun{$ L#_} {TransformPattern L  XIndex UsedSymbols } end }} true }
+                     {Boot_CompilerSupport.newPatMatOpenRecord Arity {List.toTuple '#' {List.map OrderedFeaturesList fun{$ _#V} {TransformPattern  V XIndex UsedSymbols } end }}}
 
                   [] fRecord(fConst(RecordLabel _) Features) then
-                     {List.foldL Features fun{$ Acc I} case I of fColon(fConst(L _) F) then {Record.adjoin Acc RecordLabel(L:{TransformPattern F Body ClauseIndex XIndex UsedSymbols Prefix})} else Acc end end RecordLabel()}
+                     %replace the fRecord by the oz value it represents. This mean we build the record from the AST.
+                     {List.foldL Features fun{$ Acc I} case I of fColon(fConst(L _) F) then {Record.adjoin Acc RecordLabel(L:{TransformPattern F XIndex UsedSymbols })} else Acc end end RecordLabel()}
 
                   else
                      % Pattern is a record
                      if {IsSafe Pattern} then
                         % Open safe and transform it
-                        {TransformPattern {AccessSafe Pattern} Body ClauseIndex XIndex UsedSymbols Prefix}
+                        {TransformPattern {AccessSafe Pattern} XIndex UsedSymbols }
                      elseif {Record.is Pattern} then
-                        % Go over all features
-                        {Record.map Pattern fun{$ I} {TransformPattern I Body ClauseIndex XIndex UsedSymbols Prefix} end}
+                        % Recursively transform each value of the record.
+                        % FIXME: we could limit the depth of the recursive call as this code even recurses into the position features.
+                        {Record.map Pattern fun{$ I} {TransformPattern I XIndex UsedSymbols } end}
                      else
-                        % value
+                        % This is a value, simply return it.
                         Pattern
                      end
                   end
@@ -1827,6 +1878,7 @@ define
                   patternMatch(x(0) k(@PatternMatchRecord))|
                   branch(@NextTestLabel)|nil
                end
+
 
 
                % Initialise variables
@@ -1865,61 +1917,14 @@ define
                   %   true
                   %end
                end
-
-
-               fun {GenOpenRecordCode Pattern Body NextTestLabel ErrorLabel Params}
-                  ClauseCode
-                  RecordLabel
-                  Features
-               in
-                  fOpenRecord(RecordLabel Features)=Pattern
-                  % First build code for the tests of all features present in the open record
-                  ClauseCode={List.map Features    fun{$ fColon(fConst(L _) fConst(Val _))}
-                                                      move(k(L) x(1))|
-                                                      %first : record we test against
-                                                      %second : feature we look at
-                                                      %third : result=found?
-                                                      %fourth: result=value in the feature we looked at
-                                                      callBuiltin(k(Boot_Record.testFeature) [x(0) x(1) x(2) x(3)])|
-                                                      condBranch(x(2) @NextTestLabel ErrorLabel)|
-                                                      % if match and need to store value in register, ie the value of the feature in the open record was a variable
-                                                      if {IsSafe Val} then
-                                                         move(x(3) {PermRegForSym {AccessSafe Val} Params})
-                                                      else
-                                                         nil
-                                                      end|
-                                                      nil
-                                                   end}
-                  % Test label
-                  % x(0) is value we test against
-                  % For an open record, no need to append to CodeBuffer as it is nil, just
-                  % replace the value
-                  move({PermRegForSym RecordLabel Params} x(1))|
-                  % first: value we test against
-                  % second: the label value we need
-                  % third: result of test
-                  callBuiltin(k(Boot_Record.testLabel) [x(0) x(1) x(2)])|
-                  % Go to next test of match not successful
-                  condBranch(x(2) @NextTestLabel ErrorLabel)|
-                  % Else test all features present in the open record
-                  ClauseCode |
-                  % If all pass, execute code in thi clause
-                  {GenCodeInt Body Params}|
-                  % Then jump at the end of this case instruction
-                  branch(EndLabel)|
-                  nil
-               end
             in
-
-
                {List.forAllInd Clauses proc{$ Ind fCaseClause(Pattern Body)}
                                           PatternLabel={Record.label Pattern}
-
-                                             UsedSymbols
-                                             XIndex
-                                             Prefix
-                                             PatternForRecord
-                                             PatternIndex
+                                          UsedSymbols
+                                          XIndex
+                                          Prefix
+                                          PatternForRecord
+                                          PatternIndex
                                        in
                                           {Show 'Starting work on pattern'}
                                           {Show '************************'}
@@ -1927,10 +1932,11 @@ define
 
                                           ThisLabel:={GenLabel}
 
-                                          % CHECKME: check that this is indeed superfluous when using patMatOpenRecords
-                                          % This shortens the code, but augments the number of y records used, as the y index is not reset for each clause.
+                                          % If we start a new sequence, had the code of the previous sequence to Code
+                                          % This shortens the code, but augments the number of y records used, as the
+                                          % y index is not reset for each clause.
                                           if {IsNewSequence PatternLabel @SequenceType} then
-                                             {Show 'this is a new sequence, include buffer in code and reset vars'}
+                                             % Do not do it at the first iteration
                                              if @ThisTestLabel\=unit then
                                                 Code:=@Code|lbl(@ThisTestLabel)|{PrefixOfSeq @SequenceType PatternMatchRecord NextTestLabel}|@CodeBuffer|nil
                                              end
@@ -1946,23 +1952,26 @@ define
                                           % Collect symbol used, so that they can be stored in Y regs to
                                           % keep them accessible in this branch
                                           UsedSymbols={NewCell nil}
+
                                           % Index of last assigned X register.
                                           % Initialise it with 0 to keep the value we test against in x(0)
                                           XIndex={NewCell 0}
+
                                           % Build record used in the pattern matching instruction
-                                          Prefix={NewCell nil}
-                                          PatternForRecord = {TransformPattern Pattern Body Ind XIndex UsedSymbols Prefix}
+                                          PatternForRecord = {TransformPattern Pattern XIndex UsedSymbols}
+
                                           % Needed to avoid a parse error
                                           % Reminder: SeqLen is the number of clauses completed in the current sequence.
                                           % Hence this this clause' pattern index is one more.
                                           PatternIndex=@SeqLen+1
 
                                           PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
-                                          CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|@Prefix|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
+                                          CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
                                           % Update number of clauses visited in current sequence
                                           SeqLen:=@SeqLen+1
                                        end}
                Code:=@Code|
+                     % FIXME: this includes a label for the first test that is not needed
                      lbl(@ThisTestLabel)|{PrefixOfSeq @SequenceType PatternMatchRecord NextTestLabel}|
                      @CodeBuffer|
                      %---- error ----
