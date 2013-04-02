@@ -740,6 +740,12 @@ define
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(LockIn Pos) [Lock NewProcSym] Pos)) Pos)
+         [] fCase(Val Clauses Else=fNoElse(_) Pos) then
+            fun {DesugarCaseClause fCaseClause(Pattern Body)}
+               fCaseClause({DesugarExpr Pattern Params} {DesugarStat Body Params})
+            end
+         in
+            fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} Else Pos)
          [] fCase(Val Clauses Else Pos) then
             fun {DesugarCaseClause fCaseClause(Pattern Body)}
                fCaseClause({DesugarExpr Pattern Params} {DesugarStat Body Params})
@@ -1995,8 +2001,13 @@ define
                      tailCall(k(Exception.raiseError) 1)|
                      % else branch
                      lbl(@NextTestLabel)|
-                     {GenCodeInt Else Params}|
-                     lbl(EndLabel)|nil
+                     case Else
+                     of fNoElse(_) then
+                        lbl(EndLabel)|nil
+                     else
+                        {GenCodeInt Else Params}|
+                        lbl(EndLabel)|nil
+                     end
                {List.flatten @Code}
             end
          in
