@@ -136,7 +136,7 @@ Abstraction (with G regs)  -> CodeArea (with K regs) -> Code
 The compiler will have to generate code that can be passed to the assembler targetting the virtual machine. This assembler language has solid support for the virtual machine concepts as we'll see.
 The assembler accepts an Oz list of instructions that are Oz records. 
 
-\subsection{Register Operations}
+\subsection{Register Operations}\label{sec:opcode:registers}
 Registers access instructions are proper to each type. To access the nth G X Y registers, the instruction will respectively be g(n), x(n), y(n). 
 
 K registers are used to store constants, and are not numbered, but identified by the value they store. The constant 2 will appear in the code as k(2), the constant record r(a b c) will appear in the code as k(r(a b c)).
@@ -145,15 +145,18 @@ As mentioned earlier, Y registers are persisting for the lifespan of the current
 
 X registers are work registers, and if a value in a X register needs to be accessed several time across calls, it has to be saved in a Y register. This is done with a move instruction: \lstinline!move(source_reg destination_reg)!.
 
+%FIXME: what kind of registers can be unified. Does it make sense to unify X regs?
+Unification is supported with the instruction unify(LHS RHS) where both LHS and RHS are registers.
+
+\subsection{Jumps}\label{sec:opcode:jumps}
 Code positions can be identified by labels, which need to be atoms or names. A label \lstinline!L! will appear in the code in a record \lstinline!lbl(L)!. 
 Labels are required for jumps in the code. 
 Jumps will move the execution to the label they have as argument. For example \lstinline!branch(endLabel)! will jump to the position in the code identified by the label \lstinline!endLabel!.
 
 Conditional jumps will look at the value in a register, and if this value is not true, it will jump to the code at the label it was given. That instruction also takes a label locating error handling code. Here is an example of conditional jump that will look at the value in X register 0: \lstinline!condBranch(x(0) elseLabel errorLabel)|!. If the value in x(0) is true, it continues execution. If it is false it jumps to the position in the code identified by the label \lstinline!elseLabel!. If an error occurs, it jumps to the label \lstinline!errorLabel!.
 
-%FIXME: what kind of registers can be unified. Does it make sense to unify X regs?
-Unification is supported with the instrcution unify(LHS RHS) where both LHS and RHS are registers.
 
+\subsection{Calls}\label{sec:opcode:calls}
 %FIXME: can only call procedures and builtins?
 Calls can be made with \lstinline!call(R Args)!, where R is a register identifying what to call (procedure or builtin) and Args is the number of arguments passed to the callee. The arguments of the call are not directly passed to the call instruction, but have to be placed in the X registers from 0 to Args-1 with move instructions before the call, as this is where the virtual machine will look for the arguments. The complete code for a call to a callee located in register Y 3 with three arguments which values come from Y registers 0 to 2 will thus be of the form:
 \begin{lstlisting}
@@ -165,6 +168,7 @@ call(y(3) 3)
 
 A call done as last instruction of an abstraction should be made with the tailCall instruction, as this lets the virtual machine optimise the execution. It has the exact same specification as the call instruction, only the name of the instruction differs: \lstinline!tailCall(Callee Args)!.
 
+\subsection{Records}\label{sec:opcode:records}
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
 A record of arity Arity, with NumberOfFeatures features is unified with register DestinationReg with this instruction:
 \lstinline!createRecordUnify(k(Arity) NumberOfFeatures DestinationReg)!. which has to be followed by instructions to fill the features with their respective values:
@@ -175,7 +179,7 @@ There are two special cases of records that are handled specifically by the virt
 A con is a record with label '|' and with only 2 features numbers 1 and 2 and is initialised by
 \lstinline!createConsUnify(DestinationReg)!. Again, this instruction has to be followed by arrayFill instructions, two in this particular case.
 A tuple is a record with all numeric features. It is initialised by \lstinline!createTupleUnify(k(Label) NumberOfFeatures DestinationReg)! and followed by arrayFill instructions.
-\subsubsection{Procedures}\label{sec:opcode:procedures}
+\subsection{Procedures}\label{sec:opcode:procedures}
 A procedure is represented by what is called an abstractions (see Section \ref{sec:vm:abstractions}), which is created and stored in register DestinationReg with
 \lstinline!createAbstractionUnify(k(CodeArea) GlobalsCount  DestinationReg)!
 CodeArea is the assembled body of the procedure (see Section \ref{sec:codegen:procedures} for details). GlobalsCount identifies how many references to global variables this abstraction holds. It is the number of arrayFill instructions that will follow to initialise those global variables that the abstraction can access in G variables numbered from 0. The first arrayFill instruction will set the value of g(0), the second the value of g(1), \ldots
