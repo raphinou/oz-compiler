@@ -664,8 +664,8 @@ define
             NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
             fOpenRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end })
-         [] fSideCondition(Pattern Decls Guards GuardSymbol Pos) then
-            fSideCondition({DesugarExpr Pattern Params} Decls {List.map Guards fun {$ I} {DesugarExpr I Params} end} GuardSymbol Pos)
+         [] fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) then
+            fNamedSideCondition({DesugarExpr Pattern Params} Decls {List.map Guards fun {$ I} {DesugarExpr I Params} end} GuardSymbol Pos)
          [] fColon(Feature Value) then
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
 
@@ -706,8 +706,8 @@ define
       %---------------------------
          fun {DesugarCaseClause Clause}
             case Clause
-            of fCaseClause(fSideCondition(Pattern Decls Guards GuardSymbol Pos) Body) then
-               fCaseClause(fSideCondition({DesugarExpr Pattern Params} Decls {DesugarStat Guards Params} GuardSymbol  Pos) {DesugarStat Body Params} )
+            of fCaseClause(fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) Body) then
+               fCaseClause(fNamedSideCondition({DesugarExpr Pattern Params} Decls {DesugarStat Guards Params} GuardSymbol  Pos) {DesugarStat Body Params} )
             [] fCaseClause(Pattern Body) then
                fCaseClause({DesugarExpr Pattern Params} {DesugarStat Body Params})
             end
@@ -1049,8 +1049,8 @@ define
             % FIXME:  is this really the place to constantise the record.
             % This requires the unnest function to be called on both sides of fEq before it gets treated....
             {UnnestFRecord AST Params}
-         [] fSideCondition(Pattern Decls Guards GuardSymbol Pos) then
-            fSideCondition({UnnesterInt Pattern Params} Decls {UnnesterInt Guards Params} GuardSymbol Pos)
+         [] fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) then
+            fNamedSideCondition({UnnesterInt Pattern Params} Decls {UnnesterInt Guards Params} GuardSymbol Pos)
          else
             {DefaultPass AST UnnesterInt Params}
          end
@@ -1269,7 +1269,7 @@ define
                                                 NewBody = {NamerForBody Body NewParams}
                                                 (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
                                                 {Params.env restore}
-                                                fCaseClause(fSideCondition(NewPattern Decls NewGuards NewGuardSymbol Pos) NewBody)
+                                                fCaseClause(fNamedSideCondition(NewPattern Decls NewGuards NewGuardSymbol Pos) NewBody)
                                              [] fCaseClause(Pattern Body) then
                                                 {Params.env backup}
                                                 NewPattern = {NamerForCaptures Pattern NewParams}
@@ -1885,7 +1885,7 @@ define
                      {Sym set(xindex @XIndex)}
                      UsedSymbols:=Sym|@UsedSymbols
                      {Boot_CompilerSupport.newPatMatCapture @XIndex}
-                  [] fSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
+                  [] fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
                      {TransformPattern RealPattern XIndex UsedSymbols }
                   [] fOpenRecord(fConst(RecordLabel _) Features) then
                      % OpenRecords are replaced by a newPatMatOpenRecord.
@@ -1946,7 +1946,7 @@ define
                   {Show 'Preparing prefix for'}
                   {DumpAST.dumpAST Pattern _}
                   case Pattern
-                  of fSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
+                  of fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
                      % This is a clause with guards. The label of the guards code is
                      % ThisLabel, so that the patternmatch jumps to the guards code.
 
@@ -2019,10 +2019,10 @@ define
                   {Show Type}
                   if Type==none then
                      true
-                  elseif Label==fSideCondition then
+                  elseif Label==fNamedSideCondition then
                      {Show '**************** New sequence because label was fSideCondition (start with guards clause) *********************'}
                      true
-                  elseif Type==fSideCondition then
+                  elseif Type==fNamedSideCondition then
                      {Show '**************** New sequence because type was fSideCondition (after guards clause) *********************'}
                      true
                   else
@@ -2094,7 +2094,7 @@ define
                                           PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
                                           % ThisLabel is set by PrefixOfSequence, not here
                                           % Used symbols are also used in the prefix, so they are accessible in guards code
-                                          if @SequenceType==fSideCondition then
+                                          if @SequenceType==fNamedSideCondition then
                                              CodeBuffer:=@CodeBuffer|{GenCodeInt Body Params}|branch(EndLabel)|nil
                                           else
                                              CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
