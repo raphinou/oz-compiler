@@ -1846,19 +1846,89 @@ define
             % record patterns could only be handled individually.
             % The first version of this code was doing exactly the same.
             % The current code uses the possibilities offered by the new VM, but
-            % still uses the same concepts of clause sequences, even if with the
-            % Mozart2 vm, we can only have 1 sequence as all clauses can be grouped
-            % in one sequence.
+            % still uses the same concepts of clause sequences.
             %
-            % A sequence of clauses is a group of subsequent clauses of the same type (constant or open record).
+            % A sequence of clauses is a group of subsequent clauses of the same type (constant or open record) and with no guards.
             % As sequence of clauses are grouped, the opcode generated will not
             % have one test instruction per clause, but one test instruction
             % per sequence of clause, and the test result will jump to the corresponding clause' body.
-            % Hence each clause body has to be identified by a label. The label of the currently handled clause is found in the cell ThisLable.
-            % Currently, it is still possible to generate one test per clause. In that case, the code needs to perform a test instruction and jump to the next test if unsuccessful. Hence the code keeps track of the current test label (in ThisTestLabel) and the next test label (NextTestLabel).
+            %
+            % This will result in opcodes of this form:
+            %   patternMatch(x(0) k('#'(Pat1#lbl1 Pat2#lbl2)))
+            %   branch(NextTestLabel)
+            %   lbl(1)
+            %   Code for clause1
+            %   branch(EndLabel)
+            %   lbl(2)
+            %   Code for clause2
+            %   lbl(NextTestLabel)
+            %
+            %   ... Other clauses ...
+            %
+            %   lbl(EndLabel)
+            %
+            % A clause with guards however must be the only clause in the sequence.
+            % This is because after testing the pattern, we need code to test the guards,
+            % which is not possible in the opcode showed above.
+            % The opcode for clauses with guards looks like this:
+            %
+            %   patternMatch(x(0) k('#'(Pat1#lbl1)))
+            %   lbl(1)
+            %     Guards code
+            %   condBranch(GuardReg NextTestLabel ErrorLabel)
+            %   Code for clause1
+            %   branch(EndLabel)
+            %   lbl(NextTestLabel)
+            %   patternMatch(....)
+            %   ...
+            %   lbl(EndLabel)
+            %
+            % If the pattern match is successful, the jump target it the code of the guards, and not the code of the clause.
+            % The guards code has to be placed exactly there so that it has access to the captures created by the patternMatch!
+            %
+            % Code-related explanations
+            % -------------------------
+            % The jump destination of done by the patternMatch (which is the clause' body or the guards code
+            % as illustrated above) has to be identified by a label, found in the variable ThisLabel
+            %
+            % Currently, it is still possible to generate one test per clause.
+            % The function InNewSequence just has to return true in all cases.
+            %
+            % The code needs to be able to perform a test instruction and
+            % jump to the next test if unsuccessful. Hence the code keeps track
+            % of both the current test label (in ThisTestLabel) and the next test
+            % label (NextTestLabel).
+            %
             % The cell Code holds the code generated for all completely visited sequences.
-            % The cell CodeBuffer holds the code for all handled clauses of the current sequence. This does not include the test instruction. When a new sequence is started (tested with IsNewSequence), the test instruction is prepended to the CodeBuffer by PrefixOfSeq and this is then appended to the Code cell.
-            % After execution of the body of a clause, no code of other clauses should be executed, hence the need to have an EndLabel.
+            % The cell CodeBuffer holds the code for all handled clauses of the
+            % current sequence. This does not include the prefix of the clause' code.
+            %
+            % The prefix of a clause' code is simply the code performing the
+            % tests of the pattern and the guards, which has to pass
+            % successfully for the clause' code to be executed.
+            %
+            % Due to the difference of code structure between clauses with guards and those without,
+            % the prefix is constructed differently in these 2 cases. See function PrefixOfSeq.
+            % For clauses without guards, the simplest case, the prefix simply consists in the patternMatch instruction.
+            % As multiple clauses can be grouped, the clause' code label has to
+            % be introduced in the CodeBuffer, it cannot be set by PrefixOfSeq
+            % when closing the sequence.
+            %
+            % It is the opposite situation in clauses with guards, because the patternMatch should not jump
+            % to the clause' body, but to the guards' code. That's why in this case the label ThisLabel is not
+            % introduced in the CodeBuffer, because it would then make the patternMatch jump to the clause' body,
+            % short-circuiting the guards code.
+            %
+            % The same applies to the call to UsedSymbolsToYReg that inserts code to make used symbols available in Y registers.
+            % For clauses without guards, it is added to CodeBuffer, but for clauses with guards,
+            % this code has to be inserted before the guards code, so that capture are available.
+
+
+
+            % When a new sequence is started (tested with IsNewSequence), the previous sequence is closed:
+            % its prefix followed by the CodeBuffer are appended to Code.
+            % After execution of the body of a clause, no code of other clauses
+            % should be executed, hence the need to have an EndLabel.
 
 
             fun {HandleCase Clauses Params}
@@ -1872,20 +1942,20 @@ define
                   % This function will return the value corresponding to this clause in the record passed to patternMatch
                   % The XIndex cell contains the last assigned X register
                   % It collects symbols found in the pattern in the UsedSymbols list
-                  {Show 'Called TransformPattern with'}
-                  {DumpAST.dumpAST Pattern _}
                   case Pattern
                   of fConst(Val Pos) then
                      % Call TransformPattern on the value in fConst, as it could be a safe holding a capture
                      {TransformPattern Val XIndex UsedSymbols }
                   [] fSym(Sym Pos) then
                      % If this is a symbol, it is a capture in the pattern match
-                     % Assign the next X register to that symbol, add it to the list of used symbols, and replace it with a newPatMatCapture.
+                     % Assign the next X register to that symbol, add it to the
+                     % list of used symbols, and replace it with a newPatMatCapture.
                      XIndex:=@XIndex+1
                      {Sym set(xindex @XIndex)}
                      UsedSymbols:=Sym|@UsedSymbols
                      {Boot_CompilerSupport.newPatMatCapture @XIndex}
                   [] fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
+                     % For a guarded clause, only look at its pattern
                      {TransformPattern RealPattern XIndex UsedSymbols }
                   [] fOpenRecord(fConst(RecordLabel _) Features) then
                      % OpenRecords are replaced by a newPatMatOpenRecord.
@@ -1914,11 +1984,10 @@ define
                   [] fRecord(fConst(RecordLabel _) Features) then
                      %replace the fRecord by the oz value it represents. This mean we build the record from the AST.
                      {List.foldL Features fun{$ Acc I} case I of fColon(fConst(L _) F) then {Record.adjoin Acc RecordLabel(L:{TransformPattern F XIndex UsedSymbols })} else Acc end end RecordLabel()}
-
                   else
                      % Pattern is a record
                      if {IsSafe Pattern} then
-                        % Open safe and transform it
+                        % Open safe and transform it.
                         {TransformPattern {AccessSafe Pattern} XIndex UsedSymbols }
                      elseif {Record.is Pattern} then
                         % Recursively transform each value of the record.
@@ -1933,28 +2002,17 @@ define
 
 
                fun {PrefixOfSeq TestedValue Pattern Type PatternMatchRecord ThisLabel NextTestLabel ErrorLabel UsedSymbols Params}
-                  % This distinction was needed when the code didn't use the patMatOpenRecord
-                  % As we group multiple pattern matches in one instruction, we
-                  % need this to build the prefix after we visited all grouped
-                  % clauses
-                  %if Type==fRecord orelse Type==fConst then
-                  %   patternMatch(x(0) k(@PatternMatchRecord))|
-                  %   branch(@NextTestLabel)|nil
-                  %else
-                  %   nil
-                  %end
-                  {Show 'Preparing prefix for'}
-                  {DumpAST.dumpAST Pattern _}
                   case Pattern
                   of fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
                      % This is a clause with guards. The label of the guards code is
                      % ThisLabel, so that the patternmatch jumps to the guards code.
 
-                     % Place TestedValue in x(0)
+                     % Place TestedValue in x(0) as guards code could have wiped it
                      move({RegForSym TestedValue Params} x(0))|
                      patternMatch(x(0) k(PatternMatchRecord))|
                      branch(NextTestLabel)|
                      lbl(ThisLabel)|
+                     % Make captures available to guards code
                      {UsedSymbolsToYReg UsedSymbols}|
                      {GenCodeInt Guards Params}|
                      move({RegForSym GuardSymbol Params} x(1))|
@@ -1965,7 +2023,7 @@ define
                      % each clause' code is set already in the loop, so we do not
                      % include it here.
 
-                     % Place TestedValue in x(0)
+                     % Place TestedValue in x(0) as guards code could have wiped it
                      move({RegForSym TestedValue Params} x(0))|
                      patternMatch(x(0) k(PatternMatchRecord))|
                      branch(NextTestLabel)|
@@ -1997,43 +2055,35 @@ define
                EndLabel={GenLabel}
                % Label identifying error code
                ErrorLabel={GenLabel}
+
                % Cell holding the last pattern encountered in the loop.
                % Needed to be able to add guards opcodes for last clause
                % FIXME: could possibly be improved
                ThisPattern={NewCell unit}
                PreviousPattern={NewCell unit}
                ThisGuardLabel={NewCell {GenLabel}}
+
                % Collect symbols used in clause code.
                % Declared here because it needs to be passed to ProfixOfSeq out of the {List.forAllInd Clauses} loop.
                UsedSymbols={NewCell nil}
 
                fun {IsNewSequence Label Type}
-                  % Only fRecord and fConst are part of sequences
-                  % fRecord are stored in a safe in a fConst
-                  % hence we can just test if the label is fConst
+                  % Only fRecord and fConst with no guards are part of sequences
+                  % AS fRecord are stored in a safe in a fConst we can just test if the label is fConst
                   % Return true to debug and see all clauses generated seperately
                   % Seems that by using patMatOpenRecord we can put all in one sequence
-                  {Show label}
-                  {Show Label}
-                  {Show type}
-                  {Show Type}
                   if Type==none then
+                     % First iteration
                      true
                   elseif Label==fNamedSideCondition then
-                     {Show '**************** New sequence because label was fSideCondition (start with guards clause) *********************'}
+                     % Beginning a clause with guards
                      true
                   elseif Type==fNamedSideCondition then
-                     {Show '**************** New sequence because type was fSideCondition (after guards clause) *********************'}
+                     % This clause follows a clause with guards
                      true
                   else
-                     {Show '**************** No new sequence, CONTINUING *********************'}
                      false
                   end
-                  %if Type==fConst andthen Label==fConst then
-                  %   false
-                  %else
-                  %   true
-                  %end
                end
             in
                {List.forAllInd Clauses proc{$ Ind fCaseClause(Pattern Body)}
@@ -2050,13 +2100,12 @@ define
                                           PreviousPattern:=@ThisPattern
                                           ThisPattern:=Pattern
 
-                                          % If we start a new sequence, had the code of the previous sequence to Code
-                                          % This shortens the code, but augments the number of y records used, as the
-                                          % y index is not reset for each clause.
+                                          % If we start a new sequence, add the code of the previous sequence to Code
                                           if {IsNewSequence PatternLabel @SequenceType} then
                                              % Do not do it at the first iteration
                                              if @SequenceType\=none then
                                                 if @ThisTestLabel\=unit then
+                                                   % Do not include a label for first test
                                                    Code:=@Code|lbl(@ThisTestLabel)|{UsedSymbolsToYReg @UsedSymbols}|{PrefixOfSeq TestedValue @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
                                                 else
                                                    Code:=@Code|{PrefixOfSeq TestedValue @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
@@ -2075,12 +2124,16 @@ define
 
                                           ThisLabel:={GenLabel}
 
+
                                           % Collect symbol used, so that they can be stored in Y regs to
                                           % keep them accessible in this branch
+                                          % Reset it for each clause
                                           UsedSymbols:=nil
 
                                           % Index of last assigned X register.
                                           % Initialise it with 0 to keep the value we test against in x(0)
+                                          % FIXME: this can certainly by changed as we now put the tested value
+                                          % in x(0) at the beginning of each test.
                                           XIndex={NewCell 0}
 
                                           % Build record used in the pattern matching instruction
@@ -2092,8 +2145,6 @@ define
                                           PatternIndex=@SeqLen+1
 
                                           PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
-                                          % ThisLabel is set by PrefixOfSequence, not here
-                                          % Used symbols are also used in the prefix, so they are accessible in guards code
                                           if @SequenceType==fNamedSideCondition then
                                              CodeBuffer:=@CodeBuffer|{GenCodeInt Body Params}|branch(EndLabel)|nil
                                           else
@@ -2102,6 +2153,7 @@ define
                                           % Update number of clauses visited in current sequence
                                           SeqLen:=@SeqLen+1
                                        end}
+               % Add the code for the last clause, for error handling, and the end label
                Code:=@Code|
                      % FIXME: this if expression in the list might not be the clearest code
                      if @ThisTestLabel\=unit then
