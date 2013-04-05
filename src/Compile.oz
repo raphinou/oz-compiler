@@ -220,7 +220,7 @@ define
          elseif L==1 then
             Instrs.1
          else
-            raise emptyListPassedToWrapInFAnd end
+            unit
          end
       end
    end
@@ -664,8 +664,8 @@ define
             NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
             fOpenRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end })
-         [] fSideCondition(Pattern Decls Guards Pos) then
-            fSideCondition({DesugarExpr Pattern Params} Decls {List.map Guards fun {$ I} {DesugarExpr I Params} end} Pos)
+         [] fSideCondition(Pattern Decls Guards GuardSymbol Pos) then
+            fSideCondition({DesugarExpr Pattern Params} Decls {List.map Guards fun {$ I} {DesugarExpr I Params} end} GuardSymbol Pos)
          [] fColon(Feature Value) then
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
 
@@ -706,8 +706,8 @@ define
       %---------------------------
          fun {DesugarCaseClause Clause}
             case Clause
-            of fCaseClause(fSideCondition(Pattern Decls Guards Pos) Body) then
-               fCaseClause(fSideCondition({DesugarExpr Pattern Params} Decls {DesugarExpr Guards Params}  Pos) {DesugarStat Body Params} )
+            of fCaseClause(fSideCondition(Pattern Decls Guards GuardSymbol Pos) Body) then
+               fCaseClause(fSideCondition({DesugarExpr Pattern Params} Decls {DesugarStat Guards Params} GuardSymbol  Pos) {DesugarStat Body Params} )
             [] fCaseClause(Pattern Body) then
                fCaseClause({DesugarExpr Pattern Params} {DesugarStat Body Params})
             end
@@ -1049,6 +1049,8 @@ define
             % FIXME:  is this really the place to constantise the record.
             % This requires the unnest function to be called on both sides of fEq before it gets treated....
             {UnnestFRecord AST Params}
+         [] fSideCondition(Pattern Decls Guards GuardSymbol Pos) then
+            fSideCondition({UnnesterInt Pattern Params} Decls {UnnesterInt Guards Params} GuardSymbol Pos)
          else
             {DefaultPass AST UnnesterInt Params}
          end
@@ -1204,15 +1206,12 @@ define
             end
 
          [] fCase(Val Clauses Else Pos) then
-            NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil} guardsCode:{NewCell nil})}
+            NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil})}
             fun {NamerForClauseGuards Guard Params}
                NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
-               NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
             in
-               %(Params.guardsCode):=fEq(NewSymbol {NamerForBody Guard Params} Pos)|@(Params.guardsCode)
-               (Params.guardsCode):=fLocal(NewProcSym fAnd(fProc(NewProcSym nil fEq(NewSymbol {NamerForBody Guard Params} Pos) nil Pos) fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)) Pos)|@(Params.guardsCode)
                (Params.guardsSymbols):=NewSymbol|@(Params.guardsSymbols)
-               NewSymbol
+               fEq(NewSymbol {NamerForBody Guard Params} Pos)
             end
 
             fun {NamerForCaptures Pattern Params}
@@ -1259,16 +1258,18 @@ define
                                           in
                                              case I
                                              of fCaseClause(fSideCondition(Pattern Decls Guards Pos) Body) then
+                                                NewGuardSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                                                 NewGuards
                                              in
                                                 {Params.env backup}
                                                 NewPattern = {NamerForCaptures Pattern NewParams}
                                                 % Don't create new symbols in guards, but give access to
                                                 % those defined in the pattern by using the same environment
-                                                NewGuards={NamerForClauseGuards Guards NewParams}
+                                                NewGuards=fEq(NewGuardSymbol {NamerForBody Guards Params} Pos)
                                                 NewBody = {NamerForBody Body NewParams}
+                                                (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
                                                 {Params.env restore}
-                                                fCaseClause(fSideCondition(NewPattern Decls NewGuards Pos) NewBody)
+                                                fCaseClause(fSideCondition(NewPattern Decls NewGuards NewGuardSymbol Pos) NewBody)
                                              [] fCaseClause(Pattern Body) then
                                                 {Params.env backup}
                                                 NewPattern = {NamerForCaptures Pattern NewParams}
@@ -1279,11 +1280,7 @@ define
                                           end }
 
             Decls = {List.append @(NewParams.captures) @(NewParams.guardsSymbols)}
-            if {List.length @(NewParams.guardsCode)}>0 then
-               NewCaseAST=fAnd( {WrapInFAnd @(NewParams.guardsCode)} fCase({NamerForBody Val Params} NewClauses {NamerForBody Else Params} Pos) )
-            else
-               NewCaseAST=fCase({NamerForBody Val Params} NewClauses {NamerForBody Else Params} Pos)
-            end
+            NewCaseAST=fCase({NamerForBody Val Params} NewClauses {NamerForBody Else Params} Pos)
             if {List.length Decls}>0 then
                R=fLocal({WrapInFAnd Decls} NewCaseAST Pos)
             else
@@ -1606,6 +1603,8 @@ define
       fun {RegForSym AST Params}
       %-------------------------
          % Return register for fSym or fConst
+         {Show 'reg for sym'}
+         {DumpAST.dumpAST AST _}
          case AST
          of fConst(K _) then
             k(K)
@@ -1822,7 +1821,7 @@ define
             end
 
          %-----------------------------
-         [] fCase(Val Clauses Else Pos) then
+         [] fCase(TestedValue Clauses Else Pos) then
          %-----------------------------
             % A case statement is testing a value Val against clauses:
             %
@@ -1886,7 +1885,7 @@ define
                      {Sym set(xindex @XIndex)}
                      UsedSymbols:=Sym|@UsedSymbols
                      {Boot_CompilerSupport.newPatMatCapture @XIndex}
-                  [] fSideCondition(RealPattern Decls Guards Pos) then
+                  [] fSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
                      {TransformPattern RealPattern XIndex UsedSymbols }
                   [] fOpenRecord(fConst(RecordLabel _) Features) then
                      % OpenRecords are replaced by a newPatMatOpenRecord.
@@ -1933,7 +1932,7 @@ define
                end
 
 
-               fun {PrefixOfSeq Pattern Type PatternMatchRecord ThisLabel NextTestLabel ErrorLabel Params}
+               fun {PrefixOfSeq TestedValue Pattern Type PatternMatchRecord ThisLabel NextTestLabel ErrorLabel UsedSymbols Params}
                   % This distinction was needed when the code didn't use the patMatOpenRecord
                   % As we group multiple pattern matches in one instruction, we
                   % need this to build the prefix after we visited all grouped
@@ -1947,21 +1946,30 @@ define
                   {Show 'Preparing prefix for'}
                   {DumpAST.dumpAST Pattern _}
                   case Pattern
-                  of fSideCondition(RealPattern Decls Guards Pos) then
+                  of fSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
+                     % This is a clause with guards. The label of the guards code is
+                     % ThisLabel, so that the patternmatch jumps to the guards code.
+
+                     % Place TestedValue in x(0)
+                     move({RegForSym TestedValue Params} x(0))|
                      patternMatch(x(0) k(PatternMatchRecord))|
                      branch(NextTestLabel)|
                      lbl(ThisLabel)|
-                     move(k('will test guard') x(0))|
-                     call(k(Show) 1)|
-                     move({RegForSym Guards Params} x(0))|
-                     call(k(Show) 1)|
-                     move({RegForSym Guards Params} x(1))|
-                     condBranch(x(1) NextTestLabel ErrorLabel)|nil
+                     {UsedSymbolsToYReg UsedSymbols}|
+                     {GenCodeInt Guards Params}|
+                     move({RegForSym GuardSymbol Params} x(1))|
+                     condBranch(x(1) NextTestLabel ErrorLabel)|
+                     nil
                   else
-                     {Show 'we got in the else branch'}
+                     % This is the prefix of a sequence. In this case, the label for
+                     % each clause' code is set already in the loop, so we do not
+                     % include it here.
+
+                     % Place TestedValue in x(0)
+                     move({RegForSym TestedValue Params} x(0))|
                      patternMatch(x(0) k(PatternMatchRecord))|
                      branch(NextTestLabel)|
-                     lbl(ThisLabel)|nil
+                     nil
                   end
                end
 
@@ -1995,6 +2003,9 @@ define
                ThisPattern={NewCell unit}
                PreviousPattern={NewCell unit}
                ThisGuardLabel={NewCell {GenLabel}}
+               % Collect symbols used in clause code.
+               % Declared here because it needs to be passed to ProfixOfSeq out of the {List.forAllInd Clauses} loop.
+               UsedSymbols={NewCell nil}
 
                fun {IsNewSequence Label Type}
                   % Only fRecord and fConst are part of sequences
@@ -2027,7 +2038,6 @@ define
             in
                {List.forAllInd Clauses proc{$ Ind fCaseClause(Pattern Body)}
                                           PatternLabel={Record.label Pattern}
-                                          UsedSymbols
                                           XIndex
                                           Prefix
                                           PatternForRecord
@@ -2047,9 +2057,9 @@ define
                                              % Do not do it at the first iteration
                                              if @SequenceType\=none then
                                                 if @ThisTestLabel\=unit then
-                                                   Code:=@Code|lbl(@ThisTestLabel)|{PrefixOfSeq @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel Params}|@CodeBuffer|nil
+                                                   Code:=@Code|lbl(@ThisTestLabel)|{UsedSymbolsToYReg @UsedSymbols}|{PrefixOfSeq TestedValue @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
                                                 else
-                                                   Code:=@Code|{PrefixOfSeq @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel Params}|@CodeBuffer|nil
+                                                   Code:=@Code|{PrefixOfSeq TestedValue @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
                                                 end
                                              end
                                              % Reset loop variables
@@ -2067,7 +2077,7 @@ define
 
                                           % Collect symbol used, so that they can be stored in Y regs to
                                           % keep them accessible in this branch
-                                          UsedSymbols={NewCell nil}
+                                          UsedSymbols:=nil
 
                                           % Index of last assigned X register.
                                           % Initialise it with 0 to keep the value we test against in x(0)
@@ -2083,16 +2093,21 @@ define
 
                                           PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
                                           % ThisLabel is set by PrefixOfSequence, not here
-                                          CodeBuffer:=@CodeBuffer|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
+                                          % Used symbols are also used in the prefix, so they are accessible in guards code
+                                          if @SequenceType==fSideCondition then
+                                             CodeBuffer:=@CodeBuffer|{GenCodeInt Body Params}|branch(EndLabel)|nil
+                                          else
+                                             CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
+                                          end
                                           % Update number of clauses visited in current sequence
                                           SeqLen:=@SeqLen+1
                                        end}
                Code:=@Code|
                      % FIXME: this if expression in the list might not be the clearest code
                      if @ThisTestLabel\=unit then
-                        lbl(@ThisTestLabel)|{PrefixOfSeq @ThisPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel Params}
+                        lbl(@ThisTestLabel)|{PrefixOfSeq TestedValue @ThisPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}
                      else
-                        {PrefixOfSeq @ThisPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel Params}
+                        {PrefixOfSeq TestedValue @ThisPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}
                      end|
                      @CodeBuffer|
                      %---- error ----
@@ -2111,7 +2126,6 @@ define
                {List.flatten @Code}
             end
          in
-            move({RegForSym Val Params} x(0))|
             {HandleCase Clauses Params}|
             nil
 
