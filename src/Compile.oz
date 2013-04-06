@@ -77,6 +77,7 @@ define
          %  -global
          %  -localised (when a global has been replaced by a new local symbol)
          %  -patternmatch
+         %  -wildcard (unused symbol)
          type
          ref
       meth clone(?NewSym)
@@ -190,6 +191,13 @@ define
          % eg when a variable local to a proc override a variable captured from the parent environment.
          NewSymbol = { New Symbol init(Name Pos)}
          {Dictionary.put @dict Name NewSymbol}
+      end
+      meth setSyntheticSymbol(Pos ?NewSymbol)
+         % create a new symbol and map it to variable Name.
+         % This method is used when we need to override an already defined mapping,
+         % eg when a variable local to a proc override a variable captured from the parent environment.
+         NewSymbol = { New SyntheticSymbol init(Pos)}
+         {Dictionary.put @dict {NewName} NewSymbol}
       end
       meth backup()
          % Backup environment so it can be restored later.
@@ -1101,11 +1109,9 @@ define
          %----------------
             Sym
          in
-            % in declarations or procedure procdecl, assign symbol to variables
-            %if Params.indecls orelse ({HasFeature Params procdecl}  andthen Params.procdecl) then
-               % assign symbol in declarations
-               Sym={Params.env setSymbol(Name Pos $)}
-               fSym( Sym Pos)
+            % assign symbol in declarations
+            Sym={Params.env setSymbol(Name Pos $)}
+            fSym( Sym Pos)
          %--------------------
          [] fAnd(First Second) then
          %--------------------
@@ -1239,6 +1245,16 @@ define
                   {Show 'fColon in NamerForCapture'}
                   % Pattern matching on values in records, not on the features
                   fColon({NamerForBody Key Params} {NamerForCaptures Val Params} )
+               [] fWildcard(Pos) then
+                  NewSymbol
+               in
+                  NewSymbol={Params.env setSyntheticSymbol(Pos $)}
+                  {NewSymbol set(type wildcard)}
+                  % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
+                  % Even if it is not used, we need to declare it
+                  (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
+                  % In the fConst, directly place the 'safe'
+                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
                else
                   % CHECKME : is this ok?
                   {NamerForBody Pattern Params}
