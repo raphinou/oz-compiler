@@ -502,14 +502,26 @@ These functions all have the same structure:
 \end{figure}
 Having the same structure enables the use of the function DefaultPass, which calls the function passed as second arguments recursively on the AST with Params as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
 Params if a record with label params, and features are added according to use. For an example, look at the globaliser below.%FIXME: add reference
-\subsection{Namer}
+\subsection{Declarations Flattener}
+The Oz language accepts complex instructions in the declaration part of \lstinline!local Decls in Body end!. This brings the need to decide what variables are declared for each instruction present in the \lstinline!Decls!. 
+For example, in unification, only the left hand side variable gets declared, and only B is implicitely declared in the following code snippet:
+\begin{lstlisting}
+   local
+      B=2*A
+   in
+      ...
+   end
+\end{lstlisting}
+Luckily, this has been clearly formalised by the Oz implementers and published on the web\footnote[]{http://www.mozart-oz.org/documentation/notation/node6.html}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
+
+\subsection{Namer}\label{sec:arch:namer}
 The namer  basically replaces all occurences if a variable's \lstinline!fVar! by \lstinline!fSym! records holding the symbol representing said variable. Each variable is assigned one unique symbol. 
 
 In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVars! by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
 
 \subsubsection{Declarations}
 So the question raises of when do variables get declared.
-One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}.  \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing variables with the same name coming from the parent environment.
+One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}.  \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing variables with the same name coming from the parent environment. At this stage, \lstinline!Decls! only contains simple variables declaration, thanks to the declaration flattener (section \label{sec:arch:declsflattener}).
 
 Another kind of declaration is found in the definition of procedures and functions. Indeed, fProc (section \ref{sec:input:procedures} and fFun (section \ref{sec:input:functions}) records also implicitely declare the variables for their formal parameters. % see test 029
 
@@ -568,11 +580,10 @@ will result by this transformation in an AST corresponding to this Oz code:
 \end{lstlisting}
 
 %FIXME: add reference
-In addition, the \lstinline!fSym! record corresponding to these capture variables are themselves stored in an unforgeable secure structure (as described in CTMCP Section 3.7.5) which is itself wrapped in an \lstinline!fConst!. The reason of this manipulation is to prevent manipulations of those symbols by later compiler passes. Now these will be handled as constants in all subsequent compiler passes. Another consequence of this is that the records implicitely declaring variables in a pattern are seen as constant records, all features being constants! And these are treated as such, notably in the desugaring of records (section \ref{sec:desugar:records}).
+In addition, the \lstinline!fSym! record corresponding to these capture variables are themselves stored in an unforgeable secure structure (as described in CTMCP Section 3.7.5) which is itself wrapped in an \lstinline!fConst!. The reason of this manipulation is to prevent manipulations of those symbols by later compiler passes. Now these will be handled as constants in all subsequent compiler passes. Another consequence of this is that the records implicitely declaring variables in a pattern are seen as constant records, all features being constants! And these are treated as such, notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
 
 \subsubsection{Non-declaration code}
 In code not declaring variables, the namer's job is much simpler: it will simply replace all occurences of fVar records by a fSym record having the corresponding symbol as first feature.
-
 \subsubsection{Compiler Code Notes}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
 There local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
@@ -608,7 +619,7 @@ This code also illustrates how it comes that functions can access variables defi
 
 
 
-\subsection{Desugar}\label{section:desugar}
+\subsection{Desugar}\label{sec:arch:desugar}
 The desugar pass handles the transformation of syntactic sugar code in its canonical form.
 The desugar function has two local functions defined, one for handling expressions, one for handling statements.
 \subsubsection{On statements and expressions}
@@ -822,7 +833,7 @@ The desugar step of lazy function simply revolves in wrapping in a thread a call
 \subsubsection{Transformation in an expression}
 A statement can be transformed in an expression of the value assigned to the variable in which place a \$ was placed.
 Currently only the form fun \{\$ Args\} is supported
-\subsubsection{Records}\label{sec:desugar:records}
+\subsubsection{Records}\label{sec:arch:desugar:records}
 As mentioned in the description of records, the features can be left out, and are in that case implicit, with increasing integer values starting at 1.
 In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in \lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the programmer to avoid conflict, as implicit feature assignment does not check for explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is coherent with Mozart 1. %FIXME: check this is all ok.
 An additional action was added in the desugar step for records: transforming records that are constants or records that have non-constant label or features. This transformation replaces fRecord that have all label, features and values constant by a fConst with as value the record reconstructed. This greatly simplifies the AST for these records, and can be done because the value of the record can be used as is in later steps, notably the opcodes generation. 
@@ -904,9 +915,9 @@ or an expression as in
 in which case both code branches are desugared as expression.
 A fNoElse record is left as is and will only be useful for the opcode generation function.
 
-\subsection{Unnester}            
+\subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
-\subsubsection{Unification}\label{sec:unnester:unification}
+\subsubsection{Unification}\label{sec:arch:unnester:unification}
 The unnesting result of a unification instruction depends on the elementary character of each side, giving these three cases:
 \begin{description}
   \item[Both elementary]In this case there is nothing to do
@@ -1022,7 +1033,7 @@ And this requires a new unnesting step (see the unnesting of unifications) resul
 It is also the unnester that will transform the nesting marker. There are three cases that are handled.
 \begin{description}
   \item[Definitions of procedures] At this step, if we found a nesting marker as the identifier of a procedure, it is necessarily in an assignment statement. The unnester needs to transform \lstinline!X=proc{$ A..N}! in \lstinline!proc{X A..N}!.
-  \item[As argument of a call] In this case, the nesting marker has to be replaced by the variable the expression is assigned to. For example, \lstinline!X={P A $ B}! needs to be transformed in  \lstinline!{P A X B}!. Note that this transformation is excluding the unification transformation described earlier in section \ref{sec:unnester:unification}: either there is a nesting marker and the symbol the call expression is assigned to replaces the nesting marker in the arguments list, OR the symbol the call expression is assigned to is added as last argument to the call and in that case no argument may be the nesting marker.
+  \item[As argument of a call] In this case, the nesting marker has to be replaced by the variable the expression is assigned to. For example, \lstinline!X={P A $ B}! needs to be transformed in  \lstinline!{P A X B}!. Note that this transformation is excluding the unification transformation described earlier in section \ref{sec:arch:unnester:unification}: either there is a nesting marker and the symbol the call expression is assigned to replaces the nesting marker in the arguments list, OR the symbol the call expression is assigned to is added as last argument to the call and in that case no argument may be the nesting marker.
   \item[In matching an argument] %FIXME: to do
 \end{description}
 
@@ -1347,6 +1358,43 @@ Possibly include some measure?
 
 
 
+
+
+\begin{appendices} 
+
+  \chapter{Pattern Variables}\label{appendix:patternvariables}
+%FIXME: arrange layout
+Statements:
+$
+D1 D2                        PV(D1) \cup PV(D2)
+x                            \{x\}
+(S)                          PV(S)
+(D in S)                     PV(S) - PV(D)
+local D in S end             PV(S) - PV(D)
+proc ... {E ...} ... end     PV(E)
+fun ... {E ...} ... end      PV(E)
+class E ... end              PV(E)
+functor E ... end            PV(E)
+E = ...                      PV(E)
+otherwise                    \emptyset
+$
+
+
+Declarations:
+
+$
+x                                         \{x\}
+(E)                                       PV(E)
+(D in [ S ] E)                            (PV(S) \cup PV(E)) - PV(D)
+local D in [ S ] E end                    (PV(S) \cup PV(E)) - PV(D)
+E1 = E2                                   PV(E1) \cup PV(E2)
+[E1 ... En]                               PV(E1) \cup ... \cup PV(En)
+E1|E2                                     PV(E1) \cup PV(E2)
+E1\#...\#En                                 PV(E1) \cup ... \cup PV(En)
+il([ f1: ] E1 ... [ fn: ] En [ ... ])     PV(E1) \cup ... \cup PV(En)
+otherwise                                 \emptyset
+$
+\end{appendices}
 \end{document}
 
 % vim: set textwidth=80
