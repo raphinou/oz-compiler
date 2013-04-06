@@ -222,7 +222,7 @@ These are the types that are currently handled, with their corresponding records
   \item[atoms] fAtom(value position)
 \end{description}
 
-\subsection{Variables}
+\subsection{Variables}\label{sec:input:variables}
 A variable is found in a record fVar(VarName Pos)
 
 \subsection{Unification}
@@ -248,9 +248,9 @@ Example:\\
   }
 \end{tabular}
 
-\subsection{Declarations}
+\subsection{Declarations}\label{sec:input:flocal}
 Declarations are found in records of the form fLocal(Declarations Body Pos), where declarations and Body are both AST subtrees. 
-example:
+For example:
 
 \begin{lstlisting}
 local
@@ -274,7 +274,7 @@ fLocal(
             fInt(1 _) ))
 \end{verbatim}
 
-\subsection{Procedures}
+\subsection{Procedures}\label{sec:input:procedures}
 \subsubsection{Definitions}
 Procedures are found in records of the form fProc(Name Arguments Body Flags Pos), where the Arguments and Body features are AST subtrees. %FIXME: what can be Name? fVar, $. Other possibilities?
 Example:
@@ -297,7 +297,7 @@ fApply(
            |fInt( 3 _))))
 \end{verbatim}
 
-\subsection{Functions}                                                         
+\subsection{Functions}\label{sec:input:functions}
 Funtion definitions are found in the AST un fFun records, with the same features found in fProc records. Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
 However, only functions can be marked as lazy as in \lstinline!fun lazy {F N} .. end!. This lazy marker is translated in a flag.
 \subsubsection{Definitions}
@@ -380,17 +380,12 @@ When the feature is not explicitely given, the item in the list of features and 
 \end{lstlisting}
 
 
-\subsection{Ignored expression: \_}
-Oz syntax allows to put \_ in the location of an value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a record with label fWildcard and with only feature the position of the marker in the code.
-Ignoring the value returned by a function is thus written \lstinline!_={F N}!. In a pattern matching of a record, we might reuse only the first feature of the record, ognoring values of others. This is done like this:
-\begin{lstlisting}
-  case Record 
-  of label(V _ _) then
-    % Use V here, ignoring the other feature values
-    ..
-  end
-\end{lstlisting}
+\subsection{Ignored expression: \_}\label{sec:input:wildcard}
+Oz syntax allows to put \lstinline!_! in the location of a value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a record \lstinline!fWildcard(Pos)!.
+Ignoring the value returned by a function is thus written \lstinline!_={F N}!. 
 This allows the user to not declare variables he wouldn't use anyway, which would in addition raise a warning about a variable used only once\ldots
+
+Pattern matchin is covered extensively in section \ref{sec:input:patternmatching}
 
 \subsection{Threads}
 Thread instructions are present in the AST in the form of records with label fThread, and with two features: the body of the thread, and its position in the source code:
@@ -413,8 +408,77 @@ This code results in a fLockThen record in the AST, with 3 features: the lock L,
 \subsection{If then else}
 The if..then..else construct is put in records:
 fBoolCase( Condition ThenCode ElseCode)
-The form if..then..end, ie with no else branch, gives this AST:
-fBoolCase( Condition ThenCode fNoElse(pos).
+The else part is optional in Oz. In this case, ElseCode is a record \lstinline!fNoElse(pos)! in the AST.
+\subsection{Boolean combinations}\label{sec:input:booleancombinations}
+The boolean conjunction operation in Oz represented by the keyword \lstinline!andthen!. Such a conjunction is present in the AST in the form of a record \lstinline!fAndThen(First Second)!, where first and second must be expressions with a boolean value.
+The boolean disjunction operation is done thanks to the keyword \lstinline!orelse!, present in the AST in the form of a record \lstinline!fOrElse(First Second)!.
+\subsection{Case Instruction and Pattern Matching}\label{sec:input:patternmatching}
+The Case instruction in Oz is of the following form where optional parts are enclosed in double square brackets ([[ ]]).
+\begin{lstlisting}
+   case Value                           % _
+   of Pattern1 [[andthen Guards1]] then %  \____ This is a clause
+     Code1                              % _/
+   [] Pattern2 [[andthen Guards2]] then
+     Code2
+   ..
+   [[else
+     ElseCode]]
+   end
+\end{lstlisting}
+This ends up in the AST in a record of the form \lstinline!fCase(Value Clauses ElseCode pos)!.
+\lstinline!Clauses! is a list of records each representing one clause and containing the clause' pattern, guards and code. We will analyse these further below.
+The else part of the instruction is optional. If no else is provided, then ElseCode in the AST is a record \lstinline!fNoElse(pos)!.
+
+A clause with no guards is present in the AST in the form of a record \lstinline!fCaseClause(Pattern Body)!. \lstinline!Pattern! can be a constant value (integer, string, record, \ldots), present in the AST as described earlier. It can also be a record where a feature value is not a constant but a variable (in a \lstinline!fVar(Name pos)! record as described in section \ref{sec:input:variables}). In case of a match of the constant feature values in the pattern, this declares said variable and assigns the value of the corresponding feature in the value the pattern is tested against. Here is an example:
+\begin{lstlisting}
+  R=lab(a b c d)
+  case R
+  of lab(a B c d) then
+    {Show B}  % B's value is b
+  end
+\end{lstlisting}
+Features of a record in a pattern can also have the wildcard \lstinline!_! as value, represented in the AST as described in section \ref{sec:input:wildcard}.
+
+The pattern can also be or contain an open record specifying only the first features which should match, as in the following example:
+\begin{lstlisting}
+  R=lab(a b c d)
+  case R
+  of lab(a b ...) then
+    % Code for record with label lab
+    % and value a and b for two first features.
+  end
+\end{lstlisting}
+The syntax for an open record pattern is the same as for a record pattern, except that subsequent features that should be ignored are replaced by \lstinline!...!. Also in the AST an open record is very similar to a record. Only the label changes to \lstinline!fOpenRecord!, and only the specified features are present in the AST, the \lstinline!...! being absent from the AST. Here is an example of an open record:
+\lstinline!lab(a b ...)! 
+and its AST representation:
+\begin{lstlisting}
+   fOpenRecord(
+      fConst(lab pos)
+      |(
+         fColon(
+            fConst(1 pos)
+            fConst(a pos)
+         )
+         |(
+            fColon(
+               fConst(2 pos)
+               fConst(b pos)
+            )
+            nil
+         )
+      )
+   )
+\end{lstlisting}
+
+Records and open records can of course be nested.
+
+A clause with guards is present in the AST in the form of a record \lstinline!fSideCondition(Pattern Decls Guards Pos)!, where \lstinline!Pattern! is as above, Decls is usually skipped (\lstinline!fSkip(pos)!)%FIXME: what are decls??
+and Guards is simply the AST of the code of the guard (without the \lstinline!andthen! introducing the guard).
+Guards must be an expression with a boolean value, possibly using the boolean combinations of section \ref{sec:input:booleancombinations}.
+
+% FIXME: add !Var and conjunctions
+
+
 \chapter{Compiler}
 \section{Architecture}
 The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument that they need to transform, and they return the transformed AST.
@@ -439,10 +503,21 @@ These functions all have the same structure:
 Having the same structure enables the use of the function DefaultPass, which calls the function passed as second arguments recursively on the AST with Params as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
 Params if a record with label params, and features are added according to use. For an example, look at the globaliser below.%FIXME: add reference
 \subsection{Namer}
-replaces fVar by fSym. In declarations, creates a new symbol for declared variables, in body, looks at already defined symbols.
-fLocal introduces a new environment, in which the variables declared in its first feature are added to the environment, possibly erasing variables with the same name coming from the parent environment.
-fProc and fFun do the same, because they implicitely declare their formal parameters % see test 029
-It is this manipulation of the environments that make that the code in Figure~\ref{fig:namer_nested_locals} does not throws an error of impossible unification and shows 6.
+The namer  basically replaces all occurences if a variable's \lstinline!fVar! by \lstinline!fSym! records holding the symbol representing said variable. Each variable is assigned one unique symbol. 
+
+In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVars! by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
+
+\subsubsection{Declarations}
+So the question raises of when do variables get declared.
+One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}.  \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing variables with the same name coming from the parent environment.
+
+Another kind of declaration is found in the definition of procedures and functions. Indeed, fProc (section \ref{sec:input:procedures} and fFun (section \ref{sec:input:functions}) records also implicitely declare the variables for their formal parameters. % see test 029
+
+Still another kind of declaration happens in pattern matching (section \ref{sec:input:patternmatching}), when a record present in the pattern has a feature that is a variable.
+These variables get implicitely declared and added to the environment in which not only the clause' body but also its guards will be executed.
+
+
+It is these manipulations of the environments that make that the code in Figure~\ref{fig:namer_nested_locals} does not throws an error of impossible unification of A with 6. Indeed, the inner variable A gets another symbol assigned than the outer one, and replaces it in the environment of the inner instructions. Thus there is no ambiguity in the \lstinline!Show! instruction as to which its argument is, and it effectively shows 6.
 \begin{figure}
 \begin{lstlisting}
 local
@@ -458,6 +533,80 @@ end
 \caption{Nested locals handled by Namer}
 \label{fig:namer_nested_locals}
 \end{figure}
+
+%FIXME: add pattern matching example
+The namer also handles the variables in record and open record patterns specially.
+First, it wraps the whole \lstinline!case! instruction inside a \lstinline!local..in..end! instruction declaring all variables implicitely declared in the patterns. Here is an illustration in Oz notation.
+The AST of the following case instruction
+
+\begin{lstlisting}
+case R
+of lab(A b c) then
+   Code1
+[] rec(a B c) then
+   Code2
+[] l(a ...) then
+   Code3
+end
+\end{lstlisting}
+
+will result by this transformation in an AST corresponding to this Oz code:
+
+\begin{lstlisting}
+   local 
+      A B C
+   in
+      case R
+      of lab(A b c) then
+         Code1
+      [] rec(a B c) then
+         Code2
+      [] l(a b C ...) then
+         Code3
+      end
+   end
+\end{lstlisting}
+
+%FIXME: add reference
+In addition, the \lstinline!fSym! record corresponding to these capture variables are themselves stored in an unforgeable secure structure (as described in CTMCP Section 3.7.5) which is itself wrapped in an \lstinline!fConst!. The reason of this manipulation is to prevent manipulations of those symbols by later compiler passes. Now these will be handled as constants in all subsequent compiler passes. Another consequence of this is that the records implicitely declaring variables in a pattern are seen as constant records, all features being constants! And these are treated as such, notably in the desugaring of records (section \ref{sec:desugar:records}).
+
+\subsubsection{Non-declaration code}
+In code not declaring variables, the namer's job is much simpler: it will simply replace all occurences of fVar records by a fSym record having the corresponding symbol as first feature.
+
+\subsubsection{Compiler Code Notes}
+The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
+There local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
+Notice that NamerForBody calls NamerForDecls when a function or procedure is defines, and NamerForCaptures when captures are present in patterns. Here is for example the code handling a function definition in non-declaration code:
+
+\begin{lstlisting}
+  %---------------------------------
+  [] fFun(Name Args Body Flags Pos) then
+  %---------------------------------
+     Res
+  in
+     {Params.env backup()} 
+     Res=fFun(
+        % The function's variable has to be declared explicitely in the declaration part.
+        % That's why we call NamerForBody on the Name
+        {NamerForBody Name Params}
+        % Formal parameters are declarations, that's why we call NameForDecls
+        {List.map Args fun {$ I} {NamerForDecls I Params} end }
+        {NamerForBody Body Params}
+        Flags
+        Pos
+     )
+     {Params.env restore()}
+     Res
+\end{lstlisting}
+The environment, mapping variable names to their respective symbol, is stored in the object available through Params.env. This object's \lstinline!backup! method will backup the current environment and create a new one with the exact same bindings.
+We see in this code that the function creates a new environment based on its parent environment, which is backuped to be restored when done. The name of the function is passed to \lstinline!NamerForBody!, because the name of the function must have been declared previously and be present in the environment. 
+The formal parameters of the function however are passed to \lstinline!NamerForDecls!, as these are variables implicitely declared, that have to be added to the current environment. This updated environment is then used by \lstinline!NamerForBody! to transform the function's body.
+At the end, the parent's environment is restored, ensuring that formal parameters of the function are not available outside of the function.
+
+This code also illustrates how it comes that functions can access variables defined in the defining environment (such functions are called closures): all those are inherited by the function's environment!
+
+
+
 
 \subsection{Desugar}\label{section:desugar}
 The desugar pass handles the transformation of syntactic sugar code in its canonical form.
@@ -673,7 +822,7 @@ The desugar step of lazy function simply revolves in wrapping in a thread a call
 \subsubsection{Transformation in an expression}
 A statement can be transformed in an expression of the value assigned to the variable in which place a \$ was placed.
 Currently only the form fun \{\$ Args\} is supported
-\subsubsection{Records}
+\subsubsection{Records}\label{sec:desugar:records}
 As mentioned in the description of records, the features can be left out, and are in that case implicit, with increasing integer values starting at 1.
 In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in \lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the programmer to avoid conflict, as implicit feature assignment does not check for explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is coherent with Mozart 1. %FIXME: check this is all ok.
 An additional action was added in the desugar step for records: transforming records that are constants or records that have non-constant label or features. This transformation replaces fRecord that have all label, features and values constant by a fConst with as value the record reconstructed. This greatly simplifies the AST for these records, and can be done because the value of the record can be used as is in later steps, notably the opcodes generation. 
