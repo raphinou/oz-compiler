@@ -212,7 +212,9 @@ arrayFill(x(1))
 Describe records received from parser.
 Not all will be described here as an exhaustive list is available at %http://www.mozart-oz.org/home/doc/compiler/node7.html#appendix.syntax. 
 \subsection{Position in source code}
-Most records have the corresponding position in the source code available in their last feature, in the form of a record of the form pos(file linebegin columnbegin fileend lineend columend). This information has to trickle through all transformations so meaningful error messages can be given to the programmer in case of error.
+Most records have the corresponding position in the source code available in their last feature, encoded in a record of the form \lstinline!pos(File Linebegin Columnbegin Fileend Lineend Columnend)!. This information has to trickle through all transformations so meaningful error messages can be given to the programmer in case of error.
+
+For clarity and brievety, in the examples of AST included in this document, the positions will always be represented by the featureless record \lstinline!pos!. 
 \subsection{Basic data types}
 The basic data type described in this section are the simplest node found in the AST as they have no children and are the leafs of the tree.
 These are the types that are currently handled, with their corresponding records in the AST:
@@ -304,38 +306,48 @@ However, only functions can be marked as lazy as in \lstinline!fun lazy {F N} ..
 Function definitions are found in records fFun(Name Arguments Body Flags Pos). The features are identical to the procedure definition.
 \subsubsection{Calls}
 The calls of functions are identical to the call of procedures as they are found in fApply.
-\subsection{Arithmetic operators}
-Arithmetic operators are parsed as the operator application to arguments being the operands. For example
-5+2 is parsed as:
+\subsection{Arithmetic operators}\label{sec:input:operators}
+Arithmetic operators are parsed as records of the form fOpApply(Operator Args Pos), which first feature is the operator to apply, and its second feature being the list of operands. It also has a position record as third feature. For example
+\lstinline!5+2! is parsed as:
 \begin{lstlisting}
       fOpApply(
          '+'
          |(
-            fInt(5 pos("test2.oz" 1 3 "test2.oz" 1 4) )
+            fInt(5 pos)
             |(
-               fInt(2 pos("test2.oz" 1 5 "test2.oz" 1 6) )
+               fInt(2 pos )
                
             )
          )
-         \_
+         pos
       )
 
 \end{lstlisting}
-\subsection{Nesting marker \$}
+\subsection{Nesting marker \$}\label{sec:input:nestingmarker}
 In Oz, some statements can be transformed in expressions by the use of the \$ marker. This marker is found in the AST as a record fDollar() with a unique feature: it position.
 The statements that can be transformed in expressions are
 \begin{itemize}
   \item Function, Procedure, Functor and Class declarations. For example X=fun{\$ A B} .. end
-  \item In the parameters list of a call, in the location of an expression. For example {Foo A..\$..N}
+  \item In the parameters list of a call to a procedure, in the location of an expression. For example {Foo A..\$..N}
   \item In a pattern position of a parameter of a call. For example {Foo bar(A..\$..N) baz}
 \end{itemize}
+Note that although functions can unify their parameters with values, like in 
+\begin{lstlisting}
+  fun {F A ?R2}
+     R2=3*A
+     2*A
+  end
+\end{lstlisting}
+It makes absolutely no sense to put a nesting marker as second argument to a call of this function, like in 
+\lstinline[mathescape]!{F 2 $\$$}! because the call itself is already an expression.
+
 
 \subsection{Cells}
 \subsubsection{Assignation}
 fColonEquals(Cell Val Pos) %FIXME
 \subsubsection{Read}
 fAt(Cell Pos) % FIXME
-\subsection{Records}
+\subsection{Records}\label{sec:input:records}
 Without describing the whole syntax, here is a reminder of the record syntax in Oz code. A record is refined by \lstinline!Label(F1:V1 F2:V2)! where the label and features ($F_i$) can be an atom or a variable, and the values ($V_i$) can in addition to this be the result of a function call. Features can be left out, in which case they are implicitly assigned increasing values from 1.
 
 Records are present in the AST in records with label fRecord. Its label is the first feature, and the second feature is the list of feature/value pairs. If no feature was specified, the entry in the list is simply the value. If a feature was specified, the entry in the list is a record fColon, with the first feature being the feature and second feature being the value. All this will become much clearer with the following examples.
@@ -380,12 +392,12 @@ When the feature is not explicitely given, the item in the list of features and 
 \end{lstlisting}
 
 
-\subsection{Ignored expression: \_}\label{sec:input:wildcard}
-Oz syntax allows to put \lstinline!_! in the location of a value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a record \lstinline!fWildcard(Pos)!.
+\subsection{Wildcards}\label{sec:input:wildcard}
+Oz syntax allows to put a wildcard \lstinline!_! in the location of a value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a record \lstinline!fWildcard(Pos)!.
 Ignoring the value returned by a function is thus written \lstinline!_={F N}!. 
 This allows the user to not declare variables he wouldn't use anyway, which would in addition raise a warning about a variable used only once\ldots
 
-Pattern matchin is covered extensively in section \ref{sec:input:patternmatching}
+Pattern matching is covered extensively in Section \ref{sec:input:patternmatching}.
 
 \subsection{Threads}
 Thread instructions are present in the AST in the form of records with label fThread, and with two features: the body of the thread, and its position in the source code:
@@ -481,7 +493,7 @@ Guards must be an expression with a boolean value, possibly using the boolean co
 
 \chapter{Compiler}
 \section{Architecture}
-The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument that they need to transform, and they return the transformed AST.
+The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument the AST, and they return the transformed AST.
 These functions all have the same structure:
 \begin{figure}[h]
 \begin{lstlisting}
@@ -500,9 +512,11 @@ These functions all have the same structure:
 \end{lstlisting}
 \caption{Structure of a transformation function}
 \end{figure}
-Having the same structure enables the use of the function DefaultPass, which calls the function passed as second arguments recursively on the AST with Params as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
-Params if a record with label params, and features are added according to use. For an example, look at the globaliser below.%FIXME: add reference
-\subsection{Declarations Flattener}
+Having the same structure enables the use of the function \lstinline!DefaultPass!, which calls the function passed as second arguments recursively on the AST with \lstinline!Params! as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
+Params if a record with label \lstinline!params!, and features are added according to use. For an example, this \lstinline!Params! argument is used by the \lstinline!Globaliser! described in Section \ref{sec:arch:globaliser}.
+Although all passes work exclusively on the AST, the transformations described in later sections can and will often be illustrated more clearly and concisely by giving the Oz code corresponding to the ASTs before and after the transformation. 
+
+\subsection{Declarations Flattener}\label{sec:arch:declsflattener}
 The Oz language accepts complex instructions in the declaration part of \lstinline!local Decls in Body end!. This brings the need to decide what variables are declared for each instruction present in the \lstinline!Decls!. 
 For example, in unification, only the left hand side variable gets declared, and only B is implicitely declared in the following code snippet:
 \begin{lstlisting}
@@ -521,7 +535,7 @@ In declarations, the namer creates a new symbol for the declared variables, in o
 
 \subsubsection{Declarations}
 So the question raises of when do variables get declared.
-One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}.  \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing variables with the same name coming from the parent environment. At this stage, \lstinline!Decls! only contains simple variables declaration, thanks to the declaration flattener (section \label{sec:arch:declsflattener}).
+One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}.  \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing variables with the same name coming from the parent environment. At this stage, \lstinline!Decls! only contains simple variables declaration, thanks to the declaration flattener (see Section \ref{sec:arch:declsflattener}).
 
 Another kind of declaration is found in the definition of procedures and functions. Indeed, fProc (section \ref{sec:input:procedures} and fFun (section \ref{sec:input:functions}) records also implicitely declare the variables for their formal parameters. % see test 029
 
@@ -621,13 +635,13 @@ This code also illustrates how it comes that functions can access variables defi
 
 \subsection{Desugar}\label{sec:arch:desugar}
 The desugar pass handles the transformation of syntactic sugar code in its canonical form.
-The desugar function has two local functions defined, one for handling expressions, one for handling statements.
-\subsubsection{On statements and expressions}
 Oz distinguishes two groups of instructions: statements and expressions. An expression is ``syntactic sugar for a sequence of operations that return a value'' . Statements do not return a value.
+The desugar function handles statements and expression differently, and defines two local functions, one for handling expressions, one for handling statements.
+\subsubsection{On statements and expressions}
 %FIXME: Give references: Concepts, Techniques and Models of Computer Programming, p81.
-Handling expressions and statements is often very similar, but sometime require significant differences of treatment. Hence the use two different local functions in the Desugar pass: one for each type of instruction.
+Handling expressions and statements is often very similar, but sometime require significant differences of treatment. Hence the use two different local functions in the Desugar pass.
 
-From this raises the question of categorising an instruction as a statement or an expression. And this is not as straightforward as one may think, as the context in which the instruction is used can change the character from statement to expression. This is illustrated by this example.
+From this raises the question of categorising an instruction as a statement or an expression. And this is not as straightforward as one may think, as the context in which the instruction is used can change the type of an instruction from statement to expression. This is illustrated by the following example.
 % FIXME: storage element?? Find better name.
 In Oz, a cell is a mutable storage element which is created with an initial value (\lstinline!C={NewCell 0}!), it can be given a new value (\lstinline!C:=NewValue!) and its value can be read (\lstinline!@C!). There's also an exchange operation \lstinline!{Exchange C Old New}! which ``atomically binds Old with the old content of the cell, and set New to be the new content''.%FIXME: reference pvr book page 415.
 Assigning a new value to a cell is usually a statement returning no value, but when used as the right hand side of an assignment, it becomes an expression, whose value is the Old value of the cell !
@@ -667,85 +681,85 @@ The declaration part of this instruction is always a statement. The body is
 also a statement because the whole local...in...end is a statement. If it were
 an expression (as in Figure \ref{fig:statement_and_expression2}), the body
 would have been an expression! In our case, the body is a sequence of
-instructions, resulting in a hierarchy of fAnd records in the AST. A sequence
-can be a statement, as in this case, or an expression, in which case the value
-of the whole sequence is the value of the last expression. This illustrates the
+instructions, resulting in a hierarchy of fAnd records in the AST. Thus we see that a sequence
+can be a statement or an expression, in which case the value
+of the whole sequence is the value of the last instruction which must be an expression. This illustrates the
 need of distinct functions when statement and expressions must be handled
-differently. The fact is that the character (statement or
+differently. 
+
+The fact is that the character (statement or
 expression) of a sequence of instructions is determined at the start of the
 sequence, the top of the fAnd hierarchy in the AST. But the impact of this
 distinction is found at the very bottom of this hierarchy: the last
 instruction, the end of the sequence. To be able to distingish both cases, we
 need to branch as soon as we determine the instruction's character.
 
-If we note F the pass of the compiler, FExpr the locally defined function handling expressions, and fStat corresponding function for statements, we can ensure that the right function is applied to each instructions'AST as defined in section \ref{section:compilerinput} by following these rules of identification, and call FStat on statements and FExpr on expressions:
+If we note F the pass of the compiler, FExpr the locally defined function handling expressions, and FStat corresponding function for statements, we can ensure that the right function is applied to each instruction's AST as defined in section \ref{section:compilerinput} by following these rules of identification, and call FStat on statements and FExpr on expressions:
 
 %FIXME possibly replace the AST record by the Oz instruction they represent
 \begin{description}
   \item[program] the program is a statement
   \item[fLocal] 
     \begin{itemize}
-      \item the declarations are all just fSym, since the DeclsFlattener has move all other code to the body. These fSyms are neither expressions nor statement, they are just fSym declarations.
-      \item the body has the same character as its fLocal
+      \item the declarations are all just fSym, since the DeclsFlattener has move all other code to the body. These fSyms are neither expressions nor statement, they are just fSym declarations, and the declaration part is a statement.
+      \item the body has the same character as its parent fLocal
     \end{itemize}
   \item[fAnd] 
     \begin{itemize}
       \item the first feature is a statement
-      \item same character as the fAnd
+      \item the second feature has same character as its parent fAnd
     \end{itemize}
   \item[fEq] both sides are expressions
   \item[fProc] if the proc definition is an expression, its identifier must be the nesting marker \$, else its identifier is an expression. The arguments are expressions, and the body is a statement.
-  \item[fFun] are similar to fProc
+  \item[fFun] are similar to fProc, because a function definition is desugared in a procedure definition as described in Section \ref{sec:arch:desugar:functions}.
   \item[fApply] calls can be statements or expressions, but in both cases the callee and its arguments are all expressions. 
   \item[fColonEquals] can be statement or expression, but Cell and Val are in both cases expressions.
-  \item[fAt(Cell Pos)] is an expression. Its Cell is an expression
-  \item[fSym] , outside local's declaration part, are expressions
+  \item[fAt(Cell Pos)] is an expression, as is Cell
+  \item[fSym] , outside of \lstinline!local..in..end!'s declaration part, are expressions
   \item[fConst] are expressions
-  \item[fRecord] are expressions
+  \item[fRecord] are expressions, as are its label and values.
+  \item[fCase] can be a statement or an expression. The \lstinline!fCaseClause!s and the else code have the same type as their parent fCase. The patterns in the \lstinline!fCaseClause!s are expressions, as are the guards.
 \end{description}
+
+%FIXME: do i keep this next paragraph?
+All expressions and statements in the AST will be visited by Desugar. Even if the statement itself is not transformed, as is the case for a unification, its children will be visited and possibly transformed. For example
+X=5+2 will still be a unification after it's been desugared, but its children will have been transformed in X={Number.'+' 5 2}.
 
 
 
 \subsubsection{Arithmetic operators}
 Infix arithmetic operators are transformed in the call of their respective function.
-The operators are parsed as fOpApply( Operator ArgsList)
+The operators are parsed as fOpApply records as described in section \ref{sec:input:operators}. Building further on the example of that section, the AST coming from the parser
 
-This code
-
-\begin{lstlisting}
-  5+2
-\end{lstlisting}
-
-is parsed as
 \begin{verbatim}
       fOpApply(
          '+'
          |(
-            fInt(5 _ )
+            fInt(5 pos)
             |(
-               fInt(2 _ )
+               fInt(2 pos)
                
             )
          )
-         _
+         pos
       )
 \end{verbatim}
-and must be transformed in:
+will be transformed in:
 \begin{verbatim}
       fApply(
          Number.'+'
          |(
-            fInt(5 _ )
+            fInt(5 pos)
             |(
-               fInt(2 _ )
+               fInt(2 pos)
                
             )
          )
-         _
+         pos
       )
 \end{verbatim}
 
-\subsubsection{Functions}
+\subsubsection{Functions}\label{sec:arch:desugar:functions}
 Functions are transformed in their canonical procedure form. This is done simply by replacing the function by a procedure with exactly the same characteristics, except that it takes one additional argument (the return value), and the body of this procedure is the unification of this new argument with the original body of the function. This resulting AST is itself recursively ``desugared''.
 
 For example, the code
@@ -755,30 +769,30 @@ For example, the code
    end
 
 \end{lstlisting} 
-is parsed as (in a redacted form to be readable):
+is parsed as:
 \begin{verbatim}
       fFun(
-         fSym(F _)
+         fSym(F pos
          |(
-            fSym(A _)
+            fSym(A pos)
             |(
-               fSym(B _)
-               
+               fSym(B pos)
+               nil
             )
          )
          fOpApply(
             '+'
             |(
-               fSym(A)
+               fSym(A pos)
                |(
-                  fSym(B)
-                  
+                  fSym(B pos)
+                  nil
                )
             )
-            _
+            pos
          )
          
-         _
+         pos
       )
 \end{verbatim}
 and transformed by the desugar pass to become:
@@ -786,11 +800,11 @@ and transformed by the desugar pass to become:
      fProc(     
          fSym(F)
          |(    
-            fSym(A)
+            fSym(A pos)
             |(
-               fSym(B)
+               fSym(B pos)
                |(
-                  fSym(R)
+                  fSym(R pos)
                   
                )
             )
@@ -798,74 +812,101 @@ and transformed by the desugar pass to become:
          fEq(
             fSym(R)
             fApply(
-               fConst('+' _)
+               fConst('+' pos
                |(
-                  fSym(A _)
+                  fSym(A pos)
                   |(
-                     fSym(B _)
-
+                     fSym(B pos)
+                     nil
                   )
                )
-               _
+               pos
             )
-            _
+            pos
          )
 
-         _
+         pos
       )
 
 \end{verbatim}
 
+We can also illustrate this transformation in Oz code. For the same example, the resulting Oz code is
+\begin{lstlisting}
+   proc {F A B ?R}
+      R={Number.'+' A B}
+   end
+\end{lstlisting} 
 We see that a new symbol, that we denoted R for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
 
 Lazy functions have in their flags a lazy atom: \lstinline!fAtom(lazy pos)!.
-The desugar step of lazy function simply revolves in wrapping in a thread a call to the builtin \lstinline!waitNeeded! on the return symbol before unifying it with the body of the function. In Oz notation, this results in transforming \lstinline!fun lazy {F A1..An} Body end! in 
+The desugar step of lazy function simply revolves in wrapping in a thread a call to the builtin \lstinline!waitNeeded! on the return symbol before unifying it with the body of the function. If the function of the example we worked on until now had been marked as lazy, the transformation would have yielded this result, in Oz notation:
 \begin{lstlisting}
-   proc {F A1..An ReturnSymbol}
+   proc {F A B ?R}
       thread 
-         {WaitNeeded ReturnSymbol}
-         ReturnSymbol=Body
+         {WaitNeeded R}
+         R={Number.'+' A B}
       end
    end
+\end{lstlisting} 
+
+\subsubsection{Records}\label{sec:arch:desugar:records}
+As mentioned in the description of records in Section \ref{sec:input:records}, the features can be left out, and are in that case implicit, with increasing integer values starting at 1. The Desugar pass will make this features explicit.
+
+In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in \lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the programmer to avoid conflict, as implicit feature assignment does not check for explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is coherent with Mozart 1, but causes an error. %FIXME: check this is all ok.
+An additional action was added in the desugar step for records. First, \lstinline!fRecord! that have all label, features and values constant are replaced by a \lstinline!fConst! with as value the record reconstructed. This greatly simplifies the AST for these records as is illustrated in the next example, and can be done because the value of the record can be used as is in later steps, notably the opcodes generation. 
+\begin{lstlisting}
+      fRecord(
+         fAtom(rec pos)
+         |(
+            fColon(
+               fInt(1 pos)
+               fAtom(a pos)
+            )
+            |(
+               fColon(
+                  fInt(2 pos)
+                  fAtom(b pos)
+               )
+               nil
+            )
+         )
+      )
+\end{lstlisting}
+is transformed in
+\begin{lstlisting}
+  fConst( rec(1:a 2:b) pos)
 \end{lstlisting}
 
 
-\subsubsection{Transformation in an expression}
-A statement can be transformed in an expression of the value assigned to the variable in which place a \$ was placed.
-Currently only the form fun \{\$ Args\} is supported
-\subsubsection{Records}\label{sec:arch:desugar:records}
-As mentioned in the description of records, the features can be left out, and are in that case implicit, with increasing integer values starting at 1.
-In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in \lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the programmer to avoid conflict, as implicit feature assignment does not check for explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is coherent with Mozart 1. %FIXME: check this is all ok.
-An additional action was added in the desugar step for records: transforming records that are constants or records that have non-constant label or features. This transformation replaces fRecord that have all label, features and values constant by a fConst with as value the record reconstructed. This greatly simplifies the AST for these records, and can be done because the value of the record can be used as is in later steps, notably the opcodes generation. 
-Records with non constant labels and/or features are replaced by a call to \lstinline!Boot_Record.makeDynamic!. The goal here is to leave in the AST only records with constant label and features. MakeDynamic takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by \lstinline!{makeDynamic Rec '#'(1:F1 2:V1 3:F2 4:V2)}! .
+Records with non constant labels and/or features are replaced by a call to \lstinline!Boot_Record.makeDynamic!. The goal of this transformation is to leave in the AST only records with constant label and features. MakeDynamic takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by \lstinline!{makeDynamic Rec '#'(1:F1 2:V1 3:F2 4:V2)}! .
 In the AST, this replaces 
 \begin{lstlisting}
   fRecord(Label 
-          fColon(Feature1 Value1)|
-            fColon(Feature2 Value2)|
-            nil
+          |(fColon(Feature1 Value1 pos)
+            |(fColon(Feature2 Value2 pos)
+              nil))
   )
 \end{lstlisting}
 where Label, Feature1 and Feature2 can be fSyms, by
 \begin{lstlisting}
   fApply(
          fConst(makeDynamic pos) 
-         Label|
-           fRecord(fConst('#' pos) 
-                        Label|
-                          fColon(1 Feature1)|
-                          fColon(2 Value1)|
-                          fColon(3 Feature2)|
-                          fColon(4 Value2)|
-                          nil 
-           )|
-           nil
-  )
+         |(Label
+           |(fRecord(fConst('#' pos) 
+                        |(Label
+                           |(fColon(1 Feature1)|
+                             |(fColon(2 Value1)|
+                               |(fColon(3 Feature2)|
+                                 |(fColon(4 Value2)|
+                                   nil))))))
+             nil)
+          )
 \end{lstlisting}
-We see that we end up with a AST that only contains records with constant label and features.
+We see that we end up with a AST that only contains records with constant label and features: only the values are not constants.
+%FIXME: why do this transformation?
 Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
-\subsubsection{Ignored expressions: \_}
-Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \_ is replace by \lstinline!local NewSymbol in NewSymbol end!.
+\subsubsection{Wildcards}
+Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \lstinline!_! is replace by \lstinline!local NewSymbol in NewSymbol end!.
 
 \subsubsection{Threads}
 %FIXME: is the following correct?
@@ -882,11 +923,11 @@ In Oz notation, \lstinline!thread Body end! is transformed in
       {Thread.create P}
    end
 \end{lstlisting}
-This transformation occurs in the AST of course, and here is the AST transformation illustrated. \lstinline!fThread(Body Pos)! is transformed in this AST (taken from the compile source code):
+This transformation occurs in the AST of course, and here is the AST transformation illustrated. \lstinline!fThread(Body Pos)! is transformed in this AST (taken from the compiler source code):
 \begin{lstlisting}
   fLocal(NewProcSym 
-         fAnd( fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) 
-               fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)
+         fAnd( fProc(NewProcSym nil {DesugarStat Body Params} nil pos) 
+               fApply(fConst(Boot_Thread.create pos) [NewProcSym] pos)
              ) 
          Pos)
 \end{lstlisting}
@@ -907,7 +948,7 @@ end
 
 \subsubsection{If then else}
 The condition tested is always an expression.
-The instruction if..then..else instruction can be a statement as in 
+The instruction \lstinline!if..then..else..end! can be a statement as in 
 \lstinline!if Cond then {DoTrue} else {DoFalse} end!
 , in which case both code branches are desugared as statement
 or an expression as in
@@ -915,8 +956,22 @@ or an expression as in
 in which case both code branches are desugared as expression.
 A fNoElse record is left as is and will only be useful for the opcode generation function.
 
+\subsubsection{Compiler Code Notes}
+The desugar pass is implemented by a function named \lstinline!Desugar!. It defines multiple local functions:
+\begin{description}
+  \item[DesugarOp] called to desugar operators
+  \item[DesugarRecordFeatures] working on record features, making them explicit if need be, and also desugaring the value corresponding to each feature.
+  \item[TransformRecord] called to transform records as described above, just after it has been desugared.
+  \item[IsConstantRecord] called by \lstinline!TransformRecord! to determine if the record for which the AST is passed as argument is a record with constant label, features and values
+  \item[HandleLazyFlag] will wrap the body of a function in a thread if needed, as described in Section \ref{sec:arch:desugar:functions}.
+  \item[DesugarExpr] called by \lstinline!Desugar! to desugar expressions
+  \item[DesugarStat] called by \lstinline!Desugar! to desugar statements
+\end{description}
+
+The program itself being a statement, the function Desugar simply call DesugarStat on the AST of the whole program. This will trigger further calls to DesugarExpr and DesugarStat that will traverse and transform the whole AST.
+
 \subsection{Unnester}\label{sec:arch:unnester}
-The unnester will result in an AST in which there are only elementary instructions. Although the unnester works exclusively on the AST, examples given below to illustrate the unnester work will sometimes be represented in Oz code for conciseness.  The instructions susceptible to be unnested are inspected each in turn in the following subsections.
+The unnester will result in an AST in which there are only elementary instructions. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:arch:unnester:unification}
 The unnesting result of a unification instruction depends on the elementary character of each side, giving these three cases:
 \begin{description}
