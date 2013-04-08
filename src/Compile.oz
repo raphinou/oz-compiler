@@ -17,7 +17,7 @@ import
 
 export
    namer: Namer
-   genCode: GenCode
+   genCode: CodeGen
    declsFlattener: DeclsFlattener
    desugar: Desugar
    unnester: Unnester
@@ -1596,10 +1596,10 @@ define
    end
 
    %###########################
-   fun {GenCode AST CallParams}
+   fun {CodeGen AST CallParams}
    %###########################
 
-      fun {GenCodeDecls AST Params}
+      fun {CodeGenDecls AST Params}
       %----------------------------
          % Generate opcodes for declarations.
          case AST
@@ -1613,7 +1613,7 @@ define
             end
             createVar(y({Sym get(yindex $)}))
          [] fAnd(First Second) then
-            [{GenCodeDecls First Params} {GenCodeDecls Second Params}]
+            [{CodeGenDecls First Params} {CodeGenDecls Second Params}]
          end
       end
       fun {RegForSym AST Params}
@@ -1656,14 +1656,14 @@ define
          end
       end
 
-      fun {GenCodeInt AST Params}
+      fun {CodeGenInt AST Params}
       %--------------------------
          case AST
          %----------------------
          of fLocal(Decls Body _) then
          %----------------------
             % Should create all without recursive call
-            [ {GenCodeDecls Decls Params} {GenCodeInt Body Params}]
+            [ {CodeGenDecls Decls Params} {CodeGenInt Body Params}]
 
          %---------------------------------
          [] fDefineProc(fSym(Sym _) Args Body Flags Pos NewLocals) then
@@ -1750,6 +1750,7 @@ define
                                        AST
                                     end
                                  end}
+            % When arguments are in X registers, we can do the call
             case Sym
             of fConst(Const _) then
                {List.append @R [call(k(Const) {List.length Args})] }
@@ -1761,7 +1762,7 @@ define
          %--------------------
          [] fAnd(First Second) then
          %--------------------
-            [{GenCodeInt First  Params} {GenCodeInt Second  Params}]
+            [{CodeGenInt First  Params} {CodeGenInt Second  Params}]
 
          %----------------
          [] fEq(LHS fRecord(fConst(Label _)  Features) _) then
@@ -1819,7 +1820,7 @@ define
             move({RegForSym FSym Params} x(0))|
             condBranch(x(0) ElseLabel ErrorLabel)|
             %---- true ----
-            {GenCodeInt TrueCode Params}|
+            {CodeGenInt TrueCode Params}|
             branch(EndLabel)|
             %---- error ----
             lbl(ErrorLabel)|
@@ -1831,7 +1832,7 @@ define
             of fNoElse(_) then
                lbl(EndLabel)|nil
             else
-               {GenCodeInt FalseCode Params}|
+               {CodeGenInt FalseCode Params}|
                % ---- end ----
                lbl(EndLabel)|nil
             end
@@ -2030,7 +2031,7 @@ define
                      lbl(ThisLabel)|
                      % Make captures available to guards code
                      {UsedSymbolsToYReg UsedSymbols}|
-                     {GenCodeInt Guards Params}|
+                     {CodeGenInt Guards Params}|
                      move({RegForSym GuardSymbol Params} x(1))|
                      condBranch(x(1) NextTestLabel ErrorLabel)|
                      nil
@@ -2162,9 +2163,9 @@ define
 
                                           PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
                                           if @SequenceType==fNamedSideCondition then
-                                             CodeBuffer:=@CodeBuffer|{GenCodeInt Body Params}|branch(EndLabel)|nil
+                                             CodeBuffer:=@CodeBuffer|{CodeGenInt Body Params}|branch(EndLabel)|nil
                                           else
-                                             CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|{UsedSymbolsToYReg @UsedSymbols}|{GenCodeInt Body Params}|branch(EndLabel)|nil
+                                             CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|{UsedSymbolsToYReg @UsedSymbols}|{CodeGenInt Body Params}|branch(EndLabel)|nil
                                           end
                                           % Update number of clauses visited in current sequence
                                           SeqLen:=@SeqLen+1
@@ -2188,7 +2189,7 @@ define
                      of fNoElse(_) then
                         lbl(EndLabel)|nil
                      else
-                        {GenCodeInt Else Params}|
+                        {CodeGenInt Else Params}|
                         lbl(EndLabel)|nil
                      end
                {List.flatten @Code}
@@ -2205,7 +2206,7 @@ define
       OpCodes
    in
       % append return
-      OpCodes={List.append {List.flatten {GenCodeInt AST InitialParams} } ['return'()]}
+      OpCodes={List.append {List.flatten {CodeGenInt AST InitialParams} } ['return'()]}
 
       % prefix with allocateY
       %FIXME: keep prefix in Params?
@@ -2268,7 +2269,7 @@ define
             end}
       end
       {Show 'Assigned Ys:'#YCounter}
-      OpCodes := {List.append @OpCodes {GenCode AST params(prefix:@Prefix procassemble:true currentIndex:{NewCell YCounter} )}}
+      OpCodes := {List.append @OpCodes {CodeGen AST params(prefix:@Prefix procassemble:true currentIndex:{NewCell YCounter} )}}
       {Show 'CodeArea built with this code:'}
       {ForAll @OpCodes Show}
       {AssembleAST Arity @OpCodes PrintName DebugData Switches ?CodeArea ?VS}
