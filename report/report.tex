@@ -529,17 +529,20 @@ For example, in unification, only the left hand side variable gets declared, and
 Luckily, this has been clearly formalised by the Oz implementers and published on the web\footnote[]{http://www.mozart-oz.org/documentation/notation/node6.html}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
 
 \subsection{Namer}\label{sec:arch:namer}
-The namer  basically replaces all occurences if a variable's \lstinline!fVar! by \lstinline!fSym! records holding the symbol representing said variable. Each variable is assigned one unique symbol. 
+The namer  basically replaces all occurences of a variable's \lstinline!fVar! by \lstinline!fSym! records holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
 
 In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVars! by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
 
+The set of maps from a variable name to its corresponding symbol is called environment, and is maintained by the namer.
+
 \subsubsection{Declarations}
 So the question raises of when do variables get declared.
-One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}.  \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing variables with the same name coming from the parent environment. At this stage, \lstinline!Decls! only contains simple variables declaration, thanks to the declaration flattener (see Section \ref{sec:arch:declsflattener}).
+One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}. At this stage, \lstinline!Decls! only contains simple variables declaration, thanks to the declaration flattener (see Section \ref{sec:arch:declsflattener}). \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing mappings for variables with the same name coming from the parent environment. 
 
 Another kind of declaration is found in the definition of procedures and functions. Indeed, fProc (section \ref{sec:input:procedures} and fFun (section \ref{sec:input:functions}) records also implicitely declare the variables for their formal parameters. % see test 029
 
-Still another kind of declaration happens in pattern matching (section \ref{sec:input:patternmatching}), when a record present in the pattern has a feature that is a variable.
+Still another kind of declaration happens in pattern matching (section \ref{sec:input:patternmatching}), when a record present in the pattern has a feature that is a variable. This case is analysed specifically in section\ref{sec:arch:namer:patternmatching}.
+
 These variables get implicitely declared and added to the environment in which not only the clause' body but also its guards will be executed.
 
 
@@ -560,48 +563,67 @@ end
 \label{fig:namer_nested_locals}
 \end{figure}
 
-%FIXME: add pattern matching example
-The namer also handles the variables in record and open record patterns specially.
-First, it wraps the whole \lstinline!case! instruction inside a \lstinline!local..in..end! instruction declaring all variables implicitely declared in the patterns. Here is an illustration in Oz notation.
-The AST of the following case instruction
-
-\begin{lstlisting}
-case R
-of lab(A b c) then
-   Code1
-[] rec(a B c) then
-   Code2
-[] l(a ...) then
-   Code3
-end
-\end{lstlisting}
-
-will result by this transformation in an AST corresponding to this Oz code:
-
-\begin{lstlisting}
-   local 
-      A B C
-   in
-      case R
-      of lab(A b c) then
-         Code1
-      [] rec(a B c) then
-         Code2
-      [] l(a b C ...) then
-         Code3
-      end
-   end
-\end{lstlisting}
-
-%FIXME: add reference
-In addition, the \lstinline!fSym! record corresponding to these capture variables are themselves stored in an unforgeable secure structure (as described in CTMCP Section 3.7.5) which is itself wrapped in an \lstinline!fConst!. The reason of this manipulation is to prevent manipulations of those symbols by later compiler passes. Now these will be handled as constants in all subsequent compiler passes. Another consequence of this is that the records implicitely declaring variables in a pattern are seen as constant records, all features being constants! And these are treated as such, notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
 
 \subsubsection{Non-declaration code}
 In code not declaring variables, the namer's job is much simpler: it will simply replace all occurences of fVar records by a fSym record having the corresponding symbol as first feature.
+\subsubsection{Case Pattern Matching}\label{sec:arch:namer:patternmatching}
+For pattern matching with the \lstinline!case! instruction the namer will have more work to do, which we will discuss now. Let's note \lstinline!PatternX(Var1,Var2,..)! the pattern identified by X and implicitely declarng variables \lstinline!Var1!,\lstinline!Var2!,\ldots, and let's use the same convention for code fragments \lstinline!CodeX(Var1,Var2,..)! and guards \lstinline!GuardsX(Var1,Var2,..)! using those implicitely declared variables.
+
+The transformation of the AST corresponding this Oz code:
+\begin{lstlisting}
+case Val
+of Pattern1(A,B) andthen Guards1(A) then
+   Code1(A,B)
+[] Pattern2(B,C) andthen Guards2(C) then
+   Code2(B,C)
+else
+   ElseCode
+end
+\end{lstlisting}
+results in an AST corresponding to this Oz code:
+\begin{lstlisting}
+local
+  A1 B1 B2 C2
+in
+   case Val
+   of Pattern1(A1,B1) andthen Guards1(A1) then
+      Code1(A1,B1)
+   [] Pattern2(B2,C2) andthen Guards2(C2) then
+      Code2(B2,C2)
+   else
+      ElseCode
+   end
+end
+\end{lstlisting}
+
+Here is the way how it is achieved. The compiler traverses each clause in turn,
+and collects all symbols introduced during this operation. It creates a new
+environment for this clause, which is updated with captures done in the
+pattern. After that, the namer traverses the ASTs of the Guards and the Code
+using this updated environment. and restores the original environment, on which
+the next clause will build its own environment. This shows clearly that
+although all capture variables are are technically reachable from all clauses'
+bodies, it will never be the case as the environment on which a clause builds
+its own is the environment of the case instruction, not the environment updated
+by the previous clause. 
+
+%FIXME: add reference
+In addition, the \lstinline!fSym! record corresponding to these capture
+variables are themselves stored in an unforgeable secure structure (as
+described in CTMCP Section 3.7.5) which is itself wrapped in an
+\lstinline!fConst!. The reason of this manipulation is to prevent manipulations
+of those symbols by later compiler passes. Now these will be handled as
+constants in all subsequent compiler passes. Another consequence of this is
+that the records implicitely declaring variables in a pattern are seen as
+constant records, all features being constants! And these are treated as such,
+notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
+
+
+
 \subsubsection{Compiler Code Notes}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
-There local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
-Notice that NamerForBody calls NamerForDecls when a function or procedure is defines, and NamerForCaptures when captures are present in patterns. Here is for example the code handling a function definition in non-declaration code:
+These local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
+Notice that NamerForBody calls NamerForDecls when a function or procedure is defines, and NamerForCaptures when captures are present in patterns. Here is for example the code handling a function definition in non-declaration part of the code:
 
 \begin{lstlisting}
   %---------------------------------
@@ -906,7 +928,7 @@ We see that we end up with a AST that only contains records with constant label 
 %FIXME: why do this transformation?
 Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
 \subsubsection{Wildcards}
-Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \lstinline!_! is replace by \lstinline!local NewSymbol in NewSymbol end!.
+Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \lstinline!_! is replaced by the expression \lstinline!local NewSymbol in NewSymbol end!.
 
 \subsubsection{Threads}
 %FIXME: is the following correct?
@@ -1417,6 +1439,96 @@ The opcodes generated for this call will be
   call(y(0) 3)
 \end{lstlisting}
 
+\subsubsection{Case}
+Case statements are amongst the most complex instructions to handle in code generation. This is because different pattern types are handled differently. 
+
+
+We'll start by ignoring guards for the moment and look at this code:
+
+\begin{verbatim}
+  case Val
+                -------------------+
+                ---+               |
+  of Pattern1 then |->1 clause     |
+     Body1         |               |
+                ---+               |
+  [] Pattern2 then                 |-> Clauses sequence for Mozart2 VM
+     Body                          |
+  ...                              |
+  [] PatternN then                 |
+     BodyN                         |
+               --------------------+
+  else
+     ElseBody
+  end
+
+\end{verbatim}
+
+The Mozart1 VM allowed the compiler to group in one test instruction subsequent clauses of
+constant patterns (records, integers, atoms, floats,...), but open
+record patterns could only be handled individually.
+With the Mozart2 VM, both records and open records can be grouped in one test instruction.
+
+A sequence of clauses is a group of subsequent clauses of the same type (constant or open record) and with no guards.
+As sequence of clauses are grouped, the opcode generated will not
+have one test instruction per clause, but one test instruction
+per sequence of clause, and the test result will jump to the corresponding clause' body.
+
+This will result in opcodes of this form when testing against the value in register x(0):
+\begin{lstlisting}
+  patternMatch(x(0) k('#'(Pattern1#lbl1 Pattern2#lbl2)))
+  branch(NextTestLabel)
+  lbl(1)
+  Code for clause1
+  branch(EndLabel)
+  lbl(2)
+  Code for clause2
+  lbl(NextTestLabel)
+
+  ... Other clauses ...
+
+  lbl(EndLabel)
+\end{lstlisting}
+
+The patternMatch instruction takes two parameters: the register containing the
+value to test against, and a constant record with label '\#' and with one
+feature-value pair for each clause. 
+
+The feature is the pattern to which two transformations have been applied. 
+
+First capture variables have been replaced by an object obtained resulting from a call to
+\lstinline!Boot_CompilerSupport.newPatMatCapture!, passing as unique argument
+the X register index in which to store the value of the capture variable in
+case this pattern matches. The value is the label identifying the start of the
+code of the corresponding clause, which is where the patternMatch instruction
+will jump in case of a match.
+
+Second, open records have been replace by an object obtained resulting from a
+call to \lstinline!Boot_CompilerSupport.newPatMatOpenRecord!, passing as
+arguments the arity and features list of the open record.
+
+The patternmatch is immediately followed by an unconditional \lstinline!branch! instruction,
+which will jump to the \lstinline!ElseCode!, but is only reached if no match were found.
+
+When a match is found, the execution jumps to the label indicating the start of the clause'body.
+The opcodes of the clause'body are prefixed by instructions moving the capture
+variables'values from their X register to their respectively assigned Y
+registers.
+The clause'body opcodes are immediately followed by an unconditional jump to
+the label indicating the end of opcodes for the case instruction. This ensures
+that no following clause' body is executed.
+
+This is all there is for clauses with no guards. 
+
+Guards, however, add some complexity to the generation of opcodes, and this is what we will look at now.
+The augmented complexity comes first from the fact that a clauses with guards cannot
+be grouped with other clauses. For each clause with guards, there will be a
+test instruction generated. In addition, the code for the guards needs access
+to the value of the captures in the pattern, meaning it must come after the
+test instruction. A consequence of this is that the test instruction may not jump to the start
+of the clause'body, but must jump to the guards'code!
+
+
 \subsubsection{Instructions Sequences}
 Generating opcodes for sequences of instructions consists in the generation in order of the opcodes for each element of the sequence. 
 When \lstinline!CodeGen! visits a node \lstinline!fAnd(First Second)! in the AST, it first generates the opcodes for \lstinline!First!, then for \lstinline!Second!.
@@ -1517,6 +1629,27 @@ E1\#...\#En                                 PV(E1) \cup ... \cup PV(En)
 il([ f1: ] E1 ... [ fn: ] En [ ... ])     PV(E1) \cup ... \cup PV(En)
 otherwise                                 \emptyset
 $
+
+\chapter{Symbol Description}\label{appendix:symbol}
+A symbol instance holds information about the variable it replaced in the AST. Symbols introduced by the compile are called synthetic symbols.
+The attributes of the class are:
+\begin{description}
+  \item[id] A unique id for the symbol, used for debugging purposes.
+  \item[name] The name of the variable it represents. This can be empty for symbols introduced by the compiler.
+  \item[pos] The position of the variable's declaration in the source code.
+  \item[xindex yindex gindex] The indexes of the registers assigned to the symbol. A symbol might have both a xindex and a yindex when it is a capture in a pattern. The xindex is the index in which the value of the capture is place, and the yindex is the index of the Y register assigned to the symbol for permanent storage in the clause'body.
+  \item[procId] The procId in which this symbol is reachable.
+  \item[type] The type of the symbol, which can take the following values:
+    \begin{itemize}
+      \item localProcId for a symbol corresponding to a variable defined in the procedure where it is located.
+      \item localised for a symbol representing a global variable for the procId where it is located
+      \item patternmatch for a symbol representing a capture in a pattern
+      \item wildcard for a symbol introduced in the place of a wildcard
+      \item ref is only used for localised symbols. It references a symbol local to the enclosing procedure, building a chain that will eventually lead to a symbol of type localProcId enabling the resolution of global variables. %FIXME: improve description..
+    \end{itemize}
+\end{description}
+
+         ref
 \end{appendices}
 \end{document}
 
