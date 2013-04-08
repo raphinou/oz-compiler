@@ -971,19 +971,20 @@ The desugar pass is implemented by a function named \lstinline!Desugar!. It defi
 The program itself being a statement, the function Desugar simply call DesugarStat on the AST of the whole program. This will trigger further calls to DesugarExpr and DesugarStat that will traverse and transform the whole AST.
 
 \subsection{Unnester}\label{sec:arch:unnester}
-The unnester will result in an AST in which there are only elementary instructions. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
+The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:arch:unnester:unification}
-The unnesting result of a unification instruction depends on the elementary character of each side, giving these three cases:
+The unnesting result of a unification instruction depends on the elementary character of each side. \lstinline!fConst!, \lstinline!fSym!, lstinline!fDollar! and lstinline!fAtom! are considered elementary AST nodes. Considering the elementary charater of both sides of the unification, we have to handle three situations:
 \begin{description}
   \item[Both elementary]In this case there is nothing to do
   \item[One complex, one elementary] The unnesting is done according what the complex instruction is: 
     \begin{description}
-      \item[Call] This is code of the form \lstinline!V={P E1...En}!, which needs to be transformed in the form \lstinline!{P E1...En V}!, where the variable we assign to is passed as last argument of the call. Note this transformation is not done if one if the arguments is the nesting marker (see section \ref{sec:unnester:nestingmarker}).
+      \item[Call] This is code of the form \lstinline!V={P E1...En}!, which needs to be transformed in the form \lstinline!{P E1...En V}!, where the variable we assign to is passed as last argument of the call. Note this transformation is not done if one if the arguments is the nesting marker (see section \ref{sec:arch:unnester:nestingmarker}).
       \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of fAnd records. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
       \item[Declaration (local)] The value of a \lstinline!local..in..end! in a unification is the value of its body. Hence, the unification \lstinline!V = local declarations in body end! is moved in side the local's body resulting in the code \lstinline!local declarations in V=body end!. This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
-      \item[if then else] The unification is simply moved inside each branch, and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively innested as Is1 and Is2 can be, for example,  sequences of instructions.
+      \item[if then else] The unification is simply moved inside each branch, and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively unnested as Is1 and Is2 can be, for example,  sequences of instructions.
     \end{description}
-  \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with each side, and unnesting the resulting code.
+  \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with the left side then with the right side, and unnesting the resulting code.
+\end{description}
 We need recursive calls, as is illustrated by the following example, also showing why this code works
 \begin{lstlisting}
   3+4 = {Show}
@@ -997,7 +998,7 @@ It is transformed due to both sides being non-elementary, in this form in a firs
      T = {Show}
   end
 \end{lstlisting}
-and finally in this form by the transformation of the assignment of a procedure call in the samem procedure call with the return variable passed as additional argument:
+and finally in this form by the transformation of the assignment of a procedure call in the same procedure call with the return variable passed as additional argument:
 \begin{lstlisting}
   local
      T
@@ -1011,15 +1012,17 @@ The order of the assignments of the first step explains why this doesn't work:
   {Show} = 3+4
 \end{lstlisting}
 
-\end{description}
-\subsubsection{Calls}\label{sec:unnester:calls}
+\subsubsection{Calls}\label{sec:arch:unnester:calls}
 All arguments are unnested one by one. Elementary arguments are left untouched
 Complex arguments are extracted from the arguments list by:
-\begin{itemize}
-  \item declaring a new symbol. This means the call is wrapped in a local..in..end, the declarations part declaring the new symbol, the body part unifying this symbol with the complex expression that was the original argument, followed by the i(to be unnested) function call with the new symbol replacing the complex argument. When a call has multiple complex arguments, this result in a local..in..end hierarchy with the depth corresponding to the number of complex arguments.
+\begin{enumerate}
+  \item declaring a new symbol. 
   \item unifying this new symbol with the argument
   \item replacing the argument by the new symbol in the argument list.
-\end{itemize}
+\end{enumerate}
+
+ This means the call is wrapped in a local..in..end, the declarations part declaring the new symbol, the body part unifying this symbol with the complex expression that was the original argument, followed by the (to be unnested) function call with the new symbol replacing the complex argument. When a call has multiple complex arguments, this results in a local..in..end hierarchy with the depth corresponding to the number of complex arguments. %FIXME: check if we can change the code to have only one local declaring all variables.
+
 Here is an example of unnesting in Oz code:
 \begin{lstlisting}
   {F {F2 A} B}
@@ -1038,6 +1041,7 @@ Of course, the function called can itself be the result of a function call, and 
 \begin{lstlisting}
   { {F1 A} B }
 \end{lstlisting}
+will result in an AST for this code:
 \begin{lstlisting}
   local
     NewVar
@@ -1048,16 +1052,16 @@ Of course, the function called can itself be the result of a function call, and 
 \end{lstlisting}
 
 \subsubsection{Declarations (local)}
-This is done by unnesting the body of the instruction.
+The unnester will not touch at the declaration part of a \lstinline!local..in..end! instruction. It will only unnest the body.
 \subsubsection{If then else}
 The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 end! depends on the type of Cond. 
 \begin{itemize}
-  \item If Cond is elementary, the unnesting is done simply by unnesting the two branched.
-  \item If Cond is complex, a new symbol is created and unified with the condition Cond. This is then followed by the if then else instruction in which the complex condition is replace by the symbol newly introduced.
+  \item If \lstinline!Cond! is elementary, the unnesting is done simply by unnesting the two branched.
+  \item If \lstinline!Cond! is complex, a new symbol is created and unified with it. This is then followed by the \lstinline!if..then..else! instruction in which the complex condition is replace by the symbol newly introduced:
     \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
 \end{itemize}
 
-\subsubsection{Records}
+\subsubsection{Records}\label{sec:arch:unnester:records}
 The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
 Here is an example where the value of a feature is an if expression.
 \begin{lstlisting}
@@ -1072,7 +1076,7 @@ will be transformed in
     R=rec(a:NewVar b:2)
   end
 \end{lstlisting}
-And this requires a new unnesting step (see the unnesting of unifications) resulting in 
+And this requires a new unnesting step (see the unnesting of unifications Section \ref{sec:arch:unnester:unification}) resulting in 
 \begin{lstlisting}
   local
     NewVar
@@ -1082,22 +1086,42 @@ And this requires a new unnesting step (see the unnesting of unifications) resul
   end
 \end{lstlisting}
 
+Note that the unnester applies the exact same transformation to open records.
 
 
-\subsubsection{Nesting Marker}\label{sec:unnester:nestingmarker}
-It is also the unnester that will transform the nesting marker. There are three cases that are handled.
+\subsubsection{Nesting Marker}\label{sec:arch:unnester:nestingmarker}
+It is also the unnester that will handle the nesting marker and remove it from the AST. There are three cases that are handled.
 \begin{description}
-  \item[Definitions of procedures] At this step, if we found a nesting marker as the identifier of a procedure, it is necessarily in an assignment statement. The unnester needs to transform \lstinline!X=proc{$ A..N}! in \lstinline!proc{X A..N}!.
-  \item[As argument of a call] In this case, the nesting marker has to be replaced by the variable the expression is assigned to. For example, \lstinline!X={P A $ B}! needs to be transformed in  \lstinline!{P A X B}!. Note that this transformation is excluding the unification transformation described earlier in section \ref{sec:arch:unnester:unification}: either there is a nesting marker and the symbol the call expression is assigned to replaces the nesting marker in the arguments list, OR the symbol the call expression is assigned to is added as last argument to the call and in that case no argument may be the nesting marker.
+  \item[Definitions of procedures] At this step, if we found a nesting marker as the identifier of a procedure, it is necessarily in an assignment statement. The unnester needs to transform \lstinline[mathescape]!X=proc{$\$$ A..N}! in \lstinline!proc{X A..N}!.
+  \item[As argument of a call] In this case, the nesting marker has to be replaced by the variable the expression is assigned to. For example, \lstinline[mathescape]!X={P A $\$$ B}! needs to be transformed in  \lstinline!{P A X B}!. Note that this transformation is excluding the unification transformation described earlier in section \ref{sec:arch:unnester:unification}: either there is a nesting marker and the symbol the call expression is assigned to replaces the nesting marker in the arguments list, OR the symbol the call expression is assigned to is added as last argument to the call and in that case no argument may be the nesting marker.
   \item[In matching an argument] %FIXME: to do
 \end{description}
 
+\subsubsection{Compiler Code Notes}
+The unnester is implemented by a function called \lstinline!Unnester!. The unnester implements multiple local functions:
+\begin{itemize}
+  \item  \lstinline!IsElementary! will return if the AST passed as argument is elementary.
+  \item  \lstinline!UnnestFEq! is called to unnest unification ASTs
+  \item  \lstinline!BindVarToExpr! is the function called by \lstinline!UnnestFEq! when one side is elementary, and the other complex.
+  \item  \lstinline!UnnestFApply! is called to unnest calls
+  \item  \lstinline!UnnestFRecord! is called to unnest records and open records. Its structure is similar to that of \lstinline!UnnestFApply!.
+  \item  \lstinline!UnnestFBoolCase! is called to unnest \lstinline!if..then..else! instructions.
+\end{itemize}
 \subsection{Globaliser}\label{sec:arch:globaliser}            
-This pass handles the global variables of a procedure, that is, variables used by a procedure that does not declare it (implying that the declaration is done at an upper level. It is interesting to note that the concept of global variables is only defined for procedures.
+This pass handles the global variables of a procedure, that is, variables used by a procedure that it does not declare (implying that the declaration is done at an upper level). It is interesting to note that the concept of global variables is only defined for procedures.
 Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
 Variables declared by a procedure, including formal parameters, get assigned the procId of said procedure.
 
-Special attention has to be paid to nested procedure declarations. For example
+Special attention has to be paid to nested procedure declarations.
+The globals of procedures in the code have to be determined from the inside to the outside: determine the globals of the deepest nested procedure, and go up. 
+The globals of a procedure are:
+\begin{itemize}
+  \item all variables it uses directly (i.e. not in a procedure definition)
+  \item plus the globals of all the procedures it defines
+  \item minus the variables it declares itself
+\end{itemize}
+
+Here is an example:
 \begin{lstlisting}
 A=1
 proc {P1}                 % A is global to P1
@@ -1120,21 +1144,14 @@ in
 end
 \end{lstlisting}
 
-The globals of procedures in the code have to be determined from the inside to the outside: determine the globals of the deepest nested procedure, and go up. 
-We see that the globals of a procedure are:
-\begin{itemize}
-  \item all variables it uses directly (i.e. not in a procedure definition)
-  \item plus the globals of all the procedures it defines
-  \item minus the variables it declares itself
-\end{itemize}
 
-In the example we see that P3 uses 2 variables declared by another procedure: A and B. 
-P2 does not directly use any variable, but it defines P3 which itself has 2 global variables. Those two variables are thus also globals to P2
-P1 also does not use any variable directly, but it gets 2 globals from P2, of which it declares one: B. P1 indeed only has one global: A.
+In the example we see that \lstinline!P3! uses 2 variables declared by another procedure: \lstinline!A! and \lstinline!B!. 
+\lstinline!P2! does not directly use any variable, but it defines \lstinline!P3! which itself has 2 global variables. Those two variables are thus also globals to \lstinline!P2!.
+\lstinline!P1! also does not use any variable directly, but it gets 2 globals from \lstinline!P2!, of which it declares one: \lstinline!B!. \lstinline!P1! indeed only has one global: \lstinline!A!.
 
 In the abstract syntax tree, we replace symbols corresponding to a global variables by a new local symbol of type 'newlocal' referencing the symbol for this variables in the parent proc which might itself be a 'newlocal' symbol, and so on until we reach the level where the variables is declared.
 
-In the abstract syntax tree, fProc is replaced by fDefineProc taking 1 additional argument: the newly created local variables referencing a variables in the surrounding procedure. This additional information will enable the code generator handle global variables.
+In the abstract syntax tree, \lstinline!fProc! is replaced by \lstinline!fDefineProc! taking 1 additional argument: the newly created local variables referencing a variable in the surrounding procedure. This additional information will enable the code generator handle global variables.
 
 Handling globals correctly requires to handle numerous cases, and determining the algorithm to use requires some care, as illustrated by these examples:
 
@@ -1156,7 +1173,7 @@ in
    end
 end
 \end{lstlisting}
-In this case, A is global to P3 and it creates a new local symbol that will reference a symbol local to P2. But for P2, A is also global, and this situation needs to trigger a new local creation in P2, which will be referenced by the new local in P3. Same thing in P1.
+In this case, \lstinline!A! is global to \lstinline!P3! and it creates a new local symbol that will reference a symbol local to \lstinline!P2!. But for \lstinline!P2!, A is also global, and this situation needs to trigger a new local creation in \lstinline!P2!, which will be referenced by the new local in \lstinline!P3!. Same thing in \lstinline!P1!.
 
 \begin{lstlisting}
 local
@@ -1178,7 +1195,7 @@ in
 end
 \end{lstlisting}
 
-In this case, the traversal of the AST will first analyse {Show A} and create a new local symbol for the variables A in P1. P2 is visited later and will create a new local to reference a symbol local to P2, which is also a new local as A is global to P1. But this new local has already been created, and this situation must not trigger the creation of a new local symbol for A. Rather, the new local symbol to P2 must reference the new local symbol to P1. We see that the new local variables created in a procedure definition may have to be modified by its parent procedure.
+In this case, the traversal of the AST will first analyse \lstinline!{Show A}! and create a new local symbol for the variables \lstinline!A! in \lstinline!P1!. \lstinline!P2! is visited later and will create a new local to reference a symbol local to \lstinline!P2!, which is also a new local as \lstinline!A! is global to \lstinline!P1!. But this new local has already been created, and this situation must not trigger the creation of a new local symbol for \lstinline!A!. Rather, the new local symbol to \lstinline!P2! must reference the new local symbol to \lstinline!P1!. We see that the new local variables created in a procedure definition may have to be modified by its parent procedure.
 
 Of course, the inverse has to be handled too, i.e. a new local is created for a defined proc, and reused later:
 
@@ -1203,7 +1220,7 @@ end
 \end{lstlisting}
 
 
-Of course, a new local symbol must not be created when it would represent a locally declared variables, as in this case:
+Also, a new local symbol must not be created when it would represent a locally declared variables, as in this case:
 
 \begin{lstlisting}
 local
@@ -1225,7 +1242,7 @@ in
 end
 \end{lstlisting}
 
-Two procs defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, P2 and P3 each create a new local for A and both trigger the creation of a new local in P1 for A. But only one new local should be created in P1 for A, and both locals in P2 and P3 should reference it.
+Two procs defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, \lstinline!P2! and \lstinline!P3! each create a new local for \lstinline!A! and both trigger the creation of a new local in \lstinline!P1! for \lstinline!A!. But only one new local should be created in \lstinline!P1! for \lstinline!A!, and both locals in \lstinline!P2! and \lstinline!P3! should reference it.
 
 
 Example V:
@@ -1250,28 +1267,29 @@ end
 \end{lstlisting}
 
 In the end, the algorithm used is the following.
-Each call of the globaliser takes the AST sub tree and an additional Params argument with three fields:
+Each call of the globaliser takes the AST sub tree and an additional \lstinline!Params! argument with three fields:
 \begin{itemize}
    \item the current procId
    \item a list of global variables already seen in the current procId
    \item a list, each item being the list of new local symbols created for the global with same index in the previous list.
 \end{itemize}
 
-The globalise handles the following nodes:
+The globaliser handles the following nodes:
+%FIXME: improve layout if the nest list?
 \begin{description}
-   \item[fProc] When handling a fProc, the globaliser call gets the informations from the parent in its Params argument. Because we enter a new level of procedure nesting, a NewParams is initialised to be passed to recursive globaliser calls handling children nodes. NewParams is initialised with a new procId and two empty lists. 
-      The symbol of the procedure itself gets the procId of its parent, found in Params. The arguments of the procedure get the procId of the currently handled procedure, found in NewParams. At that time the globaliser function is called recursively on the children nodes, with NewParams as additional argument.
-      Once all children have been traversed, the list of their globals and their respective newly created locals is found in NewParams.  We have multiple new locals corresponding to one global in the case of 2 siblings procedure definitions referring the same global as in example V. 
-      Globals whose procId match the NewParams' procId are ignored, as those are variables that are declared at this level, and the chain of references must stop here for these variables.
+   \item[fProc] When handling a \lstinline!fProc!, the globaliser call gets the informations from the parent in its \lstinline!Params! argument. Because we enter a new level of procedure nesting, a \lstinline!NewParams! is initialised to be passed to recursive globaliser calls handling children nodes. NewParams is initialised with a new procId and two empty lists. 
+      The symbol of the procedure itself gets the procId of its parent, found in \lstinline!Params!. The arguments of the procedure get the procId of the currently handled procedure, found in \lstinline!NewParams!. At that time the globaliser function is called recursively on the children nodes, with \lstinline!NewParams! as additional argument.
+      Once all children have been traversed, the list of their globals and their respective newly created locals is found in \lstinline!NewParams!.  We have multiple new locals corresponding to one global in the case of 2 siblings procedure definitions referring the same global as in example V. 
+      Globals whose procId match the \lstinline!NewParams!' procId are ignored, as those are variables that are declared at this level, and the chain of references must stop here for these variables.
       For each remaining global, we look at the list of their locals. 
-      If one of these has the procId matching the current level, all other locals are changed to reference this one. This is because this specific symbol has been created by a direct use at this level, and we will use this one as the new localised symbol at this level. Then we push the global on the parent's globals list and add the local symbol to its corresponding list of new locals (those lists are found in Params)
-      If none of the locals has the current level's procId, it means the global variables has only been used in nested procedure definitions. We need to create a new local symbol for that variable at the current level that will be referenced by the existing locals. Finally, we push the global and the new local symbol we created to the parent. 
-   \item[fSym] If the symbol in this fSym has the current procId found in NewParams, keep it as is, do not change it! 
-      If its procId is different from the current procId, this fSym represents a global variable for the current level. We look in Params if a local variable with the current procId has already been created for this global variable. If yes we reuse it, else We define a new symbol, having the current procId and referencing the symbol initially in fSym. We modify the fSym to use that newly created symbol. Finally, push the global and its local to the parent.
-      
+      If one of these has the procId matching the current level, all other locals are changed to reference this one. This is because this specific symbol has been created by a direct use at this level, and we will use this one as the new localised symbol at this level. Then we push the global on the parent's globals list and add the local symbol to its corresponding list of new locals (those lists are found in \lstinline!Params!)
+      If none of the locals has the current level's procId, it means the global variables has only been used in nested procedure definitions. We need to create a new local symbol for that variable at the current level that will be referenced by the existing locals. Finally, we push the global and the new local symbol we created to the parent via \lstinline!Params!. 
+   \item[fSym] If the symbol in this \lstinline!fSym! has the current procId found in \lstinline!NewParams!, keep it as is, do not change it!  If its procId is different from the current procId, this \lstinline!fSym! represents a global variable for the current level. We look in \lstinline!Params! if a local variable with the current procId has already been created for this global variable. If yes we reuse it, else we define a new symbol, having the current procId and referencing the symbol initially in \lstinline!fSym!. We modify the \lstinline!fSym! to use that newly created symbol. Finally, push the global and its local to the parent.
+   \item[fLocal] Simply assign the current procId to the variables declared by the instruction and recursively call the globaliser on the body.
 \end{description}
 
-
+\subsubsection{Compiler Code Notes}
+The globaliser is implemented by a function called \lstinline!Globaliser!. It defines a local class \lstinline!GlobalsManager! used to ease the management of the newly localised symbols created and their relations to procIds. It also defines a function \lstinline!AssignScope! used to assign scope to variable declarations. \lstinline!Globaliser! transforms \lstinline!fProc!, \lstinline!fLocal! and \lstinline!fSym! nodes, leaves untouched the nodes \lstinline!fConst! and \lstinline!pos!, and raises an error if it finds a \lstinline!fVar! or \lstinline!fAtom!. All other nodes are traversed with the \lstinline!DefaultPass! function.
 
 \subsection{CodeGen}
 \subsubsection{Register allocation}
@@ -1453,4 +1471,3 @@ $
 \end{document}
 
 % vim: set textwidth=80
-% vim: iabbrev vm virtual machine
