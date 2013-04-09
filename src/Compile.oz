@@ -74,7 +74,6 @@ define
          procId
          % type possibilities:
          %  -localProcId
-         %  -global
          %  -localised (when a global has been replaced by a new local symbol)
          %  -patternmatch
          %  -wildcard (unused symbol)
@@ -1884,6 +1883,9 @@ define
             %
             %   lbl(EndLabel)
             %
+            % The variables in the patterns are replaced by a object obtained with a newPatMatCapture taking
+            % as argument the X register in which to place the value assigned to the capture variable.
+            %
             % A clause with guards however must be the only clause in the sequence.
             % This is because after testing the pattern, we need code to test the guards,
             % which is not possible in the opcode showed above.
@@ -2018,7 +2020,7 @@ define
                end
 
 
-               fun {PrefixOfSeq TestedValue Pattern Type PatternMatchRecord ThisLabel NextTestLabel ErrorLabel UsedSymbols Params}
+               fun {PrefixOfSeq TestedValue Pattern PatternMatchRecord ThisLabel NextTestLabel ErrorLabel UsedSymbols Params}
                   case Pattern
                   of fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
                      % This is a clause with guards. The label of the guards code is
@@ -2065,7 +2067,7 @@ define
                CodeBuffer={NewCell nil}
                % The record holding all tests for visited clauses in the current sequence
                PatternMatchRecord={NewCell '#'()}
-               % Number of record already visited in the current sequence.
+               % Number of clauses already visited in the current sequence.
                % Used to compute index in the PatternMatchRecord
                SeqLen={NewCell 0}
                % Label at the end of the code for the case
@@ -2073,19 +2075,16 @@ define
                % Label identifying error code
                ErrorLabel={GenLabel}
 
-               % Cell holding the last pattern encountered in the loop.
-               % Needed to be able to add guards opcodes for last clause
-               % FIXME: could possibly be improved
-               ThisPattern={NewCell unit}
-               PreviousPattern={NewCell unit}
-               ThisGuardLabel={NewCell {GenLabel}}
+               % Cell holding the pattern of the last visited clause.
+               % Needed for the closing code adding the code for the last sequence
+               LastPattern={NewCell unit}
 
                % Collect symbols used in clause code.
                % Declared here because it needs to be passed to ProfixOfSeq out of the {List.forAllInd Clauses} loop.
                UsedSymbols={NewCell nil}
 
                fun {IsNewSequence Label Type}
-                  % Only fRecord and fConst with no guards are part of sequences
+                  % Only clauses with no guards are part of sequences
                   % AS fRecord are stored in a safe in a fConst we can just test if the label is fConst
                   % Return true to debug and see all clauses generated seperately
                   % Seems that by using patMatOpenRecord we can put all in one sequence
@@ -2114,8 +2113,6 @@ define
                                           {Show '************************'}
                                           {DumpAST.dumpAST Pattern _}
 
-                                          PreviousPattern:=@ThisPattern
-                                          ThisPattern:=Pattern
 
                                           % If we start a new sequence, add the code of the previous sequence to Code
                                           if {IsNewSequence PatternLabel @SequenceType} then
@@ -2123,9 +2120,9 @@ define
                                              if @SequenceType\=none then
                                                 if @ThisTestLabel\=unit then
                                                    % Do not include a label for first test
-                                                   Code:=@Code|lbl(@ThisTestLabel)|{UsedSymbolsToYReg @UsedSymbols}|{PrefixOfSeq TestedValue @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
+                                                   Code:=@Code|lbl(@ThisTestLabel)|{UsedSymbolsToYReg @UsedSymbols}|{PrefixOfSeq TestedValue @LastPattern @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
                                                 else
-                                                   Code:=@Code|{PrefixOfSeq TestedValue @PreviousPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
+                                                   Code:=@Code|{PrefixOfSeq TestedValue @LastPattern @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}|@CodeBuffer|nil
                                                 end
                                              end
                                              % Reset loop variables
@@ -2136,7 +2133,6 @@ define
                                              ThisTestLabel:=@NextTestLabel
                                              NextTestLabel:={GenLabel}
                                              SequenceType:=PatternLabel
-                                             ThisGuardLabel:={GenLabel}
                                           end
 
                                           ThisLabel:={GenLabel}
@@ -2167,16 +2163,17 @@ define
                                           else
                                              CodeBuffer:=@CodeBuffer|lbl(@ThisLabel)|{UsedSymbolsToYReg @UsedSymbols}|{CodeGenInt Body Params}|branch(EndLabel)|nil
                                           end
-                                          % Update number of clauses visited in current sequence
+                                          % Update number of clauses visited in current sequence and LastPattern
                                           SeqLen:=@SeqLen+1
+                                          LastPattern:=Pattern
                                        end}
                % Add the code for the last clause, for error handling, and the end label
                Code:=@Code|
                      % FIXME: this if expression in the list might not be the clearest code
                      if @ThisTestLabel\=unit then
-                        lbl(@ThisTestLabel)|{PrefixOfSeq TestedValue @ThisPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}
+                        lbl(@ThisTestLabel)|{PrefixOfSeq TestedValue @LastPattern @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}
                      else
-                        {PrefixOfSeq TestedValue @ThisPattern @SequenceType @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}
+                        {PrefixOfSeq TestedValue @LastPattern @PatternMatchRecord @ThisLabel @NextTestLabel ErrorLabel @UsedSymbols Params}
                      end|
                      @CodeBuffer|
                      %---- error ----
