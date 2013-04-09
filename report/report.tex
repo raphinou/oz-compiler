@@ -55,16 +55,16 @@ The Mozart2 virtual machine was developed from scratch, with extensive additiona
 \subsection{Registers}\label{sec:intro:registers}
 The Mozart2 virtual machine works with four types of registers. The description of the registers uses the concept of abstractions, which is precisely defined in the next section. It is however sufficient for the understanding of this section to equate the concept of abstraction with the concept of procedure.
 \begin{description}
-  \item[X registers]are work registers that should not be used to permanently store values. X registers are for example used to pass the aguments to calls. However, the values in these registers are lost after the call. %FIXME: isn't it X regs might be lost?
+  \item[X registers]are work registers that should not be used to permanently
+    store values. X registers are for example used to pass the arguments to calls. However, the values in these registers are lost after the call. %FIXME: isn't it X regs might be lost?
     %FIXME: combien de registres X disponibles,alloues?
   \item[Y registers]are locally persisting registers. They all have to be initialised at once at the start of an abstraction's code, before their use, which requires to know how many Y registers are needed.
   \item[G registers] are holding global variables, i.e. variables that are accessed by the abstraction, but that are not locally declared.
   \item[K registers] are holding constant values, be it integers, floats or records.
 \end{description}
 
-Y are locals(y(index)), X are work registers (x(index)), G are globals filled sequentially with arrayFill (g(index)), k are constants (k(value))
 \subsection{Abstractions}\label{sec:vm:abstractions}
-An Oz procedure is represented in the virtual machine by what is called an abstraction. An Oz program itself is implicitely placed in what is called a top level abstraction.
+An Oz procedure is represented in the virtual machine by what is called an abstraction. An Oz program itself is implicitly placed in what is called a top level abstraction.
 An abstraction holds references to G registers and to its code area. This code area has references to its K registers and the code itself. 
 \begin{verbatim}
 +-----------+
@@ -116,7 +116,7 @@ same for every call of Sqrt, and the virtual machine can simply create a new
 abstraction with one global variable referencing the already existing code
 area. 
 
-If we have 2 simultaneaous calls to Sqrt, for example {Sqrt 2} and {Sqrt 5}, we
+If we have 2 simultaneous calls to Sqrt, for example {Sqrt 2} and {Sqrt 5}, we
 would end up with this structure in the virtual machine:
 
 \begin{verbatim}
@@ -131,15 +131,19 @@ G0=5
 
 
 
-Abstraction (with G regs)  -> CodeArea (with K regs) -> Code
 \section{Target Language}
-The compiler will have to generate code that can be passed to the assembler targetting the virtual machine. This assembler language has solid support for the virtual machine concepts as we'll see.
+The compiler will have to generate code that can be passed to the assembler targeting the virtual machine. This assembler language has solid support for the virtual machine concepts as we'll see.
 The assembler accepts an Oz list of instructions that are Oz records. 
 
 \subsection{Register Operations}\label{sec:intro:opcode:registers}
-Registers access instructions are proper to each type. To access the nth G X Y registers, the instruction will respectively be g(n), x(n), y(n). 
+Registers access instructions are proper to each type. To access the nth G X Y
+registers, the instruction will respectively be \lstinline!g(n)!,
+\lstinline!x(n)!, \lstinline!y(n)!. 
 
-K registers are used to store constants, and are not numbered, but identified by the value they store. The constant 2 will appear in the code as k(2), the constant record r(a b c) will appear in the code as k(r(a b c)).
+K registers are used to store constants, and are not numbered, but identified by
+the value they store. The constant 2 will appear in the code as
+\lstinline!k(2)!, the constant record \lstinline!r(a b c)! will appear in the
+code as \lstinline!k(r(a b c))!.
 
 As mentioned earlier, Y registers are persisting for the lifespan of the current frame. Their number has to be determined when the frame is initialised, and all needed Y registers are initialised at once with the instruction \lstinline!allocateY(n)! where n is the number of Y registers used in this frame.
 
@@ -153,7 +157,7 @@ Code positions can be identified by labels, which need to be atoms or names. A l
 Labels are required for jumps in the code. 
 Jumps will move the execution to the label they have as argument. For example \lstinline!branch(endLabel)! will jump to the position in the code identified by the label \lstinline!endLabel!.
 
-Conditional jumps will look at the value in a register, and if this value is not true, it will jump to the code at the label it was given. That instruction also takes a label locating error handling code. Here is an example of conditional jump that will look at the value in X register 0: \lstinline!condBranch(x(0) elseLabel errorLabel)|!. If the value in x(0) is true, it continues execution. If it is false it jumps to the position in the code identified by the label \lstinline!elseLabel!. If an error occurs, it jumps to the label \lstinline!errorLabel!.
+Conditional jumps will look at the value in a X register, and if this value is not true, it will jump to the code at the label it was given. That instruction also takes a label locating error handling code. Here is an example of conditional jump that will look at the value in X register 0: \lstinline!condBranch(x(0) elseLabel errorLabel)|!. If the value in x(0) is true, it continues execution. If it is false it jumps to the position in the code identified by the label \lstinline!elseLabel!. If an error occurs, it jumps to the label \lstinline!errorLabel!.
 
 
 \subsection{Calls}\label{sec:opcode:calls}
@@ -166,7 +170,8 @@ move(y(2) x(2))
 call(y(3) 3)
 \end{lstlisting}
 
-A call done as last instruction of an abstraction should be made with the tailCall instruction, as this lets the virtual machine optimise the execution. It has the exact same specification as the call instruction, only the name of the instruction differs: \lstinline!tailCall(Callee Args)!.
+A call done as last instruction of an abstraction should be made with the
+\lstinline!tailCall! instruction, as this lets the virtual machine optimise the execution. It has the exact same specification as the call instruction, only the name of the instruction differs: \lstinline!tailCall(Callee Args)!.
 
 \subsection{Records}\label{sec:opcode:records}
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
@@ -214,7 +219,7 @@ Not all will be described here as an exhaustive list is available at %http://www
 \subsection{Position in source code}
 Most records have the corresponding position in the source code available in their last feature, encoded in a record of the form \lstinline!pos(File Linebegin Columnbegin Fileend Lineend Columnend)!. This information has to trickle through all transformations so meaningful error messages can be given to the programmer in case of error.
 
-For clarity and brievety, in the examples of AST included in this document, the positions will always be represented by the featureless record \lstinline!pos!. 
+For clarity and brevity, in the examples of AST included in this document, the positions will always be represented by the featureless record \lstinline!pos!. 
 \subsection{Basic data types}
 The basic data type described in this section are the simplest node found in the AST as they have no children and are the leafs of the tree.
 These are the types that are currently handled, with their corresponding records in the AST:
@@ -300,7 +305,7 @@ fApply(
 \end{verbatim}
 
 \subsection{Functions}\label{sec:input:functions}
-Funtion definitions are found in the AST un fFun records, with the same features found in fProc records. Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
+Function definitions are found in the AST in fFun records, with the same features found in fProc records. Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
 However, only functions can be marked as lazy as in \lstinline!fun lazy {F N} .. end!. This lazy marker is translated in a flag.
 \subsubsection{Definitions}
 Function definitions are found in records fFun(Name Arguments Body Flags Pos). The features are identical to the procedure definition.
@@ -327,9 +332,12 @@ Arithmetic operators are parsed as records of the form fOpApply(Operator Args Po
 In Oz, some statements can be transformed in expressions by the use of the \$ marker. This marker is found in the AST as a record fDollar() with a unique feature: it position.
 The statements that can be transformed in expressions are
 \begin{itemize}
-  \item Function, Procedure, Functor and Class declarations. For example X=fun{\$ A B} .. end
-  \item In the parameters list of a call to a procedure, in the location of an expression. For example {Foo A..\$..N}
-  \item In a pattern position of a parameter of a call. For example {Foo bar(A..\$..N) baz}
+  \item Function, Procedure, Functor and Class declarations. For example
+    \lstinline!X=fun{\$ A B} .. end!
+  \item In the parameters list of a call to a procedure, in the location of an
+    expression. For example \lstinline!{Foo A..\$..N}!
+  \item In a pattern position of a parameter of a call. For example
+    \lstinline!{Foo bar(A..\$..N) baz}!
 \end{itemize}
 Note that although functions can unify their parameters with values, like in 
 \begin{lstlisting}
@@ -373,7 +381,7 @@ Here is the AST corresponding to the record definition \lstinline!rec(f1:v1 f2:v
    )
 \end{lstlisting}
 
-When the feature is not explicitely given, the item in the list of features and their respective values is simply the value. Here is the AST of this record \lstinline!rec(v1 f2:V2)!. The first item in the list is simply an atom, the value of the first feature. Note that the value of the feature f2 is a variable in this case.
+When the feature is not explicitly given, the item in the list of features and their respective values is simply the value. Here is the AST of this record \lstinline!rec(v1 f2:V2)!. The first item in the list is simply an atom, the value of the first feature. Note that the value of the feature f2 is a variable in this case.
 
 \begin{lstlisting}
    fRecord(
@@ -518,7 +526,7 @@ Although all passes work exclusively on the AST, the transformations described i
 
 \subsection{Declarations Flattener}\label{sec:arch:declsflattener}
 The Oz language accepts complex instructions in the declaration part of \lstinline!local Decls in Body end!. This brings the need to decide what variables are declared for each instruction present in the \lstinline!Decls!. 
-For example, in unification, only the left hand side variable gets declared, and only B is implicitely declared in the following code snippet:
+For example, in unification, only the left hand side variable gets declared, and only B is implicitly declared in the following code snippet:
 \begin{lstlisting}
    local
       B=2*A
@@ -529,9 +537,9 @@ For example, in unification, only the left hand side variable gets declared, and
 Luckily, this has been clearly formalised by the Oz implementers and published on the web\footnote[]{http://www.mozart-oz.org/documentation/notation/node6.html}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
 
 \subsection{Namer}\label{sec:arch:namer}
-The namer  basically replaces all occurences of a variable's \lstinline!fVar! by \lstinline!fSym! records holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
+The namer  basically replaces all occurrences of a variable's \lstinline!fVar! by \lstinline!fSym! records holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
 
-In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVars! by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
+In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVar!s by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
 
 The set of maps from a variable name to its corresponding symbol is called environment, and is maintained by the namer.
 
@@ -539,11 +547,11 @@ The set of maps from a variable name to its corresponding symbol is called envir
 So the question raises of when do variables get declared.
 One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduces in section \ref{sec:input:flocal}. At this stage, \lstinline!Decls! only contains simple variables declaration, thanks to the declaration flattener (see Section \ref{sec:arch:declsflattener}). \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing mappings for variables with the same name coming from the parent environment. 
 
-Another kind of declaration is found in the definition of procedures and functions. Indeed, fProc (section \ref{sec:input:procedures} and fFun (section \ref{sec:input:functions}) records also implicitely declare the variables for their formal parameters. % see test 029
+Another kind of declaration is found in the definition of procedures and functions. Indeed, fProc (section \ref{sec:input:procedures} and fFun (section \ref{sec:input:functions}) records also implicitly declare the variables for their formal parameters. % see test 029
 
 Still another kind of declaration happens in pattern matching (section \ref{sec:input:patternmatching}), when a record present in the pattern has a feature that is a variable. This case is analysed specifically in section\ref{sec:arch:namer:patternmatching}.
 
-These variables get implicitely declared and added to the environment in which not only the clause' body but also its guards will be executed.
+These variables get implicitly declared and added to the environment in which not only the clause' body but also its guards will be executed.
 
 
 It is these manipulations of the environments that make that the code in Figure~\ref{fig:namer_nested_locals} does not throws an error of impossible unification of A with 6. Indeed, the inner variable A gets another symbol assigned than the outer one, and replaces it in the environment of the inner instructions. Thus there is no ambiguity in the \lstinline!Show! instruction as to which its argument is, and it effectively shows 6.
@@ -565,9 +573,13 @@ end
 
 
 \subsubsection{Non-declaration code}
-In code not declaring variables, the namer's job is much simpler: it will simply replace all occurences of fVar records by a fSym record having the corresponding symbol as first feature.
+In code not declaring variables, the namer's job is much simpler: it will simply
+replace all occurrences of fVar records by a fSym record having the corresponding symbol as first feature.
 \subsubsection{Case Pattern Matching}\label{sec:arch:namer:patternmatching}
-For pattern matching with the \lstinline!case! instruction the namer will have more work to do, which we will discuss now. Let's note \lstinline!PatternX(Var1,Var2,..)! the pattern identified by X and implicitely declarng variables \lstinline!Var1!,\lstinline!Var2!,\ldots, and let's use the same convention for code fragments \lstinline!CodeX(Var1,Var2,..)! and guards \lstinline!GuardsX(Var1,Var2,..)! using those implicitely declared variables.
+For pattern matching with the \lstinline!case! instruction the namer will have
+more work to do, which we will discuss now. Let's note
+\lstinline!PatternX(Var1,Var2,..)! the pattern identified by X and implicitly
+declaring variables \lstinline!Var1!,\lstinline!Var2!,\ldots, and let's use the same convention for code fragments \lstinline!CodeX(Var1,Var2,..)! and guards \lstinline!GuardsX(Var1,Var2,..)! using those implicitly declared variables.
 
 The transformation of the AST corresponding this Oz code:
 \begin{lstlisting}
@@ -614,7 +626,7 @@ described in CTMCP Section 3.7.5) which is itself wrapped in an
 \lstinline!fConst!. The reason of this manipulation is to prevent manipulations
 of those symbols by later compiler passes. Now these will be handled as
 constants in all subsequent compiler passes. Another consequence of this is
-that the records implicitely declaring variables in a pattern are seen as
+that the records implicitly declaring variables in a pattern are seen as
 constant records, all features being constants! And these are treated as such,
 notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
 
@@ -647,7 +659,7 @@ Notice that NamerForBody calls NamerForDecls when a function or procedure is def
 \end{lstlisting}
 The environment, mapping variable names to their respective symbol, is stored in the object available through Params.env. This object's \lstinline!backup! method will backup the current environment and create a new one with the exact same bindings.
 We see in this code that the function creates a new environment based on its parent environment, which is backuped to be restored when done. The name of the function is passed to \lstinline!NamerForBody!, because the name of the function must have been declared previously and be present in the environment. 
-The formal parameters of the function however are passed to \lstinline!NamerForDecls!, as these are variables implicitely declared, that have to be added to the current environment. This updated environment is then used by \lstinline!NamerForBody! to transform the function's body.
+The formal parameters of the function however are passed to \lstinline!NamerForDecls!, as these are variables implicitly declared, that have to be added to the current environment. This updated environment is then used by \lstinline!NamerForBody! to transform the function's body.
 At the end, the parent's environment is restored, ensuring that formal parameters of the function are not available outside of the function.
 
 This code also illustrates how it comes that functions can access variables defined in the defining environment (such functions are called closures): all those are inherited by the function's environment!
@@ -713,17 +725,23 @@ The fact is that the character (statement or
 expression) of a sequence of instructions is determined at the start of the
 sequence, the top of the fAnd hierarchy in the AST. But the impact of this
 distinction is found at the very bottom of this hierarchy: the last
-instruction, the end of the sequence. To be able to distingish both cases, we
+instruction, the end of the sequence. To be able to distinguish both cases, we
 need to branch as soon as we determine the instruction's character.
 
-If we note F the pass of the compiler, FExpr the locally defined function handling expressions, and FStat corresponding function for statements, we can ensure that the right function is applied to each instruction's AST as defined in section \ref{section:compilerinput} by following these rules of identification, and call FStat on statements and FExpr on expressions:
+If we note \lstinline!F! the pass of the compiler, \lstinline!FExpr! the locally defined
+function handling expressions, and \lstinline!FStat! corresponding function for
+statements, we can ensure that the right function is applied to each
+instruction's AST as defined in section \ref{section:compilerinput} by following
+these rules of identification, and call \lstinline!FStat! on statements and
+\lstinline!FExpr! on expressions:
 
 %FIXME possibly replace the AST record by the Oz instruction they represent
 \begin{description}
   \item[program] the program is a statement
   \item[fLocal] 
     \begin{itemize}
-      \item the declarations are all just fSym, since the DeclsFlattener has move all other code to the body. These fSyms are neither expressions nor statement, they are just fSym declarations, and the declaration part is a statement.
+      \item the declarations are all just fSym, since the DeclsFlattener has
+        move all other code to the body. These \lstinline!fSym!s are neither expressions nor statement, they are just fSym declarations, and the declaration part is a statement.
       \item the body has the same character as its parent fLocal
     \end{itemize}
   \item[fAnd] 
@@ -732,7 +750,7 @@ If we note F the pass of the compiler, FExpr the locally defined function handli
       \item the second feature has same character as its parent fAnd
     \end{itemize}
   \item[fEq] both sides are expressions
-  \item[fProc] if the proc definition is an expression, its identifier must be the nesting marker \$, else its identifier is an expression. The arguments are expressions, and the body is a statement.
+  \item[fProc] if the procedure's definition is an expression, its identifier must be the nesting marker \$, else its identifier is an expression. The arguments are expressions, and the body is a statement.
   \item[fFun] are similar to fProc, because a function definition is desugared in a procedure definition as described in Section \ref{sec:arch:desugar:functions}.
   \item[fApply] calls can be statements or expressions, but in both cases the callee and its arguments are all expressions. 
   \item[fColonEquals] can be statement or expression, but Cell and Val are in both cases expressions.
@@ -858,7 +876,7 @@ We can also illustrate this transformation in Oz code. For the same example, the
       R={Number.'+' A B}
    end
 \end{lstlisting} 
-We see that a new symbol, that we denoted R for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
+We see that a new symbol, that we denoted \lstinline!R! for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
 
 Lazy functions have in their flags a lazy atom: \lstinline!fAtom(lazy pos)!.
 The desugar step of lazy function simply revolves in wrapping in a thread a call to the builtin \lstinline!waitNeeded! on the return symbol before unifying it with the body of the function. If the function of the example we worked on until now had been marked as lazy, the transformation would have yielded this result, in Oz notation:
@@ -909,7 +927,8 @@ In the AST, this replaces
               nil))
   )
 \end{lstlisting}
-where Label, Feature1 and Feature2 can be fSyms, by
+where Label, \lstinline!Feature1! and \lstinline!Feature2! can be
+\lstinline!fSym!s, by
 \begin{lstlisting}
   fApply(
          fConst(makeDynamic pos) 
@@ -955,7 +974,9 @@ This transformation occurs in the AST of course, and here is the AST transformat
 \end{lstlisting}
 
 \subsubsection{Locks}
-Locks statements are handled very similarly to thread statements: their body is wrapped in a argumentless procedure, which is passed as argument, together with the lock itself, to the base environment's LockIn. In Oz notation, \lstinline!lock L then Body end! is transformed in
+Locks statements are handled very similarly to thread statements: their body is
+wrapped in a argumentless procedure, which is passed as argument, together with
+the lock itself, to the base environment's \lstinline!LockIn!. In Oz notation, \lstinline!lock L then Body end! is transformed in
 \begin{lstlisting}
 local
    P
@@ -995,14 +1016,20 @@ The program itself being a statement, the function Desugar simply call DesugarSt
 \subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:arch:unnester:unification}
-The unnesting result of a unification instruction depends on the elementary character of each side. \lstinline!fConst!, \lstinline!fSym!, lstinline!fDollar! and lstinline!fAtom! are considered elementary AST nodes. Considering the elementary charater of both sides of the unification, we have to handle three situations:
+The unnesting result of a unification instruction depends on the elementary
+character of each side. \lstinline!fConst!, \lstinline!fSym!,
+\lstinline!fDollar! and \lstinline!fAtom! are considered elementary AST nodes.
+Considering the elementary character of both sides of the unification, we have to handle three situations:
 \begin{description}
   \item[Both elementary]In this case there is nothing to do
   \item[One complex, one elementary] The unnesting is done according what the complex instruction is: 
     \begin{description}
       \item[Call] This is code of the form \lstinline!V={P E1...En}!, which needs to be transformed in the form \lstinline!{P E1...En V}!, where the variable we assign to is passed as last argument of the call. Note this transformation is not done if one if the arguments is the nesting marker (see section \ref{sec:arch:unnester:nestingmarker}).
       \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of fAnd records. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
-      \item[Declaration (local)] The value of a \lstinline!local..in..end! in a unification is the value of its body. Hence, the unification \lstinline!V = local declarations in body end! is moved in side the local's body resulting in the code \lstinline!local declarations in V=body end!. This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
+      \item[Declaration (local)] The value of a \lstinline!local..in..end! in a
+        unification is the value of its body. Hence, the unification
+        \lstinline!V = local declarations in body end! is moved in side the
+        \lstinline!local!'s body resulting in the code \lstinline!local declarations in V=body end!. This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
       \item[if then else] The unification is simply moved inside each branch, and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively unnested as Is1 and Is2 can be, for example,  sequences of instructions.
     \end{description}
   \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with the left side then with the right side, and unnesting the resulting code.
@@ -1266,7 +1293,7 @@ in
 end
 \end{lstlisting}
 
-Two procs defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, \lstinline!P2! and \lstinline!P3! each create a new local for \lstinline!A! and both trigger the creation of a new local in \lstinline!P1! for \lstinline!A!. But only one new local should be created in \lstinline!P1! for \lstinline!A!, and both locals in \lstinline!P2! and \lstinline!P3! should reference it.
+Two procedures defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, \lstinline!P2! and \lstinline!P3! each create a new local for \lstinline!A! and both trigger the creation of a new local in \lstinline!P1! for \lstinline!A!. But only one new local should be created in \lstinline!P1! for \lstinline!A!, and both locals in \lstinline!P2! and \lstinline!P3! should reference it.
 
 
 Example V:
@@ -1315,11 +1342,24 @@ The globaliser handles the following nodes:
 \subsubsection{Compiler Code Notes}
 The globaliser is implemented by a function called \lstinline!Globaliser!. It defines a local class \lstinline!GlobalsManager! used to ease the management of the newly localised symbols created and their relations to procIds. It also defines a function \lstinline!AssignScope! used to assign scope to variable declarations. \lstinline!Globaliser! transforms \lstinline!fProc!, \lstinline!fLocal! and \lstinline!fSym! nodes, leaves untouched the nodes \lstinline!fConst! and \lstinline!pos!, and raises an error if it finds a \lstinline!fVar! or \lstinline!fAtom!. All other nodes are traversed with the \lstinline!DefaultPass! function.
 
-\subsection{CodeGen}
+\subsection{CodeGen}\label{sec:arch:codegen}
 The last pass of the compiler will not return a new AST, but a list of opcodes to be passed to the assembler. It is implemented by the function \lstinline!CodeGen!, which is also responsible for register allocation to symbols present in the AST.
 
 \subsubsection{Register allocation}
 Currently, register allocation is very basic as all variable get a Y register assigned. This is far from optimal and offers a big opportunity for improving the performance of the compiled code.
+
+\subsubsection{Local..in..end}\label{sec:arch:codegen:localin}
+Those Oz instructions are present in the AST as \lstinline!fLocal! nodes.
+Generating the opcode for these nodes simply consists in generating the opcodes
+for the declaration part, followed by the opcodes for the body part of the
+instruction.
+
+Handling the declaration parts includes assigning a Y register to the symbols,
+before initialising this Y register with a \lstinline!createVar! instruction.
+
+Handling the body parts simply consists in traversing the body AST and generate
+the needed opcodes.
+
 
 \subsubsection{If then else}
 Rather than give convoluted explanations, it is easier to look at the code generating the opcodes for \lstinline!fBoolCase(FSym TrueCode FalseCode Pos)! found in the AST for an \lstinline!if..then..else! instruction:
@@ -1382,15 +1422,6 @@ and, if we note \lstinline!y(Variable)! the register assigned to \lstinline!Vari
    arrayFill(k(2)) 
 \end{lstlisting}
 
-\subsubsection{Procedures/Abstractions}\label{sec:codegen:procedures}
-At this stage, only procedures are defined, as found in \lstinline!fDefineProc! records (created by the \lstinline!Globaliser!, see Section \ref{sec:arch:globaliser}) of the form:
-\lstinline!fDefineProc(fSym(Sym pos) Args Body Flags Pos NewLocals)!
-As described in Section \ref{sec:opcode:procedures}, the body has first to be assembled. This requires to first assign registers to all symbols used in the body, generating the opcodes for the body (which might itself define procedures and thus do recursive calls) and pass it to the assembler which will return the CodeArea we need.
-The \lstinline!createAbstractionUnify! instruction can then be issued, unifying the assembled abstraction's code area \lstinline!CA! with the register assigned to the symbol \lstinline!Sym!:
-\lstinline!createAbstractionUnify(k(CA) GlobalsCount {RegFor Sym})!
-\lstinline!GlobalsCount! in this instruction is the integer number of global variables present in CA. Each global variable has to be initialised in turn by an \lstinline!arrayFill! instruction. The first \lstinline!arrayFill! will initialise the abstraction's \lstinline!g(0)!, the second will initialise the abstraction's \lstinline!g(1)!, etc\ldots
-If the variable in the enclosing environment referenced by the localised symbol is located in a X register, say 0, then the global is initialised by arrayFill(x(0)). Similarly if the variables in the enclosing environment is stored in register Y or g at index 0, then the global will be initialised with arrayFill(y(0)) or arrayFill(g(0)) respectively.
-
 \subsubsection{Unification}
 Unification not involving records simply issue a \lstinline!unify(LHS RHS)! instruction, where LHS is the register where the left-hand side is stored and RHS is the register for the right-hand side.
 \begin{lstlisting}
@@ -1423,6 +1454,15 @@ unify(y(1) k(10))
 unnify(y(1) y(2))
 \end{lstlisting}
 
+
+\subsubsection{Procedures/Abstractions}\label{sec:codegen:procedures}
+At this stage, only procedures are defined, as found in \lstinline!fDefineProc! records (created by the \lstinline!Globaliser!, see Section \ref{sec:arch:globaliser}) of the form:
+\lstinline!fDefineProc(fSym(Sym pos) Args Body Flags Pos NewLocals)!
+As described in Section \ref{sec:opcode:procedures}, the body has first to be assembled. This requires to first assign registers to all symbols used in the body, generating the opcodes for the body (which might itself define procedures and thus do recursive calls) and pass it to the assembler which will return the CodeArea we need.
+The \lstinline!createAbstractionUnify! instruction can then be issued, unifying the assembled abstraction's code area \lstinline!CA! with the register assigned to the symbol \lstinline!Sym!:
+\lstinline!createAbstractionUnify(k(CA) GlobalsCount {RegFor Sym})!
+\lstinline!GlobalsCount! in this instruction is the integer number of global variables present in CA. Each global variable has to be initialised in turn by an \lstinline!arrayFill! instruction. The first \lstinline!arrayFill! will initialise the abstraction's \lstinline!g(0)!, the second will initialise the abstraction's \lstinline!g(1)!, etc.\ldots
+If the variable in the enclosing environment referenced by the localised symbol is located in a X register, say 0, then the global is initialised by arrayFill(x(0)). Similarly if the variables in the enclosing environment is stored in register Y or g at index 0, then the global will be initialised with arrayFill(y(0)) or arrayFill(g(0)) respectively.
 
 \subsubsection{Calls}\label{sec:codegen:calls}
 Calls are done with the opcode \lstinline!call(Callee NumberOfArgs)!. The arguments are not passed to \lstinline!call!, but will be accessed in registers X with index 0 to \lstinline!NumberOfArgs!. \lstinline!CodeGen! will thus first move all argument values to X registers, then issue the \lstinline!call!.
@@ -1464,15 +1504,19 @@ We'll start by ignoring guards for the moment and look at this code:
 
 \end{verbatim}
 
-The Mozart1 VM allowed the compiler to group in one test instruction subsequent clauses of
+The Mozart1 virtual machine allowed the compiler to group in one test instruction subsequent clauses of
 constant patterns (records, integers, atoms, floats,...), but open
 record patterns could only be handled individually.
-With the Mozart2 VM, both records and open records can be grouped in one test instruction.
+With the Mozart2 virtual machine, both records and open records can be grouped in one test instruction.
 
-A sequence of clauses is a group of subsequent clauses of the same type (constant or open record) and with no guards.
-As sequence of clauses are grouped, the opcode generated will not
+We call sequence of clauses  a group of subsequent clauses and with no guards.
+As clauses of a sequence are grouped, the opcode generated will not
 have one test instruction per clause, but one test instruction
-per sequence of clause, and the test result will jump to the corresponding clause' body.
+per sequence of clauses, and the test result will jump to the corresponding clause' body.
+
+We look here at the code generated for the pattern matching, and don't consider
+the code declaring the symbols for the captures, as this has been extracted by
+the namer as described in Section \ref{sec:arch:namer:patternmatching}.
 
 This will result in opcodes of this form when testing against the value in register x(0):
 \begin{lstlisting}
@@ -1490,17 +1534,17 @@ This will result in opcodes of this form when testing against the value in regis
   lbl(EndLabel)
 \end{lstlisting}
 
-The patternMatch instruction takes two parameters: the register containing the
+The \lstinline!patternMatch! instruction takes two parameters: the register containing the
 value to test against, and a constant record with label '\#' and with one
-feature-value pair for each clause. 
+feature-value pair for each clause(in the order corresponding to the clauses in the Oz code). 
 
 The feature is the pattern to which two transformations have been applied. 
 
-First capture variables have been replaced by an object obtained resulting from a call to
+First capture variables have been replaced by an object resulting from a call to
 \lstinline!Boot_CompilerSupport.newPatMatCapture!, passing as unique argument
 the X register index in which to store the value of the capture variable in
 case this pattern matches. The value is the label identifying the start of the
-code of the corresponding clause, which is where the patternMatch instruction
+code of the corresponding clause, which is where the \lstinline!patternMatch! instruction
 will jump in case of a match.
 
 Second, open records have been replace by an object obtained resulting from a
@@ -1520,7 +1564,7 @@ that no following clause' body is executed.
 
 This is all there is for clauses with no guards. 
 
-Guards, however, add some complexity to the generation of opcodes, and this is what we will look at now.
+Guards, however, add some complexity to the generation of opcodes.
 The augmented complexity comes first from the fact that a clauses with guards cannot
 be grouped with other clauses. For each clause with guards, there will be a
 test instruction generated. In addition, the code for the guards needs access
@@ -1528,10 +1572,240 @@ to the value of the captures in the pattern, meaning it must come after the
 test instruction. A consequence of this is that the test instruction may not jump to the start
 of the clause'body, but must jump to the guards'code!
 
+Here is an example of a case instruction having clauses with guards:
+\begin{lstlisting}
+   R=2
+   ...
+   case R
+   of 2 andthen false then
+      {Show match}
+   else
+      {Show nomatch}
+   end
+\end{lstlisting}
+
+and the corresponding opcodes for the case instruction:
+
+\lstset{numbers=left, numberstyle=\tiny, stepnumber=1, numbersep=5pt}
+\begin{lstlisting}[firstnumber=1]
+          patternMatch(x(0) k('#'(2#8)))
+          branch(6)
+lbl(8)    unify(y(1) k(false))
+          move(y(1) x(1))
+          condBranch(x(1) 6 4)
+          move(k(match) x(0))
+          call(k(<P/1 Show>) 1)
+          branch(3)
+lbl(4)    move(k(errorInCase) x(0))
+          tailCall(k(<P/1 Exception.raiseError>) 1)
+lbl(6)    move(k(nomatch) x(0))
+          call(k(<P/1 Show>) 1)
+lbl(3)    return
+\end{lstlisting}
+\lstset{numbers=none}
+We see that the \lstinline!patternMatch! instruction is built the same way, but
+that it now jumps to the guards'code at \lstinline!lbl(8)! in case of
+success. 
+
+The guards'code, which here only consists of line 3, is immediately
+followed by the code of a conditional jump (lines 4 and 5) to the next test or, if as here it is the guards
+of the last clause, to the else code (with label 6). The \lstinline!condBranch!
+also takes a label for error code, which in this case is label 4.
+
+The code of the clause is on line 6 and 7, followed by the unconditional jump to
+the end label, here \lstinline!lbl(3)!.
+
+As clauses with guards can be mixed with clauses without guards, the opcodes
+generated will contain some test instructions covering multiple clauses while
+some tests will cover only one clause.
 
 \subsubsection{Instructions Sequences}
 Generating opcodes for sequences of instructions consists in the generation in order of the opcodes for each element of the sequence. 
 When \lstinline!CodeGen! visits a node \lstinline!fAnd(First Second)! in the AST, it first generates the opcodes for \lstinline!First!, then for \lstinline!Second!.
+
+
+\subsubsection{Compiler Code Notes}
+The functions \lstinline!CodeGen! declares multiple local functions:
+\begin{itemize}
+  \item \lstinline!CodeGenDecls! will generate opcodes for symbols in
+    declaration parts. This currently consists in assigning a yindex to the
+    symbol and issuing a \lstinline!createVar(y(yindex))! instruction.
+  \item \lstinline!RegForSym! will generate opcode to access the register of the
+    symbol passed as argument
+  \item \lstinline!PermRegForSym! will generate opcode to access the Y register
+    of the symbol passed as argument. This is needed to specifically access the
+    Y register of a symbol for a pattern matching capture, which also has a X
+    register assigned.
+\end{itemize}
+
+Most operations applied to AST nodes in \lstinline!CodeGen! are straight-forward translation of the
+descriptions given in this text to Oz code. For example, here is the
+code handling fLocal nodes in the AST:
+
+\begin{lstlisting}
+         %----------------------
+         of fLocal(Decls Body _) then
+         %----------------------
+            [ {CodeGenDecls Decls Params} {CodeGenInt Body Params}]
+\end{lstlisting}
+
+It just generates opcodes for declarations followed by the opcodes of the body
+of the \lstinline!local..in..end! Oz instruction, as described in Section
+\ref{sec:arch:codegen:localin}.
+
+However, due to the higher complexity of the code handling \lstinline!fCase! nodes, we'll
+spend some time analysing it here.
+
+As a reminder, we call sequence a group of consecutive clauses that can be
+grouped in one test instruction in the opcodes generated. As clauses with guards
+cannot be grouped with other clauses in one test instruction, these
+can only be part of a sequence of which they are the only clause!
+
+We call prefix of a sequence the test
+instructions checking the pattern and the guards before jumping to the
+clause'code, the next test instruction, the else code, or the end label.
+The prefix also includes the code moving captures, available in X registers,
+to Y registers if needed.
+The prefix of a sequence is generated by a call to the function
+\lstinline!PrefixOfSeq! which itself calls \lstinline!UsedSymbolsToYReg! to
+generate opcode to move symbols used in a patterns to Y registers.
+
+\lstinline!CodeGen! visits all clauses in turn.
+
+As the record passed to the instruction \lstinline!patternMatch! needs to
+include the label of the jump destination in case of a match, opcodes for all
+clauses has to be generated before the prefix can be generated.
+
+This is why the code uses a variable \lstinline!Code!, containing code,
+including prefix, for all completely visited sequences; and a variable
+\lstinline!CodeBuffer!, containing code for all visited clauses of the sequence
+currently visited. When a new sequence is started, the prefix of that sequence
+and its \lstinline!CodeBuffer! are appended to \lstinline!Code!, and
+\lstinline!CodeBuffer! is reset.
+
+But when is a new sequence started? As all clauses except those with guards can
+be grouped, a clause starts a new sequence in two cases:
+\begin{itemize}
+  \item the clause has guards
+  \item the clause immediately follows a clause with guards
+\end{itemize}
+
+For this, the compiler code defines the function
+\lstinline!IsNewSequence! which returns true if the clause passed as argument
+is starting a new sequence. The function needs to get passed as arguments the current clause and
+the current sequence type, held in the variable \lstinline!SequenceType!
+
+When a new sequence is started, the previous sequence has to be closed: its
+prefix and code buffer must be added to \lstinline!Code!. However, building the
+prefix for a clause with guards requires knowledge of the register in which the
+value of the guards expression is stored. This is found in the fourth features
+of the pattern's \lstinline!fNamedSideCondition! record in the AST.
+The last visited clause'pattern is stored in \lstinline!ThisPattern!. This is
+needed for the closing code, which also generates the opcode for the last sequence.
+
+As described, the test instruction \lstinline!patternMatch! has to jump to the
+clause' body code or the guards code, identified by the label in
+\lstinline!ThisLabel!. If there is no match, or if there is a match, but the
+guards are not respected, the code must jump to the next test, identified by the
+label in \lstinline!NextTestLabel!
+This means that when closing the current sequence, its test instruction has to
+be identified by a label, which is found in \lstinline!ThisTestLabel!.
+
+The record to be passed to the instruction \lstinline!patternMatch! is reset to
+\lstinline!'#'()! when a new sequence is started, and is updated for each clause
+of the sequence. The record built with all visited clauses of the current
+sequence is in the variable \lstinline!PatternMatchRecord!.
+Each clause updates its respective feature value in
+\lstinline!PatternMatchRecord! through a call to the function \lstinline!TransformPattern!.
+A clause' feature number is tracked by the
+variable \lstinline!SeqLen!, holding the number of clauses already visited in
+the current sequence.
+As all capture values have to be available to the clause'code, symbols encountered
+in the pattern are collected in \lstinline!UsedSymbols! by
+\lstinline!TransformPattern!. It is also \lstinline!TransformPattern! that
+assigns an X register to each capture. The last X register that has been
+assigned is kept in \lstinline!XIndex!
+
+Now that we have all elements of the code defined, we can define the invariant
+of the loop over the clauses:
+
+\begin{itemize}
+  \item \lstinline!SequenceType! is the type of the currently visited sequence 
+  \item \lstinline!ThisTestLabel! is the label identifying the test instruction of this sequence
+  \item \lstinline!NextTestLabel! is the label that will identify the test
+    instruction of the next sequence
+  \item \lstinline!Code! is the list of opcodes for all completely visited sequences
+  \item \lstinline!CodeBuffer! is the code for all visited clauses of the current sequence
+  \item \lstinline!PatternMatchRecord! is the record to be passed to \lstinline!patternMatch!
+        holding information for all visited clauses of the current sequence.
+  \item \lstinline!SeqLen! is the number or clauses already visited in the current sequence
+  \item \lstinline!LastPattern! is the pattern of the last visited clause.
+\end{itemize}
+
+\lstinline!XIndex!, \lstinline!ThisLabel! and \lstinline!UsedSymbols! are not
+included in the invariant as these are only used inside
+each iteration of the loop and reset at the beginning of each clause handling.
+
+With this invariant in place, we can sketch the structure of the code as
+follows:
+\begin{lstlisting}[mathescape]
+{List.forAllInd Clauses proc{$\$$ Ind fCaseClause(Pattern Body)}
+   if {IsNewSequence {Label Pattern} @SequenceType} then
+      % close previous sequence, ie update Code with
+      % the sequence' prefix and CodeBuffer
+      % This ensures Code respects the invariant at the end of this iteration
+      % --- code not included ---
+
+      % Reset sequence variables, 
+      % This ensures that SequenceType, ThisTestLabel, NextTestLabel respect the 
+      % invariant at the end of this iteration
+      CodeBuffer:=nil
+      PatternMatchRecord:='#'()
+      SequenceType:={Label Pattern}
+      SeqLen:=0
+      ThisTestLabel:=@NextTestLabel
+      NextTestLabel:={GenLabel}
+   end
+
+  % Reset clause specific variables 
+  ThisLabel:={GenLabel}
+  UsedSymbols:=nil
+  XIndex={NewCell 0}
+
+  % Build record used in the pattern matching instruction
+  % Ensures PatternMatchRecord respects the invariant at the end of this
+  % iteration
+  PatternForRecord = {TransformPattern Pattern XIndex UsedSymbols}
+  PatternIndex=@SeqLen+1
+  PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
+
+  % Update CodeBuffer to respect invariant
+  % --- code not included ---
+
+  % Restore invariant
+  SeqLen:=@SeqLen+1
+  LastPattern:=Pattern
+end}
+
+% Add last clause, error handling code, the else code and the label identifying
+% the end of the case instruction's code
+Code:=@Code|
+      PrefixOfLastSequence
+      @CodeBuffer|
+      %---- error ----
+      lbl(ErrorLabel)|
+      move(k(errorInCase) x(0))|
+      tailCall(k(Exception.raiseError) 1)|
+      % else branch
+      lbl(@NextTestLabel)|
+      case Else
+      of fNoElse(_) then
+         lbl(EndLabel)|nil
+      else
+         {CodeGenInt Else Params}|
+         lbl(EndLabel)|nil
+      end
+\end{lstlisting}
 
 
 \section{Tests}
@@ -1566,13 +1840,16 @@ The only downside to this approach is that helper functions have to be exported 
 Tests are defined by three files each:
 \begin{itemize}
   \item the oz code to compile and execute
-  \item the expected stdout
-  \item the expected stderr
+  \item the expected standard output
+  \item the expected standard error
 \end{itemize}
 All these files are put under the tests/definitions directory.
 
-A TestRunner script in oz loads the code found in the file whose path is passed as argument, parses it, gives the AST to the compiler which returns the opcodes which are assembled and executed. 
-A shell script iterates over all tests and for each execute the TestRunner, puts the stdout and stderr in result files under the tests/results directory, compares their content with the expected results and in case of difference can open a diffviewer (like vimdiff).
+A \lstinline!TestRunner! script in oz loads the code found in the file whose path is passed as argument, parses it, gives the AST to the compiler which returns the opcodes which are assembled and executed. 
+A shell script iterates over all tests and for each execute the
+\lstinline!TestRunner!, puts the standard output and standard error in result
+files under the tests/results directory, compares their content with the
+expected results and in case of difference can open a diff-viewer (like vimdiff).
 All test code has a preamble comment describing what case this test covers.
 If the test code contains the comment line
 \begin{lstlisting}
@@ -1587,7 +1864,8 @@ Adding a test is very simple:
   \item put the expected error output in a file with same name but with extension .err
 \end{enumerate}
 Once this is done, the new test will be included in the next run.
-It is also possible to run one individual test. In this case, the test is run even if it is maked as to be skipped when running the full test suite. This helps writing tests for cases needed to be supported in the future, but that should not make the full test suite fail.
+It is also possible to run one individual test. In this case, the test is run
+even if it is marked as to be skipped when running the full test suite. This helps writing tests for cases needed to be supported in the future, but that should not make the full test suite fail.
 \section{Performance}
 Possibly include some measure?
 
@@ -1645,12 +1923,16 @@ The attributes of the class are:
       \item localised for a symbol representing a global variable for the procId where it is located
       \item patternmatch for a symbol representing a capture in a pattern
       \item wildcard for a symbol introduced in the place of a wildcard
-      \item ref is only used for localised symbols. It references a symbol local to the enclosing procedure, building a chain that will eventually lead to a symbol of type localProcId enabling the resolution of global variables. %FIXME: improve description..
     \end{itemize}
+  \item[ref] is only used for localised symbols. This might justify the creation
+    of a specific class for localised symbols, like for synthetic symbols.
+    However, I preferred to postpone this to the optimising step. \lstinline!ref! references a symbol local to the enclosing procedure, building a chain that will eventually lead to a symbol of type localProcId enabling the resolution of global variables. %FIXME: improve description..
 \end{description}
 
-         ref
+
+
 \end{appendices}
 \end{document}
 
-% vim: set textwidth=80
+% vim: textwidth=80
+% :setlocal spell spelllang=en_gb
