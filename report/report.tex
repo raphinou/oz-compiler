@@ -521,7 +521,14 @@ These functions all have the same structure:
 \caption{Structure of a transformation function}
 \end{figure}
 Having the same structure enables the use of the function \lstinline!DefaultPass!, which calls the function passed as second arguments recursively on the AST with \lstinline!Params! as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
-Params if a record with label \lstinline!params!, and features are added according to use. For an example, this \lstinline!Params! argument is used by the \lstinline!Globaliser! described in Section \ref{sec:arch:globaliser}.
+Params is a record with label \lstinline!params!, and features are added
+according to use. For an example, this \lstinline!Params! argument is used by
+the \lstinline!Globaliser! described in Section \ref{sec:arch:globaliser}. All
+passes take a Params as last argument, even if some do not use it. 
+% Should I add that fAnd takes a pos feature and fAndThen not, and that I had to
+% tweak the function WrapIn as a consequence?
+
+
 Although all passes work exclusively on the AST, the transformations described in later sections can and will often be illustrated more clearly and concisely by giving the Oz code corresponding to the ASTs before and after the transformation. 
 
 \subsection{Declarations Flattener}\label{sec:arch:declsflattener}
@@ -618,8 +625,13 @@ although all capture variables are are technically reachable from all clauses'
 bodies, it will never be the case as the environment on which a clause builds
 its own is the environment of the case instruction, not the environment updated
 by the previous clause. 
+%FIXME: add description of transformation if guards are present.
+% transform fSideCondition in fNamedSideCondition where guards are now a
+% statement, and vith an additional feature being the symbols holding the value
+% of the guards
 
-%FIXME: add reference
+%FIXME: add reference and detailed description
+
 In addition, the \lstinline!fSym! record corresponding to these capture
 variables are themselves stored in an unforgeable secure structure (as
 described in CTMCP Section 3.7.5) which is itself wrapped in an
@@ -1935,4 +1947,3 @@ The attributes of the class are:
 \end{document}
 
 % vim: textwidth=80
-% :setlocal spell spelllang=en_gb

@@ -8,7 +8,14 @@ local
 in
 
 R=if {F B C}+2>={F A B}*2 then
-   t
+   D
+in
+   D=A+B+C
+   if D>0 then
+      t   % <--- this is reached
+   else
+      f
+   end
 else
    f
 end

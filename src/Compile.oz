@@ -210,26 +210,37 @@ define
       end
    end
 
-   % Wrap an instructions list in fAnd
+   % Wrap an instructions list in records with label Label.
+   % Mainly used to wrap a list of nodes in fAnd or fAndThen.
+   % However, as fAnd has no position feature and fAndThen has,
+   % there was a nedd to add the trick of passing the position value false
+   % for record without positions...
    % Note the first element of the list is the deepest nested.
    % This is usually ok as instructions list are often build by adding the new
    % instruction at the beginning of the list like:
    %   NewInstr|CurrentInstrs
-   fun {WrapInFAnd Instrs}
+   fun {WrapIn Label Instrs WithPos}
       if {Not {List.is Instrs}}then
          {Show Instrs}
-         raise wrapInFAndNeedsAList end
+         raise wrapInNeedsAList end
       else
          L = {List.length Instrs}
       in
          if L>1 then
-            {List.foldL Instrs.2 fun {$ A I} fAnd(I A) end Instrs.1}
+            if WithPos==false then
+               {List.foldL Instrs.2 fun {$ A I} Label(I A) end Instrs.1}
+            else
+               {List.foldL Instrs.2 fun {$ A I} Label(I A WithPos) end Instrs.1}
+            end
          elseif L==1 then
             Instrs.1
          else
             unit
          end
       end
+   end
+   fun {WrapInFAnd L}
+      {WrapIn fAnd L false}
    end
 
    fun {UnWrapFAnd AST}
@@ -627,6 +638,13 @@ define
             % The fLocal we introduce is an expression, handle it as such!
             %{DesugarExpr fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
             fProc(Dollar {List.append Args [ReturnSymbol]} {DesugarStat {HandleLazyFlag ReturnSymbol Body Flags Pos} Params} Flags Pos)
+
+         [] fAndThen(First Second Pos) then
+            fBoolCase({DesugarExpr First Params} {DesugarExpr Second Params} fConst(false Pos) Pos)
+
+         [] fOrElse(First Second Pos) then
+            fBoolCase({DesugarExpr First Params} fConst(true Pos) {DesugarExpr Second Params} Pos)
+
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
@@ -697,6 +715,7 @@ define
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} fEq(NewSymbol Else Pos) Pos) Params} NewSymbol) Pos)
+
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -1211,7 +1230,7 @@ define
             end
 
          [] fCase(Val Clauses Else Pos) then
-            NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil})}
+            NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil} additionalGuards:{NewCell nil})}
             fun {NamerForClauseGuards Guard Params}
                NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
             in
@@ -1234,6 +1253,13 @@ define
                   % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
                   (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
                   % In the fConst, directly plave the 'safe'
+                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
+               [] fEscape( Var=fVar(Name VarPos) Pos) then
+                  NewSymbol={New SyntheticSymbol init(Pos)}
+               in
+                  {NewSymbol set(type patternmatch)}
+                  (Params.additionalGuards):= fOpApply('==' [fSym(NewSymbol Pos) {NamerForBody Var Params}] Pos)|@(Params.additionalGuards)
+                  (Params.captures):=fSym(NewSymbol Pos)|@(NewParams.captures)
                   fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
                [] fRecord(Label Features) then
                   {Show 'fRecord in NamerForCapture'}
@@ -1271,26 +1297,39 @@ define
             NewClauses={List.map Clauses  fun{$ I}
                                              NewPattern NewBody
                                           in
+                                             % Additional guards are clause specific. Reset them everytime
+                                             (NewParams.additionalGuards):=nil
                                              case I
                                              of fCaseClause(fSideCondition(Pattern Decls Guards Pos) Body) then
                                                 NewGuardSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                                                 NewGuards
                                              in
-                                                {Params.env backup}
+                                                {NewParams.env backup}
                                                 NewPattern = {NamerForCaptures Pattern NewParams}
                                                 % Don't create new symbols in guards, but give access to
                                                 % those defined in the pattern by using the same environment
-                                                NewGuards=fEq(NewGuardSymbol {NamerForBody Guards Params} Pos)
+                                                % Also add possible guards introduced by !Vars in pattern
+                                                NewGuards=fEq(NewGuardSymbol {WrapIn fAndThen {NamerForBody Guards NewParams}|@(NewParams.additionalGuards) Pos} Pos)
                                                 NewBody = {NamerForBody Body NewParams}
                                                 (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
-                                                {Params.env restore}
+                                                {NewParams.env restore}
                                                 fCaseClause(fNamedSideCondition(NewPattern Decls NewGuards NewGuardSymbol Pos) NewBody)
                                              [] fCaseClause(Pattern Body) then
-                                                {Params.env backup}
+                                                {NewParams.env backup}
                                                 NewPattern = {NamerForCaptures Pattern NewParams}
                                                 NewBody = {NamerForBody Body NewParams}
-                                                {Params.env restore}
-                                                fCaseClause(NewPattern NewBody)
+                                                if @(NewParams.additionalGuards)==nil then
+                                                   {NewParams.env restore}
+                                                   fCaseClause(NewPattern NewBody)
+                                                else
+                                                   NewGuardSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+                                                   NewGuards
+                                                in
+                                                   NewGuards=fEq(NewGuardSymbol {WrapIn fAndThen @(NewParams.additionalGuards) Pos} Pos)
+                                                   (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
+                                                   {NewParams.env restore}
+                                                   fCaseClause(fNamedSideCondition(NewPattern fSkip(unit)  NewGuards NewGuardSymbol Pos) NewBody)
+                                                end
                                              end
                                           end }
 
@@ -1812,9 +1851,9 @@ define
          %--------------------------------------
          [] fBoolCase(FSym TrueCode FalseCode _) then
          %--------------------------------------
-            ErrorLabel={NewName}
-            ElseLabel={NewName}
-            EndLabel={NewName}
+            ErrorLabel={GenLabel}
+            ElseLabel={GenLabel}
+            EndLabel={GenLabel}
          in
             move({RegForSym FSym Params} x(0))|
             condBranch(x(0) ElseLabel ErrorLabel)|
