@@ -29,6 +29,7 @@
 \maketitle
 \tableofcontents
 
+%FIXME: add reference to next transformation for each node
 
 \chapter{Introduction}
 \section{Initial State}
@@ -214,6 +215,7 @@ arrayFill(x(1))
 
 
 \section{Compiler input}\label{section:compilerinput}
+%FIXME: add index for all record labels in the AST
 Describe records received from parser.
 Not all will be described here as an exhaustive list is available at %http://www.mozart-oz.org/home/doc/compiler/node7.html#appendix.syntax. 
 \subsection{Position in source code}
@@ -337,7 +339,7 @@ The statements that can be transformed in expressions are
   \item In the parameters list of a call to a procedure, in the location of an
     expression. For example \lstinline!{Foo A..\$..N}!
   \item In a pattern position of a parameter of a call. For example
-    \lstinline!{Foo bar(A..\$..N) baz}!
+    \lstinline[mathescape]!{Foo bar(A..$\$$..N) baz}!
 \end{itemize}
 Note that although functions can unify their parameters with values, like in 
 \begin{lstlisting}
@@ -497,6 +499,25 @@ and Guards is simply the AST of the code of the guard (without the \lstinline!an
 Guards must be an expression with a boolean value, possibly using the boolean combinations of section \ref{sec:input:booleancombinations}.
 
 % FIXME: add !Var and conjunctions
+Variables can also be used in patterns for their value, and not as a new capture
+declaration. This is done by prefixing the variable with an exclamation mark.
+Here is an example:
+
+\begin{lstlisting}
+A=a
+case V
+of rec(A b c) then
+   % matches rec(_ b c), i.e. all records with label rec, second feature value
+   % b, third value c, with A being a new capture variable
+[] rec(!A b c) then
+   % only matches rect(a b c)
+end
+\end{lstlisting}
+
+and escaped variable ends up in the AST as wrapped in an \lstinline!fEscape!
+record. \lstinline!A! appears in the AST as \lstinline!fEscape( fVar(A pos)
+pos)!.
+The next transformation of \lstinline!fEscape! nodes is done by the Namer, see Section \ref{sec:arch:namer:patternmatching}.
 
 
 \chapter{Compiler}
@@ -641,6 +662,16 @@ constants in all subsequent compiler passes. Another consequence of this is
 that the records implicitly declaring variables in a pattern are seen as
 constant records, all features being constants! And these are treated as such,
 notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
+
+Escaped variables are transformed by the namer, which introduces a capture
+symbol and then validates that it has the value of the escaped variable.
+ A pattern with an escaped variables, like \lstinline!rec(!Var)! is
+transformed in \lstinline!rev(Capt) and then Capt==Var!
+Although this transformation might be seen as a \lstinline!Desugar! transformation, it is
+done in the \lstinline!Namer! because the pit already traverses and transforms the
+patterns, and all code infrastructure was already in place. Putting this
+transformation in the \lstinline!Desugar! pass would have introduced code duplication and
+incur a performance cost.
 
 
 
@@ -1011,6 +1042,32 @@ or an expression as in
 in which case both code branches are desugared as expression.
 A fNoElse record is left as is and will only be useful for the opcode generation function.
 
+\subsubsection{Booleans Combinations}
+Combinations of boolean expressions with \lstinline!andthen! are desugared in
+\lstinline!if..then..else! expressions. Here is the translation
+rule:
+\lstinline!Cond1 andthen Cond2! is translated in \lstinline!if Cond1 then Cond2 else false end! 
+We see that conditions are evaluated from left to right, and that conditions
+evaluation stops as soon as possible, i.e. when a false condition is
+encountered.
+
+\lstinline!orelse! combinations are similarly translated from \lstinline!Cond1 orelse Cond2! to \lstinline!if Cond1 then true else Cond2 end!  
+\begin{lstlisting}
+(A==1 andthen B==2) orelse C==3
+\end{lstlisting}
+becomes
+
+%FIXME: add label for this example reused later, id: DESUGARFANDTHEN
+\begin{lstlisting}
+if (if A==1 then B==2 else false end)
+then
+  true
+else
+  C==3
+end
+\end{lstlisting}
+
+This form will then be handled by later passes of the compiler.
 \subsubsection{Compiler Code Notes}
 The desugar pass is implemented by a function named \lstinline!Desugar!. It defines multiple local functions:
 \begin{description}
@@ -1121,7 +1178,46 @@ The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 en
   \item If \lstinline!Cond! is complex, a new symbol is created and unified with it. This is then followed by the \lstinline!if..then..else! instruction in which the complex condition is replace by the symbol newly introduced:
     \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
 \end{itemize}
+Looking at the result of the Desugar pass for the boolean combination example, this code
+%FIXME: add reference to that earlier example, id: DESUGARFANDTHEN
+\begin{lstlisting}
+if (if A==1 then B==2 else false)
+then
+  true
+else
+  C==3
+end
+\end{lstlisting}
 
+Will become
+
+\begin{lstlisting}
+local
+   Cond
+in
+   Cond=(if A==1 then B==2 else false end)
+   if Cond
+   then
+     true
+   else
+     C==3
+   end
+end
+\end{lstlisting}
+and then, by unnesting the \lstinline!if..then..else!:
+\begin{lstlisting}
+local
+   Cond
+in
+   if A==1 then Cond=(B==2) else Cond=false end
+   if Cond
+   then
+     true
+   else
+     C==3
+   end
+end
+\end{lstlisting}
 \subsubsection{Records}\label{sec:arch:unnester:records}
 The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
 Here is an example where the value of a feature is an if expression.
