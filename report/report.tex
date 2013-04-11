@@ -515,8 +515,7 @@ end
 \end{lstlisting}
 
 and escaped variable ends up in the AST as wrapped in an \lstinline!fEscape!
-record. \lstinline!A! appears in the AST as \lstinline!fEscape( fVar(A pos)
-pos)!.
+record. \lstinline!A! appears in the AST as \lstinline!fEscape( fVar(A pos) pos)!.
 The next transformation of \lstinline!fEscape! nodes is done by the Namer, see Section \ref{sec:arch:namer:patternmatching}.
 
 
@@ -646,12 +645,7 @@ although all capture variables are are technically reachable from all clauses'
 bodies, it will never be the case as the environment on which a clause builds
 its own is the environment of the case instruction, not the environment updated
 by the previous clause. 
-%FIXME: add description of transformation if guards are present.
-% transform fSideCondition in fNamedSideCondition where guards are now a
-% statement, and vith an additional feature being the symbols holding the value
-% of the guards
-
-%FIXME: add reference and detailed description
+%FIXME: add reference and detailed description of secure storage
 
 In addition, the \lstinline!fSym! record corresponding to these capture
 variables are themselves stored in an unforgeable secure structure (as
@@ -662,6 +656,22 @@ constants in all subsequent compiler passes. Another consequence of this is
 that the records implicitly declaring variables in a pattern are seen as
 constant records, all features being constants! And these are treated as such,
 notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
+
+%FIXME: add description of transformation if guards are present.
+% transform fSideCondition in fNamedSideCondition where guards are now a
+% statement, and vith an additional feature being the symbols holding the value
+% of the guards
+Patterns with guards require some additional work. These are present in the AST
+as \lstinline!fSideCondition(Pattern Decls Guards Pos)!. First, a new symbol is
+introduced and unified with the \lstinline!Guards! expression. The record in the
+AST is replaced by \lstinline!fNamedSideCondition(Pattern Decls GuardsStatement GuardSymbol Pos)! when guard statement is the unification of the newly
+introduced symbol \lstinline!GuardSymbol!. The \lstinline!GuardSymbol! is
+declared together with capture variables. 
+This transformation cannot be completely represented in Oz code, notably the
+transformation of the guards in statement. It will become clear when looking at
+the \lstinline!CodeGen! why this transformation is done like this.
+%FIXME: add ref to codegen and check this is clearly explained.
+
 
 Escaped variables are transformed by the namer, which introduces a capture
 symbol and then validates that it has the value of the escaped variable.
@@ -707,6 +717,12 @@ At the end, the parent's environment is restored, ensuring that formal parameter
 
 This code also illustrates how it comes that functions can access variables defined in the defining environment (such functions are called closures): all those are inherited by the function's environment!
 
+The most complex code is the \lstinline!Namer! is for handling \lstinline!fCase! nodes as it needs to 
+\begin{itemize}
+  \item declare new capture variables
+  \item handle guards by, amongst other things, introducing a new symbol
+  \item add guards corresponding to escaped variables in patterns
+\end{itemize}
 
 
 
