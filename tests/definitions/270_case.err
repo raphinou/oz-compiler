@@ -3,11 +3,12 @@
 %**
 %** Missing else clause
 %**
-%** Matching: 3
-%** in file "definitions/261_case.oz", line 5
+%** Matching: rec2(a b)
+%** in file "definitions/270_case.oz", line 7
 %**
 %** Call Stack:
 %** procedure 'Exception.raiseError' in 
+%** procedure 'test' in file "definitions/270_case.oz", line 7, column 4, 
 %** procedure 'Q' in file "Truc.oz", line 32, column 3, 
 %** procedure in file "tests/TestRunner.oz", line 1, column 1, 
 %** procedure 'RootManager,Pickle/fast' in file "/home/sjrd/documents/projets/mozart2/lib/main/init/Module.oz", line 244, column 7, 

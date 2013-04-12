@@ -1,0 +1,5 @@
+fRecord(lab [f1(a b c d e f) f2 f3] more(m1 m2 m3) rest)
+b
+f3
+more(m1 m2 m3)
+m2

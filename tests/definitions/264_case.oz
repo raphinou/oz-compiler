@@ -15,16 +15,6 @@ in
       {Show elseBranch}
    end
    {Show '---'}
-   % Nothing matches, and no else
-   case A
-   of 3 then
-      {Show 3}
-   [] rec(a b c) then
-      {Show rec}
-   [] 4 then
-      {Show 4}
-   end
-   {Show '---'}
    % Else is executed
    case A
    of 3 then
