@@ -480,6 +480,303 @@ define
       {DeclsFlattenerInt AST unit}
    end
 
+   % FIXME : we add Show manually to the base environment.
+   AugmentedBase={AdjoinAt Base 'Show' Show}
+   % Key is a name known only by the compiler, and used to protect date, notably in the pattern matching code.
+   Key = {NewName}
+
+   % Helper functions to store and access data stored privately by the compiler.
+   fun {StoreInSafe X}
+      {NewChunk store(Key:X compiler_internal__:true)}
+   end
+   fun {AccessSafe X}
+      X.Key
+   end
+   fun {IsSafe X}
+      {IsChunk X} andthen {HasFeature X Key}
+   end
+
+   %##############
+   fun {Namer AST}
+   %##############
+      % The namer replaces variable names with a Symbol instance, all identical
+      % variable instances referencing the same symbol.
+      % The environment is a dictionary, the keys being variable names, the value
+      % being their respective symbol instance
+      % AST = the record
+      % Params is a record with 1 features:
+      %   env = mapping of var names to symbols built in parents
+      % Body and declarations are handled by 2 distinct functions: NamerForDecls
+      % and NamerForBody.
+
+      fun {NamerForDecls AST Params}
+      %-----------------------------
+         % In declarations, we create a new symbol.
+         case AST
+         %----------------
+         of fVar(Name Pos) then
+         %----------------
+            Sym
+         in
+            % assign symbol in declarations
+            Sym={Params.env setSymbol(Name Pos $)}
+            fSym( Sym Pos)
+         %--------------------
+         [] fAnd(First Second) then
+         %--------------------
+            fAnd( {NamerForDecls First Params} {NamerForDecls Second Params})
+         %---
+         else
+         %---
+            %{Show 'AST received by NamerForDecls:'}
+            %{DumpAST.dumpAST AST _}
+            raise flattenerLeftOtherThingsThanFVarInDecls end
+         end
+      end
+
+
+
+      fun {NamerForBody AST Params}
+      %----------------------------
+         % for fLocal, fFun, fProc, we backup the environment when we enter and
+         % restore it when we get out.
+         % for fFun and fProc, this is necessary or formal parameters could
+         % erase variables with the same name in the parent environment when
+         % used after the fun/proc definition (see test 029)
+         case AST
+         %-----------------------
+         of fLocal(Decl Body Pos) then
+         %-----------------------
+            Res
+         in
+            {Params.env backup()}
+            Res=fLocal(
+               {NamerForDecls Decl Params}
+               {NamerForBody Body  Params}
+               Pos
+               )
+            {Params.env restore()}
+            Res
+
+         %---------------------------------
+         [] fFun(Name Args Body Flags Pos) then
+         %---------------------------------
+            Res
+         in
+            {Params.env backup()}
+            Res=fFun(
+               % The function's variable has to be declared explicitely in the declaration part.
+               % That's why we call NamerForBody on the Name
+               {NamerForBody Name Params}
+               % Formal parameters are declarations, that's why we call NameForDecls
+               {List.map Args fun {$ I} {NamerForDecls I Params} end }
+               {NamerForBody Body Params}
+               Flags
+               Pos
+            )
+            {Params.env restore()}
+            Res
+
+         %---------------------------------
+         [] fProc(Name Args Body Flags Pos) then
+         %---------------------------------
+            Res
+         in
+            {Params.env backup()}
+            Res=fProc(
+               % The procedure's variable has to be declared explicitely in the declaration part.
+               % That's why we call NamerForBody on the Name
+               {NamerForBody Name Params}
+               % Formal parameters are declarations, that's why we call NameForDecls
+               {List.map Args fun {$ I} {NamerForDecls I Params} end }
+               {NamerForBody Body Params}
+               Flags
+               Pos
+            )
+            {Params.env restore()}
+            Res
+
+
+         %----------------
+         [] fVar(Name Pos) then
+         %----------------
+            Sym
+         in
+            if {Params.env hasSymbol(Name $)} then
+               % if a symbol exists for this variable, use it as
+               % is it a local variable
+               Sym={Params.env getSymbol(Name $)}
+               fSym( Sym Pos)
+            elseif {HasFeature AugmentedBase Name} then
+               % variable from the Base env
+               fConst(AugmentedBase.Name Pos)
+            elseif Name == 'Base' then
+               % the special variable representing the Base env itself
+               fConst(AugmentedBase Pos)
+            else
+               % this variable is not declared
+               % TODO issue an error
+               %raise unnamedVariable end
+               AST
+            end
+
+         [] fCase(Val Clauses Else Pos) then
+            NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil} additionalGuards:{NewCell nil})}
+            fun {NamerForCaptures Pattern Params}
+               % This function creates synthetic symbols for captures in the case patterns
+               % These new symbols are collected in Params.captures so they can be declared
+               % outside the case.
+               {Show 'NamerForCaptures begin'}
+               case Pattern
+               of fVar(Name Pos) then
+                  NewSymbol
+               in
+                  NewSymbol={Params.env setSymbol(Name Pos $)}
+                  {NewSymbol set(type patternmatch)}
+                  {Show 'fVar in NamerForCapture'}
+                  % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
+                  (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
+                  % In the fConst, directly plave the 'safe'
+                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
+               [] fEscape( Var=fVar(_ _) Pos) then
+                  NewSymbol={New SyntheticSymbol init(Pos)}
+               in
+                  {NewSymbol set(type patternmatch)}
+                  (Params.additionalGuards):= fOpApply('==' [fSym(NewSymbol Pos) {NamerForBody Var Params}] Pos)|@(Params.additionalGuards)
+                  (Params.captures):=fSym(NewSymbol Pos)|@(NewParams.captures)
+                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
+               [] fRecord(Label Features) then
+                  {Show 'fRecord in NamerForCapture'}
+                  fRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
+               [] fOpenRecord(Label Features) then
+                  fOpenRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
+               [] fColon(Key Val) then
+                  {Show 'fColon in NamerForCapture'}
+                  % Pattern matching on values in records, not on the features
+                  fColon({NamerForBody Key Params} {NamerForCaptures Val Params} )
+               [] fWildcard(Pos) then
+                  NewSymbol
+               in
+                  NewSymbol={Params.env setSyntheticSymbol(Pos $)}
+                  {NewSymbol set(type wildcard)}
+                  % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
+                  % Even if it is not used, we need to declare it
+                  (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
+                  % In the fConst, directly place the 'safe'
+                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
+               [] fEq(LHS RHS Pos) then
+               %   T
+               %in
+               %   T=fPatMatConjunction({NamerForCaptures LHS Params} {NamerForCaptures RHS Params} Pos)
+               %   {Show 'fPatMatConjunction placed in the safe:'}
+               %   {Show T}
+               %   fConst({StoreInSafe T} Pos)
+               % FIXME: remove dumpAST calls
+                  {Show 'LHS and RHS of pattern conjunction are resp:'}
+                  {DumpAST.dumpAST LHS _}
+                  {DumpAST.dumpAST RHS _}
+                  {Show 'LHS and RHS of fPatMatConjunction are respectively:'}
+                  fPatMatConjunction({DumpAST.dumpAST {NamerForCaptures LHS Params}} {DumpAST.dumpAST {NamerForCaptures RHS Params}} Pos)
+               else
+                  % CHECKME : is this ok?
+                  {NamerForBody Pattern Params}
+               end
+            end
+            NewClauses
+            Decls
+            NewCaseAST
+            R
+         in
+            {Show '**********************'}
+            {Show fCase}
+            {Show '**********************'}
+
+            NewClauses={List.map Clauses  fun{$ I}
+                                             NewPattern NewBody
+                                          in
+                                             % Additional guards are clause specific. Reset them everytime
+                                             (NewParams.additionalGuards):=nil
+                                             case I
+                                             of fCaseClause(fSideCondition(Pattern Decls Guards Pos) Body) then
+                                                NewGuardSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+                                                NewGuards
+                                             in
+                                                {NewParams.env backup}
+                                                NewPattern = {NamerForCaptures Pattern NewParams}
+                                                % Don't create new symbols in guards, but give access to
+                                                % those defined in the pattern by using the same environment
+                                                % Also add possible guards introduced by !Vars in pattern
+                                                NewGuards=fEq(NewGuardSymbol {WrapIn fAndThen {NamerForBody Guards NewParams}|@(NewParams.additionalGuards) Pos} Pos)
+                                                NewBody = {NamerForBody Body NewParams}
+                                                (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
+                                                {NewParams.env restore}
+                                                fCaseClause(fNamedSideCondition(NewPattern Decls NewGuards NewGuardSymbol Pos) NewBody)
+                                             [] fCaseClause(Pattern Body) then
+                                                {NewParams.env backup}
+                                                NewPattern = {NamerForCaptures Pattern NewParams}
+                                                NewBody = {NamerForBody Body NewParams}
+                                                if @(NewParams.additionalGuards)==nil then
+                                                   {NewParams.env restore}
+                                                   fCaseClause(NewPattern NewBody)
+                                                else
+                                                   NewGuardSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+                                                   NewGuards
+                                                in
+                                                   NewGuards=fEq(NewGuardSymbol {WrapIn fAndThen @(NewParams.additionalGuards) Pos} Pos)
+                                                   (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
+                                                   {NewParams.env restore}
+                                                   fCaseClause(fNamedSideCondition(NewPattern fSkip(unit)  NewGuards NewGuardSymbol Pos) NewBody)
+                                                end
+                                             end
+                                          end }
+
+            Decls = {List.append @(NewParams.captures) @(NewParams.guardsSymbols)}
+            NewCaseAST=fCase({NamerForBody Val Params} NewClauses {NamerForBody Else Params} Pos)
+            if {List.length Decls}>0 then
+               R=fLocal({WrapInFAnd Decls} NewCaseAST Pos)
+            else
+               R=NewCaseAST
+            end
+            {Show 'Will return:'}
+            {DumpAST.dumpAST R _}
+            R
+         %-----------
+         [] fInt(V P) then
+         %-----------
+            fConst(V P)
+
+         %-------------
+         [] fFloat(V P) then
+         %-------------
+            fConst(V P)
+
+         %------------
+         [] fAtom(V P) then
+         %------------
+            fConst(V P)
+
+         %---
+         else
+         %---
+            {Show 'Default pass for next ast'}
+            {Show AST}
+            {Show '..............................................'}
+            {DefaultPass AST NamerForBody Params}
+         end
+      end
+
+      InitialParams = params(env:{New Environment init()})
+   in
+      %{Show 'AST received by Namer:'}
+      %{DumpAST.dumpAST AST}
+      %{Show '--------------------------------------------------------------------------------'}
+      {Show '-------'}
+      {Show 'Namer'}
+      {Show '-------'}
+      {NamerForBody AST InitialParams}
+   end
+
+
    %################
    fun {Desugar AST}
    %################
@@ -526,9 +823,18 @@ define
          of fColon(F V) then
             fColon({DesugarExpr F Params} {DesugarExpr V Params})
          else
-            % Feature.2 is position. Check this is always the case!
+            Pos
+         in
+            % Feature.2 is most of the time the position, but not alway.
+            % We check it
+            if {Record.is Feature.2} andthen {Label Feature.2}==pos then
+               Pos = Feature.2
+            else
+               Pos = pos
+            end
+
             (Params.featureIndex):=@(Params.featureIndex)+1
-            fColon( fConst(@(Params.featureIndex) Feature.2) {DesugarExpr Feature Params})
+            fColon( fConst(@(Params.featureIndex) Pos) {DesugarExpr Feature Params})
          end
       end
       % Expression/statements:
@@ -541,7 +847,7 @@ define
          {List.foldL Fs fun {$ FB#VB I} F V in I=fColon(F V) (FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true}
       end
 
-      fun {TransformRecord AST=fRecord(Label Features)}
+      fun {TransformRecord AST=fRecord(_ Features)}
       %------------------------------------------------
          % Called to transform record just *after* it has been desugared:
          % - replace constant record by a constant (fConst)
@@ -559,6 +865,7 @@ define
                case Features
                of fColon(F V)|Fs then
                   % FIXME: set pos!
+                  % FIXME: check if we shouldn't we call TransformRecord or Features2Record on the value if it is a fRecord?
                   fColon(fConst(I pos) F)|fColon(fConst(I+1 pos) V)|{Features2RecordInt Fs I+2}
                [] nil then
                   nil
@@ -575,18 +882,27 @@ define
             % it in the AST as a constant (under a fConst)
 
             Rec
-            RecordLabel
+
+            fun {ConstantiseRecord AST=fRecord(fConst(RecordLabel _) _ )}
+               fun {ConstantiseRecordInt AST Lab}
+                  {List.foldL Features fun{$ A I}
+                                          case I
+                                          of fColon(fConst(L _) fConst(F _)) then
+                                             {Record.adjoin A Lab(L:F)}
+                                          [] fColon(fConst(L _) R=fRecord(_ _ _)) then
+                                             % CONTINUE: constantise inner records too!
+                                             {Record.adjoin A Lab(L:{TransformRecord R})}
+                                          else
+                                             A
+                                          end
+                                      end Lab()}
+               end
+            in
+               {ConstantiseRecordInt AST RecordLabel}
+            end
+
          in
-            Label=fConst(RecordLabel _)
-            Rec={List.foldL Features fun{$ A I}
-                                       case I
-                                       of fColon(fConst(L _) fConst(F _)) then
-                                          {Record.adjoin A RecordLabel(L:F)}
-                                       else
-                                          A
-                                       end
-                                   end RecordLabel()}
-            % FIXME: set pos!
+            Rec={ConstantiseRecord AST}
             fConst(Rec pos)
          [] true#false then
             % will use makeArity in CodeGen, leave as is
@@ -653,8 +969,6 @@ define
          [] fAnd(First Second) then
             % if the fAnd is an expression, only the second part is treated as expression
             fAnd({DesugarStat First Params} {DesugarExpr Second Params})
-         [] fAndThen(First Second Pos) then
-            fAndThen({DesugarExpr First Params} {DesugarExpr Second Params} Pos)
          [] fAt(Cell Pos) then
             fApply( fConst(Boot_Value.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
 
@@ -685,6 +999,8 @@ define
             {TransformRecord fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end }) }
 
          % Desugar open record pattern of a case clause
+         [] fPatMatConjunction(LHS RHS Pos) then
+            fConst({StoreInSafe fPatMatConjunction({DesugarExpr LHS Pos} {DesugarExpr RHS Pos} Pos)} Pos)
          [] fOpenRecord(Label Features) then
             NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
@@ -1034,10 +1350,10 @@ define
                % all fLocal introduced by complex arguments have been directly place out of fRecord when traversing ArgsRest
                % and all what's left in the argument list are Symbols.
                case FRecordAST
-               of fRecord(Op Features) then
+               of fRecord(Op _) then
                   {Show 'Unnesting returns fRecord'}
                   fRecord(Op {List.reverse NewArgsList})
-               [] fOpenRecord(Op Features) then
+               [] fOpenRecord(Op _) then
                   {Show 'Unnesting returns fOpenRecord'}
                   fOpenRecord(Op {List.reverse NewArgsList})
                end
@@ -1046,9 +1362,9 @@ define
          end
       in
          case AST
-         of fRecord(Op Features) then
+         of fRecord(_ Features) then
             {UnnestFRecordInt AST nil Features}
-         [] fOpenRecord(Op Features) then
+         [] fOpenRecord(_ Features) then
             {UnnestFRecordInt AST nil Features}
          end
       end
@@ -1086,297 +1402,6 @@ define
       {Show 'Unnester'}
       {Show '-------'}
       {UnnesterInt AST params}
-   end
-
-
-   % FIXME : we add Show manually to the base environment.
-   AugmentedBase={AdjoinAt Base 'Show' Show}
-   % Key is a name known only by the compiler, and used to protect date, notably in the pattern matching code.
-   Key = {NewName}
-
-   % Helper functions to store and access data stored privately by the compiler.
-   fun {StoreInSafe X}
-      {NewChunk store(Key:X compiler_internal__:true)}
-   end
-   fun {AccessSafe X}
-      X.Key
-   end
-   fun {IsSafe X}
-      {IsChunk X} andthen {HasFeature X Key}
-   end
-
-   %##############
-   fun {Namer AST}
-   %##############
-      % The namer replaces variable names with a Symbol instance, all identical
-      % variable instances referencing the same symbol.
-      % The environment is a dictionary, the keys being variable names, the value
-      % being their respective symbol instance
-      % AST = the record
-      % Params is a record with 1 features:
-      %   env = mapping of var names to symbols built in parents
-      % Body and declarations are handled by 2 distinct functions: NamerForDecls
-      % and NamerForBody.
-
-      fun {NamerForDecls AST Params}
-      %-----------------------------
-         % In declarations, we create a new symbol.
-         case AST
-         %----------------
-         of fVar(Name Pos) then
-         %----------------
-            Sym
-         in
-            % assign symbol in declarations
-            Sym={Params.env setSymbol(Name Pos $)}
-            fSym( Sym Pos)
-         %--------------------
-         [] fAnd(First Second) then
-         %--------------------
-            fAnd( {NamerForDecls First Params} {NamerForDecls Second Params})
-         %---
-         else
-         %---
-            %{Show 'AST received by NamerForDecls:'}
-            %{DumpAST.dumpAST AST _}
-            raise flattenerLeftOtherThingsThanFVarInDecls end
-         end
-      end
-
-
-
-      fun {NamerForBody AST Params}
-      %----------------------------
-         % for fLocal, fFun, fProc, we backup the environment when we enter and
-         % restore it when we get out.
-         % for fFun and fProc, this is necessary or formal parameters could
-         % erase variables with the same name in the parent environment when
-         % used after the fun/proc definition (see test 029)
-         case AST
-         %-----------------------
-         of fLocal(Decl Body Pos) then
-         %-----------------------
-            Res
-         in
-            {Params.env backup()}
-            Res=fLocal(
-               {NamerForDecls Decl Params}
-               {NamerForBody Body  Params}
-               Pos
-               )
-            {Params.env restore()}
-            Res
-
-         %---------------------------------
-         [] fFun(Name Args Body Flags Pos) then
-         %---------------------------------
-            Res
-         in
-            {Params.env backup()}
-            Res=fFun(
-               % The function's variable has to be declared explicitely in the declaration part.
-               % That's why we call NamerForBody on the Name
-               {NamerForBody Name Params}
-               % Formal parameters are declarations, that's why we call NameForDecls
-               {List.map Args fun {$ I} {NamerForDecls I Params} end }
-               {NamerForBody Body Params}
-               Flags
-               Pos
-            )
-            {Params.env restore()}
-            Res
-
-         %---------------------------------
-         [] fProc(Name Args Body Flags Pos) then
-         %---------------------------------
-            Res
-         in
-            {Params.env backup()}
-            Res=fProc(
-               % The procedure's variable has to be declared explicitely in the declaration part.
-               % That's why we call NamerForBody on the Name
-               {NamerForBody Name Params}
-               % Formal parameters are declarations, that's why we call NameForDecls
-               {List.map Args fun {$ I} {NamerForDecls I Params} end }
-               {NamerForBody Body Params}
-               Flags
-               Pos
-            )
-            {Params.env restore()}
-            Res
-
-
-         %----------------
-         [] fVar(Name Pos) then
-         %----------------
-            Sym
-         in
-            if {Params.env hasSymbol(Name $)} then
-               % if a symbol exists for this variable, use it as
-               % is it a local variable
-               Sym={Params.env getSymbol(Name $)}
-               fSym( Sym Pos)
-            elseif {HasFeature AugmentedBase Name} then
-               % variable from the Base env
-               fConst(AugmentedBase.Name Pos)
-            elseif Name == 'Base' then
-               % the special variable representing the Base env itself
-               fConst(AugmentedBase Pos)
-            else
-               % this variable is not declared
-               % TODO issue an error
-               %raise unnamedVariable end
-               AST
-            end
-
-         [] fCase(Val Clauses Else Pos) then
-            NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil} additionalGuards:{NewCell nil})}
-            fun {NamerForClauseGuards Guard Params}
-               NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
-            in
-               (Params.guardsSymbols):=NewSymbol|@(Params.guardsSymbols)
-               fEq(NewSymbol {NamerForBody Guard Params} Pos)
-            end
-
-            fun {NamerForCaptures Pattern Params}
-               % This function creates synthetic symbols for captures in the case patterns
-               % These new symbols are collected in Params.captures so they can be declared
-               % outside the case.
-               {Show 'NamerForCaptures begin'}
-               case Pattern
-               of fVar(Name Pos) then
-                  NewSymbol
-               in
-                  NewSymbol={Params.env setSymbol(Name Pos $)}
-                  {NewSymbol set(type patternmatch)}
-                  {Show 'fVar in NamerForCapture'}
-                  % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
-                  (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
-                  % In the fConst, directly plave the 'safe'
-                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
-               [] fEscape( Var=fVar(Name VarPos) Pos) then
-                  NewSymbol={New SyntheticSymbol init(Pos)}
-               in
-                  {NewSymbol set(type patternmatch)}
-                  (Params.additionalGuards):= fOpApply('==' [fSym(NewSymbol Pos) {NamerForBody Var Params}] Pos)|@(Params.additionalGuards)
-                  (Params.captures):=fSym(NewSymbol Pos)|@(NewParams.captures)
-                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
-               [] fRecord(Label Features) then
-                  {Show 'fRecord in NamerForCapture'}
-                  fRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
-               [] fOpenRecord(Label Features) then
-                  fOpenRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
-               [] fColon(Key Val) then
-                  {Show 'fColon in NamerForCapture'}
-                  % Pattern matching on values in records, not on the features
-                  fColon({NamerForBody Key Params} {NamerForCaptures Val Params} )
-               [] fWildcard(Pos) then
-                  NewSymbol
-               in
-                  NewSymbol={Params.env setSyntheticSymbol(Pos $)}
-                  {NewSymbol set(type wildcard)}
-                  % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
-                  % Even if it is not used, we need to declare it
-                  (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
-                  % In the fConst, directly place the 'safe'
-                  fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
-               else
-                  % CHECKME : is this ok?
-                  {NamerForBody Pattern Params}
-               end
-            end
-            NewClauses
-            Decls
-            NewCaseAST
-            R
-         in
-            {Show '**********************'}
-            {Show fCase}
-            {Show '**********************'}
-
-            NewClauses={List.map Clauses  fun{$ I}
-                                             NewPattern NewBody
-                                          in
-                                             % Additional guards are clause specific. Reset them everytime
-                                             (NewParams.additionalGuards):=nil
-                                             case I
-                                             of fCaseClause(fSideCondition(Pattern Decls Guards Pos) Body) then
-                                                NewGuardSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
-                                                NewGuards
-                                             in
-                                                {NewParams.env backup}
-                                                NewPattern = {NamerForCaptures Pattern NewParams}
-                                                % Don't create new symbols in guards, but give access to
-                                                % those defined in the pattern by using the same environment
-                                                % Also add possible guards introduced by !Vars in pattern
-                                                NewGuards=fEq(NewGuardSymbol {WrapIn fAndThen {NamerForBody Guards NewParams}|@(NewParams.additionalGuards) Pos} Pos)
-                                                NewBody = {NamerForBody Body NewParams}
-                                                (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
-                                                {NewParams.env restore}
-                                                fCaseClause(fNamedSideCondition(NewPattern Decls NewGuards NewGuardSymbol Pos) NewBody)
-                                             [] fCaseClause(Pattern Body) then
-                                                {NewParams.env backup}
-                                                NewPattern = {NamerForCaptures Pattern NewParams}
-                                                NewBody = {NamerForBody Body NewParams}
-                                                if @(NewParams.additionalGuards)==nil then
-                                                   {NewParams.env restore}
-                                                   fCaseClause(NewPattern NewBody)
-                                                else
-                                                   NewGuardSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
-                                                   NewGuards
-                                                in
-                                                   NewGuards=fEq(NewGuardSymbol {WrapIn fAndThen @(NewParams.additionalGuards) Pos} Pos)
-                                                   (NewParams.guardsSymbols):=NewGuardSymbol|@(NewParams.guardsSymbols)
-                                                   {NewParams.env restore}
-                                                   fCaseClause(fNamedSideCondition(NewPattern fSkip(unit)  NewGuards NewGuardSymbol Pos) NewBody)
-                                                end
-                                             end
-                                          end }
-
-            Decls = {List.append @(NewParams.captures) @(NewParams.guardsSymbols)}
-            NewCaseAST=fCase({NamerForBody Val Params} NewClauses {NamerForBody Else Params} Pos)
-            if {List.length Decls}>0 then
-               R=fLocal({WrapInFAnd Decls} NewCaseAST Pos)
-            else
-               R=NewCaseAST
-            end
-            {Show 'Will return:'}
-            {DumpAST.dumpAST R _}
-            R
-         %-----------
-         [] fInt(V P) then
-         %-----------
-            fConst(V P)
-
-         %-------------
-         [] fFloat(V P) then
-         %-------------
-            fConst(V P)
-
-         %------------
-         [] fAtom(V P) then
-         %------------
-            fConst(V P)
-
-         %---
-         else
-         %---
-            {Show 'Default pass for next ast'}
-            {Show AST}
-            {Show '..............................................'}
-            {DefaultPass AST NamerForBody Params}
-         end
-      end
-
-      InitialParams = params(env:{New Environment init()})
-   in
-      %{Show 'AST received by Namer:'}
-      %{DumpAST.dumpAST AST}
-      %{Show '--------------------------------------------------------------------------------'}
-      {Show '-------'}
-      {Show 'Namer'}
-      {Show '-------'}
-      {NamerForBody AST InitialParams}
    end
 
 
@@ -1673,26 +1698,29 @@ define
          end
 
       end
-      fun {PermRegForSym AST Params}
-      %-------------------------
-         % Return register for fSym or fConst
-         case AST
-         of fConst(K _) then
-            k(K)
-         [] fSym(Sym _) then
-            if {Sym get(type $)}==localised then
-               g({Sym get(gindex $)})
-            else
-               YReg={Sym get(yindex $)}
-            in
-               if YReg==nil then
-                  raise nonAssignedYReg end
-               else
-                  y(YReg)
-               end
-            end
-         end
-      end
+
+      % FIXME: remove if not needed
+      %fun {PermRegForSym AST Params}
+      %%-------------------------
+      %   % Return y,g or kregister for fSym or fConst
+      %   % Does not return X register
+      %   case AST
+      %   of fConst(K _) then
+      %      k(K)
+      %   [] fSym(Sym _) then
+      %      if {Sym get(type $)}==localised then
+      %         g({Sym get(gindex $)})
+      %      else
+      %         YReg={Sym get(yindex $)}
+      %      in
+      %         if YReg==nil then
+      %            raise nonAssignedYReg end
+      %         else
+      %            y(YReg)
+      %         end
+      %      end
+      %   end
+      %end
 
       fun {CodeGenInt AST Params}
       %--------------------------
@@ -1704,7 +1732,8 @@ define
             [ {CodeGenDecls Decls Params} {CodeGenInt Body Params}]
 
          %---------------------------------
-         [] fDefineProc(fSym(Sym _) Args Body Flags Pos NewLocals) then
+         [] fDefineProc(fSym(Sym _) Args Body _     Pos NewLocals) then
+         %  fDefineProc(fSym(Sym _) Args Body Flags Pos NewLocals) then
          %---------------------------------
 
             %FIXME: the name of the proc can not be available, eg in the case { {GetProc 2} arg1 arg2}
@@ -1876,7 +1905,7 @@ define
             end
 
          %-----------------------------
-         [] fCase(TestedValue Clauses Else Pos) then
+         [] fCase(TestedValue Clauses Else _) then
          %-----------------------------
             % A case statement is testing a value Val against clauses:
             %
@@ -2001,10 +2030,13 @@ define
                   % The XIndex cell contains the last assigned X register
                   % It collects symbols found in the pattern in the UsedSymbols list
                   case Pattern
-                  of fConst(Val Pos) then
+                  of fConst(Val _) then
                      % Call TransformPattern on the value in fConst, as it could be a safe holding a capture
                      {TransformPattern Val XIndex UsedSymbols }
-                  [] fSym(Sym Pos) then
+                  [] fPatMatConjunction(LHS RHS _) then
+                     {Boot_CompilerSupport.newPatMatConjunction '#'({TransformPattern LHS XIndex UsedSymbols} {TransformPattern RHS XIndex UsedSymbols} ) }
+
+                  [] fSym(Sym _) then
                      % If this is a symbol, it is a capture in the pattern match
                      % Assign the next X register to that symbol, add it to the
                      % list of used symbols, and replace it with a newPatMatCapture.
@@ -2012,7 +2044,8 @@ define
                      {Sym set(xindex @XIndex)}
                      UsedSymbols:=Sym|@UsedSymbols
                      {Boot_CompilerSupport.newPatMatCapture @XIndex}
-                  [] fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
+                  [] fNamedSideCondition(RealPattern _     _      _           _) then
+                    %fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
                      % For a guarded clause, only look at its pattern
                      {TransformPattern RealPattern XIndex UsedSymbols }
                   [] fOpenRecord(fConst(RecordLabel _) Features) then
@@ -2041,7 +2074,13 @@ define
 
                   [] fRecord(fConst(RecordLabel _) Features) then
                      %replace the fRecord by the oz value it represents. This mean we build the record from the AST.
-                     {List.foldL Features fun{$ Acc I} case I of fColon(fConst(L _) F) then {Record.adjoin Acc RecordLabel(L:{TransformPattern F XIndex UsedSymbols })} else Acc end end RecordLabel()}
+                     {List.foldL Features  fun{$ Acc I}
+                                                case I
+                                                of fColon(fConst(L _) F) then
+                                                   {Record.adjoin Acc RecordLabel(L:{TransformPattern F XIndex UsedSymbols })}
+                                                   else Acc
+                                                end
+                                             end RecordLabel()}
                   else
                      % Pattern is a record
                      if {IsSafe Pattern} then
@@ -2061,7 +2100,8 @@ define
 
                fun {PrefixOfSeq TestedValue Pattern PatternMatchRecord ThisLabel NextTestLabel ErrorLabel UsedSymbols Params}
                   case Pattern
-                  of fNamedSideCondition(RealPattern Decls Guards GuardSymbol Pos) then
+                  of fNamedSideCondition(_           _     Guards GuardSymbol _) then
+                    %fNamedSideCondition(RealPattern Decls Guards GuardSymbol _)
                      % This is a clause with guards. The label of the guards code is
                      % ThisLabel, so that the patternmatch jumps to the guards code.
 
@@ -2144,7 +2184,6 @@ define
                {List.forAllInd Clauses proc{$ Ind fCaseClause(Pattern Body)}
                                           PatternLabel={Record.label Pattern}
                                           XIndex
-                                          Prefix
                                           PatternForRecord
                                           PatternIndex
                                        in

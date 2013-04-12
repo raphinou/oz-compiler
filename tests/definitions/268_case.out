@@ -1,0 +1,5 @@
+inner(a b)
+a
+inner(a b)
+a
+b
