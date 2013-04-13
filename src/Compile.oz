@@ -572,7 +572,7 @@ define
             fAnd( {NamerForDecls First Params} {NamerForDecls Second Params})
          [] fSym(_ _) then
             % Introduced when added support for patterns in function arguments.
-            % See explanation in NameForBody
+            % See explanation in NamerForBody
             AST
          else
          %---
@@ -647,8 +647,19 @@ define
 
       fun {NamerForBody AST Params}
       %----------------------------
+         % Function called by NamerForBody when it encounters a function of
+         % procedure with pattern arguments.
+         % It first builds a list with one item for each pattern argument of
+         % the form Sym#ArgumentAST where Sym is the symbol placed as replacement in
+         % the argument list, and ArgumentAST is the original argument.
+         % If this list is empty, it handles the fFun or fProc normally.
+         % If this list is not empty, it wraps recursively (once for each item)
+         % the body in a fCase, testing the value in Sym against pattern ArgumentAST.
+
+
          fun {HandlePatternArgs AST Params}
             Res
+            ArgsDesc
             Patterns
             ASTLabel={Record.label AST}
             Name Args Body Flags Pos
@@ -660,51 +671,56 @@ define
             else
                raise patternArgumentsOnlySupportedInFunAndProc end
             end
+            % Backup environment here because we immediately create new symbols for patterns
+            {Params.env backup()}
 
-            %Extract a list of items Symbol#Pattern
-            Patterns={List.foldL Args   fun {$ Acc I}
+            %Extract a record containing the list of new arguments in feature args,
+            % and a list of items Symbol#Pattern in feature patterns
+            ArgsDesc={List.foldL Args   fun {$ Acc I}
                                           case I
                                           of fRecord(_ _) then
                                              Pos={GetPos I}
                                              NewSymbol={Params.env setSyntheticSymbol(Pos $)}
                                           in
-                                             fSym(NewSymbol Pos)#I|Acc
+                                             (Acc.args):=fSym(NewSymbol Pos)|@(Acc.args)
+                                             (Acc.patterns):=fSym(NewSymbol Pos)#I|@(Acc.patterns)
                                           [] fOpenRecord(_ _) then
                                              Pos={GetPos I}
                                              NewSymbol={Params.env setSyntheticSymbol(Pos $)}
                                           in
-                                             fSym(NewSymbol Pos)#I|Acc
+                                             (Acc.args):=fSym(NewSymbol Pos)|@(Acc.args)
+                                             (Acc.patterns):=fSym(NewSymbol Pos)#I|@(Acc.patterns)
                                           [] fEq(LHS RHS Pos) then
                                              Pos={GetPos I}
                                              NewSymbol={Params.env setSyntheticSymbol(Pos $)}
                                           in
-                                             fSym(NewSymbol Pos)#I|Acc
+                                             (Acc.args):=fSym(NewSymbol Pos)|@(Acc.args)
+                                             (Acc.patterns):=fSym(NewSymbol Pos)#I|@(Acc.patterns)
                                           else
-                                             Acc
+                                             (Acc.args):=I|@(Acc.args)
                                           end
+                                          Acc
                                        end
-                                       nil}
-            if {List.length Patterns}>0 then
+                                       acc(patterns:{NewCell nil} args:{NewCell nil})}
+            if ArgsDesc\=nil andthen {List.length @(ArgsDesc.patterns)}>0 then
                % If we have patterns, then we replace the pattern argument by
                % their symbol, and inject a case in the body of the function.
                % This required NamerForDecls to handle fSym, as the tested value of the
                % case is the symbol we just placed in the argument list, but all the rest
                % of the fCase has still to be traversed by the namer.
                % some args are patterns
-               {Params.env backup()}
                Res=ASTLabel(
                   % The function's variable has to be declared explicitely in the declaration part.
                   % That's why we call NamerForBody on the Name
                   {NamerForBody Name Params}
                   % Formal parameters are declarations, that's why we call NameForDecls
-                  {List.map {List.map Patterns fun {$ S#P} S end} fun {$ I} {NamerForDecls I Params} end }
-                  {NamerForBody {WrapInFCases Body Patterns Pos} Params}
+                  % FIXME: we can replace the 2 list visits by one
+                  {List.map {List.reverse @(ArgsDesc.args)} fun {$ I} {NamerForDecls I Params} end }
+                  {NamerForBody {WrapInFCases Body @(ArgsDesc.patterns) Pos} Params}
                   Flags
                   Pos
                )
-               {Params.env restore()}
             else
-               {Params.env backup()}
                Res=ASTLabel(
                   % The function's variable has to be declared explicitely in the declaration part.
                   % That's why we call NamerForBody on the Name
@@ -715,8 +731,8 @@ define
                   Flags
                   Pos
                )
-               {Params.env restore()}
             end
+            {Params.env restore()}
             Res
          end
       in
@@ -933,7 +949,7 @@ define
 
       fun {IsConstantRecord fRecord(L Fs)}
       %-----------------------------------
-         % Returns triplet of bools indicating if label, features and values of record all are constants or not.
+         % Returns couple of bools indicating if label, features and values of record all are constants or not.
          % This will go through the list once, and set all components to correct boolean value.
          {List.foldL Fs fun {$ FB#VB I} F V in I=fColon(F V) (FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true}
       end

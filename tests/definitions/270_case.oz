@@ -1,12 +1,12 @@
 local
    F P
 in
-   fun {F rec(A b)}
+   fun {F A1 rec(A b)}
       A
    end
-   proc {P rec(A b)}
+   proc {P A1 rec(A b)}
       {Show A}
    end
-   {P rec2(a b)}
-   {Show {F rec(a b)}}
+   {P nil rec2(a b)}
+   {Show {F nil rec(a b)}}
 end
