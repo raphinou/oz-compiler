@@ -12,3 +12,4 @@ draft.oz
 *.aux
 vc.tex
 session.vim
+run.oz
