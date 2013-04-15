@@ -60,12 +60,6 @@ define
       end
       meth get(Attr ?R)
          R=@Attr
-         if R==nil then
-            {Show 'getting nil attribute value for'}
-            {DumpAST.dumpAST self _}
-            {Show Attr}
-            %raise gettingNilAttributeValue end
-         end
       end
    end
 
@@ -569,15 +563,12 @@ define
          % This function creates synthetic symbols for captures in the case patterns
          % These new symbols are collected in Params.captures so they can be declared
          % outside the case.
-         {Show 'NamerForCaptures begin'}
-         {DumpAST.dumpAST Pattern _}
          case Pattern
          of fVar(Name Pos) then
             NewSymbol
          in
             NewSymbol={Params.env setSymbol(Name Pos $)}
             {NewSymbol set(type patternmatch)}
-            {Show 'fVar in NamerForCapture'}
             % Add the fSym record for the new symbol in the captures list, so it can immediately be wrapped in fAnd
             (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
             % In the fConst, directly plave the 'safe'
@@ -590,12 +581,10 @@ define
             (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
             fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
          [] fRecord(Label Features) then
-            {Show 'fRecord in NamerForCapture'}
             fRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
          [] fOpenRecord(Label Features) then
             fOpenRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
          [] fColon(Key Val) then
-            {Show 'fColon in NamerForCapture'}
             % Pattern matching on values in records, not on the features
             fColon({NamerForBody Key Params} {NamerForCaptures Val Params} )
          [] fWildcard(Pos) then
@@ -628,7 +617,6 @@ define
             % its items being of the form Symbol#Pattern, where Symbol is the value
             % tested against Pattern.
             if {Not {List.is SymbolsAndPatterns}}then
-               {Show SymbolsAndPatterns}
                raise wrapInFCasesNeedsAList end
             else
                L = {List.length SymbolsAndPatterns}
@@ -846,8 +834,6 @@ define
             else
                R=NewCaseAST
             end
-            {Show 'Will return:'}
-            {DumpAST.dumpAST R _}
             R
          %-----------
          [] fInt(V P) then
@@ -1460,10 +1446,8 @@ define
                % and all what's left in the argument list are Symbols.
                case FRecordAST
                of fRecord(Op _) then
-                  {Show 'Unnesting returns fRecord'}
                   fRecord(Op {List.reverse NewArgsList})
                [] fOpenRecord(Op _) then
-                  {Show 'Unnesting returns fOpenRecord'}
                   fOpenRecord(Op {List.reverse NewArgsList})
                end
 
@@ -1791,8 +1775,6 @@ define
       fun {RegForSym AST Params}
       %-------------------------
          % Return register for fSym or fConst
-         {Show 'reg for sym'}
-         {DumpAST.dumpAST AST _}
          case AST
          of fConst(K _) then
             k(K)
