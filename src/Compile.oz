@@ -642,7 +642,6 @@ define
             % After that, it works on the AST of the function of procedure, using the lists if needed.
             Res
             ArgsDesc
-            Patterns
             ASTLabel={Record.label AST}
             Name Args Body Flags Pos
          in
@@ -671,7 +670,7 @@ define
                                           in
                                              (Acc.args):=fSym(NewSymbol Pos)|@(Acc.args)
                                              (Acc.patterns):=fSym(NewSymbol Pos)#I|@(Acc.patterns)
-                                          [] fEq(LHS RHS Pos) then
+                                          [] fEq(_ _ _) then
                                              Pos={GetPos I}
                                              NewSymbol={Params.env setSyntheticSymbol(Pos $)}
                                           in
@@ -739,11 +738,11 @@ define
             Res
 
          %---------------------------------
-         [] fFun(Name Args Body Flags Pos) then
+         [] fFun(_ _ _ _ _) then
          %---------------------------------
             {HandlePatternArgs AST Params}
          %---------------------------------
-         [] fProc(Name Args Body Flags Pos) then
+         [] fProc(_ _ _ _ _) then
          %---------------------------------
             {HandlePatternArgs AST Params}
          %----------------
@@ -1198,7 +1197,7 @@ define
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(LockIn Pos) [Lock NewProcSym] Pos)) Pos)
-         [] fCase(Val Clauses Else=fNoElse(_) Pos=pos(File Line Columns _ _ _)) then
+         [] fCase(Val Clauses fNoElse(_) Pos=pos(File Line _ _ _ _)) then
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
          [] fCase(Val Clauses Else Pos) then
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
