@@ -1912,8 +1912,8 @@ define
             of fConst(Const _) then
                {List.append @R [call(k(Const) {List.length Args})] }
             % FIXME: find better naming for Sym2 ?
-            [] fSym(Sym2 _) then
-               {List.append @R [call(y({Sym2 get(yindex $)}) {List.length Args})] }
+            [] fSym(_ _) then
+               {List.append @R [call({RegForSym Sym Params} {List.length Args})] }
             end
 
          %--------------------

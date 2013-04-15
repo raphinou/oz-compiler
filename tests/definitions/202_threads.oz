@@ -1,6 +1,5 @@
 % Function calls in thread expressions
 % Needs recursive functions support
-% --SKIP TEST--
 local
    P1 P2
    R
