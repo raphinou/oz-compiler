@@ -498,7 +498,6 @@ A clause with guards is present in the AST in the form of a record \lstinline!fS
 and Guards is simply the AST of the code of the guard (without the \lstinline!andthen! introducing the guard).
 Guards must be an expression with a boolean value, possibly using the boolean combinations of section \ref{sec:input:booleancombinations}.
 
-% FIXME: add !Var and conjunctions
 Variables can also be used in patterns for their value, and not as a new capture
 declaration. This is done by prefixing the variable with an exclamation mark.
 Here is an example:
@@ -517,6 +516,21 @@ end
 and escaped variable ends up in the AST as wrapped in an \lstinline!fEscape!
 record. \lstinline!A! appears in the AST as \lstinline!fEscape( fVar(A pos) pos)!.
 The next transformation of \lstinline!fEscape! nodes is done by the Namer, see Section \ref{sec:arch:namer:patternmatching}.
+
+Oz pattern matching also support what is called pattern conjunction, enabling to assign the value of a subexpression of the pattern to a variable. It is better illustrated by an example:
+\begin{lstlisting}
+   case V 
+   of rec(V=inner(a b ...)) then
+   ...
+   end
+\end{lstlisting}
+
+In the clause'code, the variable V will have the value of the inner record.
+These pattern conjunctions are present in the AST in \lstinline!fEq! record just 
+like unification instructions.
+Note that just like unifications (and unlike \lstinline!local..in..end!), the variable implicitly declared can be at the
+left as well as at the right side of the equal sign. So the pattern
+\lstinline!rec(V=inner(a b ...))! is equivalent to \lstinline!rec(inner(a b ...)=V)!
 
 
 \chapter{Compiler}
@@ -568,7 +582,12 @@ The namer  basically replaces all occurrences of a variable's \lstinline!fVar! b
 
 In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVar!s by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
 
+The \lstinline!Namer! also has some work to do on patterns and the variables it
+implicitly declares. As a consequence, it also handles and transforms the AST
+for functions and procedures.
+
 The set of maps from a variable name to its corresponding symbol is called environment, and is maintained by the namer.
+
 
 \subsubsection{Declarations}
 So the question raises of when do variables get declared.
@@ -657,10 +676,10 @@ that the records implicitly declaring variables in a pattern are seen as
 constant records, all features being constants! And these are treated as such,
 notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
 
-%FIXME: add description of transformation if guards are present.
-% transform fSideCondition in fNamedSideCondition where guards are now a
-% statement, and vith an additional feature being the symbols holding the value
-% of the guards
+To ease the work of future passes and improve readability of their code, the
+namer also replaces \lstinline!fEq! records of pattern conjunctions in
+\lstinline!fPatMatConjunction! records.
+
 Patterns with guards require some additional work. These are present in the AST
 as \lstinline!fSideCondition(Pattern Decls Guards Pos)!. First, a new symbol is
 introduced and unified with the \lstinline!Guards! expression. The record in the
@@ -685,10 +704,41 @@ incur a performance cost.
 
 
 
+\subsubsection{Pattern Arguments}
+Functions and procedures in Oz can be defined with pattern arguments, which
+destructures the argument and can shorten significantly the code:
+\begin{lstlisting}
+  fun {GetName person(name:Name ...)}
+     Name
+  end
+
+  Name={GetName person(name:'Turing' firstname:'Alan')}}
+\end{lstlisting}
+
+This AST of this function's definition is actually transformed in an AST corresponding to the following code:
+\begin{lstlisting}
+  fun {GetName Arg }
+     case Arg
+     of person(name:Name ...) then
+        Name
+     end
+  end
+\end{lstlisting}
+
+The namer thus replaces pattern variables by a synthetic symbol, and wraps the body of the function in case instructions (one level of case nesting for each pattern argument). 
+
+%FIXME: add patternmatching in fun/proc args + explain why some fsym are visited
+%twice
+
+
+
 \subsubsection{Compiler Code Notes}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
 These local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
-Notice that NamerForBody calls NamerForDecls when a function or procedure is defines, and NamerForCaptures when captures are present in patterns. Here is for example the code handling a function definition in non-declaration part of the code:
+Notice that NamerForBody calls NamerForDecls when a function or procedure is
+defines, and NamerForCaptures when captures are present in patterns. Here is for
+example the (redacted) code handling a definition in non-declaration part of a
+function with no pattern argument:
 
 \begin{lstlisting}
   %---------------------------------
@@ -717,7 +767,12 @@ At the end, the parent's environment is restored, ensuring that formal parameter
 
 This code also illustrates how it comes that functions can access variables defined in the defining environment (such functions are called closures): all those are inherited by the function's environment!
 
-The most complex code is the \lstinline!Namer! is for handling \lstinline!fCase! nodes as it needs to 
+Some parts of the namer code are not that simple. For example \lstinline!NamerForBody! 
+declares a function \lstinline!HandlePatternArgs!
+to apply the described transformation of functions and procedures with patterns
+arguments. 
+
+The most complex code however in the \lstinline!Namer! is for handling \lstinline!fCase! nodes as it needs to 
 \begin{itemize}
   \item declare new capture variables
   \item handle guards by, amongst other things, introducing a new symbol
@@ -1005,8 +1060,25 @@ where Label, \lstinline!Feature1! and \lstinline!Feature2! can be
 We see that we end up with a AST that only contains records with constant label and features: only the values are not constants.
 %FIXME: why do this transformation?
 Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
+\subsubsection{Pattern Matching}
+Records and open records present in a pattern undergo the same desugar
+transformation as normal records.
 \subsubsection{Wildcards}
 Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \lstinline!_! is replaced by the expression \lstinline!local NewSymbol in NewSymbol end!.
+Patterns with guards, found in the AST as \lstinline!fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos)! 
+have their features handled according their statement/instruction character:
+\lstinline!Pattern! is an expression, \lstinline!Decls! are left as is,
+\lstinline!Guards! is a statement (see the introduction
+of \lstinline!fNamedSideCondition! by the namer in Section
+\ref{sec:arch:namer:patternmatching}) and \lstinline!GuardSymbol! is just a
+symbol, left as is.
+
+Pattern conjunctions, present in \lstinline!fPatMatConjunction! records, have
+their features desugared and are then placed in a secure structure like fSym in
+patterns are by the namer (Section \ref{sec:arch:namer:patternmatching}).
+This is done because not other transformation should be done on the pattern
+conjunction's member before it is used by the code generator.
+
 
 \subsubsection{Threads}
 %FIXME: is the following correct?
@@ -1280,6 +1352,7 @@ The unnester is implemented by a function called \lstinline!Unnester!. The unnes
   \item  \lstinline!UnnestFRecord! is called to unnest records and open records. Its structure is similar to that of \lstinline!UnnestFApply!.
   \item  \lstinline!UnnestFBoolCase! is called to unnest \lstinline!if..then..else! instructions.
 \end{itemize}
+If the unnester encounters a record in the AST for which no specific operation is prescribed, it recursively unnests each feature of the record.
 \subsection{Globaliser}\label{sec:arch:globaliser}            
 This pass handles the global variables of a procedure, that is, variables used by a procedure that it does not declare (implying that the declaration is done at an upper level). It is interesting to note that the concept of global variables is only defined for procedures.
 Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
@@ -1662,7 +1735,7 @@ The \lstinline!patternMatch! instruction takes two parameters: the register cont
 value to test against, and a constant record with label '\#' and with one
 feature-value pair for each clause(in the order corresponding to the clauses in the Oz code). 
 
-The feature is the pattern to which two transformations have been applied. 
+The feature is the pattern to which three transformations have been applied. 
 
 First capture variables have been replaced by an object resulting from a call to
 \lstinline!Boot_CompilerSupport.newPatMatCapture!, passing as unique argument
@@ -1671,9 +1744,13 @@ case this pattern matches. The value is the label identifying the start of the
 code of the corresponding clause, which is where the \lstinline!patternMatch! instruction
 will jump in case of a match.
 
-Second, open records have been replace by an object obtained resulting from a
+Second, open records have been replaced by an object resulting from a
 call to \lstinline!Boot_CompilerSupport.newPatMatOpenRecord!, passing as
 arguments the arity and features list of the open record.
+
+Third, pattern conjunctions have been replaced by an object resulting from a call 
+to \lstinline!Boot_CompilerSupport.newPatMatConjunction!, passing as argument the result
+of the same transformation applied to both features of the \lstinline!fPatMatConjunction! record.
 
 The patternmatch is immediately followed by an unconditional \lstinline!branch! instruction,
 which will jump to the \lstinline!ElseCode!, but is only reached if no match were found.

@@ -264,23 +264,6 @@ define
       {List.flatten {UnWrapFAndInt AST }}
    end
 
-   fun {WrapInFCases Body SymbolsAndPatterns Pos}
-      % Wrap Body in one fCase for each item of the list SymbolsAndPatterns,
-      % its items being of the form Symbol#Pattern, where Symbol is the value
-      % tested against Pattern.
-      if {Not {List.is SymbolsAndPatterns}}then
-         {Show SymbolsAndPatterns}
-         raise wrapInFCasesNeedsAList end
-      else
-         L = {List.length SymbolsAndPatterns}
-      in
-         if L>0 then
-            {List.foldL SymbolsAndPatterns fun {$ Acc Symbol#Pattern} fCase(Symbol [fCaseClause(Pattern Acc)] fNoElse(Pos) Pos) end Body}
-         else
-            Body
-         end
-      end
-   end
 
    % List helper functions
    %Returns the index of Y in list Xs, 0 if not found
@@ -626,20 +609,9 @@ define
             % In the fConst, directly place the 'safe'
             fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
          [] fEq(LHS RHS Pos) then
-         %   T
-         %in
-         %   T=fPatMatConjunction({NamerForCaptures LHS Params} {NamerForCaptures RHS Params} Pos)
-         %   {Show 'fPatMatConjunction placed in the safe:'}
-         %   {Show T}
-         %   fConst({StoreInSafe T} Pos)
-         % FIXME: remove dumpAST calls
-            {Show 'LHS and RHS of pattern conjunction are resp:'}
-            {DumpAST.dumpAST LHS _}
-            {DumpAST.dumpAST RHS _}
-            {Show 'LHS and RHS of fPatMatConjunction are respectively:'}
-            fPatMatConjunction({DumpAST.dumpAST {NamerForCaptures LHS Params}} {DumpAST.dumpAST {NamerForCaptures RHS Params}} Pos)
+            fPatMatConjunction({NamerForCaptures LHS Params} {NamerForCaptures RHS Params} Pos)
          else
-            % CHECKME : is this ok?
+            % FIXME CHECKME : is this ok?
             {NamerForBody Pattern Params}
          end
       end
@@ -647,17 +619,39 @@ define
 
       fun {NamerForBody AST Params}
       %----------------------------
-         % Function called by NamerForBody when it encounters a function of
-         % procedure with pattern arguments.
-         % It first builds a list with one item for each pattern argument of
-         % the form Sym#ArgumentAST where Sym is the symbol placed as replacement in
-         % the argument list, and ArgumentAST is the original argument.
-         % If this list is empty, it handles the fFun or fProc normally.
-         % If this list is not empty, it wraps recursively (once for each item)
-         % the body in a fCase, testing the value in Sym against pattern ArgumentAST.
+
+
+
+         fun {WrapInFCases Body SymbolsAndPatterns Pos}
+            % Used by HandlePatternArgs
+            % Wrap Body in one fCase for each item of the list SymbolsAndPatterns,
+            % its items being of the form Symbol#Pattern, where Symbol is the value
+            % tested against Pattern.
+            if {Not {List.is SymbolsAndPatterns}}then
+               {Show SymbolsAndPatterns}
+               raise wrapInFCasesNeedsAList end
+            else
+               L = {List.length SymbolsAndPatterns}
+            in
+               if L>0 then
+                  {List.foldL SymbolsAndPatterns fun {$ Acc Symbol#Pattern} fCase(Symbol [fCaseClause(Pattern Acc)] fNoElse(Pos) Pos) end Body}
+               else
+                  Body
+               end
+            end
+         end
 
 
          fun {HandlePatternArgs AST Params}
+            % Function called by NamerForBody when it encounters a function of
+            % procedure with pattern arguments.
+            % It first builds 2 lists, which will be used if patterns are present in the arguments
+            % (in the other case, the original arguments list is used):
+            % - one containing all arguments, including the new symbols replacing the patterns
+            % - one containing items NewSymbol#Pattern
+            % The first is used to build the new parameters list, the second is used to wrap the
+            % function's body in fCases testing the value in NewSymbol against Pattern.
+            % After that, it works on the AST of the function of procedure, using the lists if needed.
             Res
             ArgsDesc
             Patterns
@@ -674,8 +668,7 @@ define
             % Backup environment here because we immediately create new symbols for patterns
             {Params.env backup()}
 
-            %Extract a record containing the list of new arguments in feature args,
-            % and a list of items Symbol#Pattern in feature patterns
+            %Extract needed lists
             ArgsDesc={List.foldL Args   fun {$ Acc I}
                                           case I
                                           of fRecord(_ _) then
@@ -703,19 +696,20 @@ define
                                        end
                                        acc(patterns:{NewCell nil} args:{NewCell nil})}
             if ArgsDesc\=nil andthen {List.length @(ArgsDesc.patterns)}>0 then
-               % If we have patterns, then we replace the pattern argument by
-               % their symbol, and inject a case in the body of the function.
+               % If we have patterns, then we replace the pattern arguments by
+               % their respective symbol, and inject a case in the body of the function.
                % This required NamerForDecls to handle fSym, as the tested value of the
                % case is the symbol we just placed in the argument list, but all the rest
                % of the fCase has still to be traversed by the namer.
-               % some args are patterns
                Res=ASTLabel(
                   % The function's variable has to be declared explicitely in the declaration part.
                   % That's why we call NamerForBody on the Name
                   {NamerForBody Name Params}
                   % Formal parameters are declarations, that's why we call NameForDecls
                   % FIXME: we can replace the 2 list visits by one
+                  % Use the new arguments list
                   {List.map {List.reverse @(ArgsDesc.args)} fun {$ I} {NamerForDecls I Params} end }
+                  % Wrap body in fCases
                   {NamerForBody {WrapInFCases Body @(ArgsDesc.patterns) Pos} Params}
                   Flags
                   Pos
@@ -794,10 +788,18 @@ define
             NewCaseAST
             R
          in
-            {Show '**********************'}
-            {Show fCase}
-            {Show '**********************'}
-
+            % We first go through all clauses.
+            % Each clause can introduce additional guards for escaped variables. Those are collected
+            % in NewParams.additionalGuards by NamerForCaptures.
+            % Each clause has its own environment, so a clause cannot access a symbol specific to another clause.
+            % Expressions with guards in fSideCondition are transformed:
+            % - Guards expressions are unified with one symbol, yielding a statement.
+            % - it produces a fNamedSideCondition where the feature corresponding to the guard holds this new statement,
+            %   and with additional feature the symbol unified with the original guards.
+            % This transformation is needed for CodeGen to know which symbol to use for the guards.
+            %
+            % Additional guards are clause specific, but guards symbols and captures are collected over the whole clauses list.
+            % These have to be declared in a local..in..end instruction wrapping the case instruction.
             NewClauses={List.map Clauses  fun{$ I}
                                              NewPattern NewBody
                                           in
@@ -1103,8 +1105,6 @@ define
             NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
             {TransformRecord fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end }) }
-
-         % Desugar open record pattern of a case clause
          [] fPatMatConjunction(LHS RHS Pos) then
             fConst({StoreInSafe fPatMatConjunction({DesugarExpr LHS Pos} {DesugarExpr RHS Pos} Pos)} Pos)
          [] fOpenRecord(Label Features) then
@@ -1112,7 +1112,7 @@ define
          in
             fOpenRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end })
          [] fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) then
-            fNamedSideCondition({DesugarExpr Pattern Params} Decls {List.map Guards fun {$ I} {DesugarExpr I Params} end} GuardSymbol Pos)
+            fNamedSideCondition({DesugarExpr Pattern Params} Decls {List.map Guards fun {$ I} {DesugarStat I Params} end} GuardSymbol Pos)
          [] fColon(Feature Value) then
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
 
