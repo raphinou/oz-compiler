@@ -1201,6 +1201,8 @@ define
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
          [] fCase(Val Clauses Else Pos) then
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
+         [] fSkip(_) then
+            AST
          %else
          %   {DefaultPass AST DesugarInt Params}
          end
@@ -1790,27 +1792,27 @@ define
       end
 
       % FIXME: remove if not needed
-      %fun {PermRegForSym AST Params}
-      %%-------------------------
-      %   % Return y,g or kregister for fSym or fConst
-      %   % Does not return X register
-      %   case AST
-      %   of fConst(K _) then
-      %      k(K)
-      %   [] fSym(Sym _) then
-      %      if {Sym get(type $)}==localised then
-      %         g({Sym get(gindex $)})
-      %      else
-      %         YReg={Sym get(yindex $)}
-      %      in
-      %         if YReg==nil then
-      %            raise nonAssignedYReg end
-      %         else
-      %            y(YReg)
-      %         end
-      %      end
-      %   end
-      %end
+      fun {PermRegForSym AST Params}
+      %-------------------------
+         % Return y,g or kregister for fSym or fConst
+         % Does not return X register
+         case AST
+         of fConst(K _) then
+            k(K)
+         [] fSym(Sym _) then
+            if {Sym get(type $)}==localised then
+               g({Sym get(gindex $)})
+            else
+               YReg={Sym get(yindex $)}
+            in
+               if YReg==nil then
+                  raise nonAssignedYReg end
+               else
+                  y(YReg)
+               end
+            end
+         end
+      end
 
       fun {CodeGenInt AST Params}
       %--------------------------
@@ -1821,6 +1823,8 @@ define
             % Should create all without recursive call
             [ {CodeGenDecls Decls Params} {CodeGenInt Body Params}]
 
+         [] fSkip(_) then
+            nil
          %---------------------------------
          [] fDefineProc(fSym(Sym _) Args Body _     Pos NewLocals) then
          %  fDefineProc(fSym(Sym _) Args Body Flags Pos NewLocals) then
@@ -1838,7 +1842,7 @@ define
             {Show '##############'}
             {System.showInfo 'Procedure '#{Sym get(name $)} }
             {Show '##############'}
-            {GenAndAssemble Body Args 'test' d(file:Pos.1 line:Pos.2 column:Pos.3) switches ?CA _} %last argument is ?VS, the virtual string is set by GenAndAssemble.
+            {GenAndAssemble Body Args {Sym get(name $)} d(file:Pos.1 line:Pos.2 column:Pos.3) switches ?CA _} %last argument is ?VS, the virtual string is set by GenAndAssemble.
 
 
             OpCodes:={List.append @OpCodes  [createAbstractionUnify(k(CA) GlobalsCount  y({Sym get(yindex $)}))]}
@@ -1960,7 +1964,7 @@ define
                end
             end
             % after create...Unify, we need to pass values through arrayFills, ordered according to the features.
-            Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({RegForSym V Params}) end }
+            Fills={List.map OrderedFeaturesList fun{$ _#V} arrayFill({PermRegForSym V Params}) end }
             {List.append [OpCodes] Fills}
          %----------------
          [] fEq(LHS RHS _) then
@@ -2277,9 +2281,9 @@ define
                                           PatternForRecord
                                           PatternIndex
                                        in
-                                          {Show 'Starting work on pattern'}
-                                          {Show '************************'}
-                                          {DumpAST.dumpAST Pattern _}
+                                          %{Show 'Starting work on pattern'}
+                                          %{Show '************************'}
+                                          %{DumpAST.dumpAST Pattern _}
 
 
                                           % If we start a new sequence, add the code of the previous sequence to Code
@@ -2435,7 +2439,7 @@ define
       end
       {Show 'Assigned Ys:'#YCounter}
       OpCodes := {List.append @OpCodes {CodeGen AST params(prefix:@Prefix procassemble:true currentIndex:{NewCell YCounter} )}}
-      {Show 'CodeArea built with this code:'}
+      {Show 'CodeArea for '#PrintName#'built with this code:'}
       {ForAll @OpCodes Show}
       {AssembleAST Arity @OpCodes PrintName DebugData Switches ?CodeArea ?VS}
    end

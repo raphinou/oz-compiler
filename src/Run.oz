@@ -10,7 +10,7 @@ import
    Debug at 'x-oz://boot/Debug'
    Compile at './Compile.ozf'
 define
-   {Debug.setRaiseOnBlock {Thread.this} true}
+%   {Debug.setRaiseOnBlock {Thread.this} true}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Boilerplate code for the parser
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -49,8 +49,8 @@ define
 
 
    Arity = 0
-   PrintName = 'Q'
-   DebugData = d(file:'Truc.oz' line:32 column:3)
+   PrintName = 'Top Level Abstraction'
+   DebugData = d(file:'run.oz' line:1 column:1)
    Switches = switches
 
    CodeArea VS
