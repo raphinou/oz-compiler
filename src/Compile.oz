@@ -3,10 +3,12 @@ functor
 import
    Narrator('class')
    ErrorListener('class')
-   Compiler(parseOzVirtualString)
-   System(printInfo showInfo show:Show)
+   System(showInfo show:Show)
    NewAssembler(assemble) at 'x-oz://system/NewAssembler.ozf'
    CompilerSupport(newAbstraction makeArity ) at 'x-oz://system/CompilerSupport.ozf'
+   % Boot_Object provides:
+   % attrExchangeFun attrGet attrPut cellOrAttrExchangeFun cellOrAttrGet cellOrAttrPut getClass is new
+   %Boot_Object at 'x-oz://boot/Object'
    Boot_CompilerSupport at 'x-oz://boot/CompilerSupport'
    Boot_Record at 'x-oz://boot/Record'
    Boot_Thread at 'x-oz://boot/Thread'
@@ -256,6 +258,16 @@ define
       end
    in
       {List.flatten {UnWrapFAndInt AST }}
+   end
+
+   fun {ListToAST L}
+      case L
+      of X|Xs then
+         fRecord(fConst('|' pos)
+                 '|'(X {ListToAST Xs}))
+      [] nil then
+         nil
+      end
    end
 
 
@@ -849,6 +861,27 @@ define
          %------------
             fConst(V P)
 
+         [] fClass(Var Flags Methods Pos) then
+            fun {NameMethod fMeth(fRecord(Name Args) Body Pos) Params}
+               NewArgs NewBody
+            in
+               % Args are available only to the method, so we backup the environment
+               % to be able to restore it after we traversed this method
+               {Params.env backup()}
+               % Declare all args
+               NewArgs={List.map Args  fun{$ fMethArg(Arg Default)}
+                                                fMethArg({NamerForDecls Arg Params} Default)
+                                             end }
+               % Traverse body with args in environment
+               NewBody={NamerForBody Body Params}
+               {Params.env restore()}
+               fMeth(fRecord( {NamerForBody Name Params} NewArgs) NewBody Pos)
+            end
+            NewMethods
+         in
+            NewMethods={List.map Methods fun {$ I} {NameMethod I Params} end }
+            fClass( {NamerForBody Var Params} Flags NewMethods Pos)
+
          %---
          else
          %---
@@ -906,6 +939,7 @@ define
          [] '\\=' then
             fConst(Value.Op Pos)
          else
+            % Return Op if it shouldn't be desugared because it is not an operator
             Op
          end
       end
@@ -1029,6 +1063,8 @@ define
 
       fun {DesugarExpr AST Params}
       %---------------------------
+      {Show 'DesugarExpr'}
+      {DumpAST.dumpAST AST _}
          % Desugar expressions
          case AST
          of fProc(Dollar Args Body Flags Pos) then
@@ -1150,6 +1186,7 @@ define
          end
       in
          % Desugar Statements.
+         {Show 'DesugarStat'}
          {DumpAST.dumpAST AST _}
          case AST
          of fAnd(First Second) then
@@ -1164,7 +1201,11 @@ define
 
          [] fApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
-            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
+            {Show 'Will desugar fApply'}
+            {Show 'Op is '#Op}
+            {Show 'is Args a list?'#{List.is Args}}
+            {Show Args}
+            fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {Show 'Will desugar arg'#I}{DesugarExpr I Params} end } Pos)
 
          [] fEq(LHS RHS Pos) then
             fEq({DesugarExpr LHS Params} {DesugarExpr RHS Params} Pos)
@@ -1201,6 +1242,52 @@ define
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
          [] fCase(Val Clauses Else Pos) then
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
+         [] fClass(_ _ _ _) then
+            fun {DesugarClass AST Params}
+               fun {TransformMethod Ind fMeth(Signature=fRecord(FName=fConst(Name _) Args) Body Pos) Params}
+                  NewArgs
+                  SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
+                  fun {BuildMessage Args Params}
+                     {List.foldL Args fun{$ Acc fMethArg(Var Default)}
+                                         %FIXME handle defaults
+                                         {Record.adjoin Acc Name(Var)}
+                                      end
+                                      Name()}
+                  end
+                  Message
+                  NewBody
+                  Decls
+                  R
+                  MessageSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+               in
+                  Message={BuildMessage Args Params}
+                  Decls = {List.mapInd Args fun {$ Ind fMethArg(Sym Default)} Sym#fEq(Sym fOpApply('.' [MessageSymbol fConst(Ind pos)] pos) pos) end}
+                  if {List.length Decls}>0 then
+                     NewBody=fLocal( {WrapInFAnd {List.map Decls fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [Body] {List.map Decls fun{$ _#Init} Init end }}} Pos)
+                  else
+                     NewBody=Body
+                  end
+                  R=fColon(fConst(Ind Pos) fRecord(fConst('#' Pos) [FName fProc(fDollar(Pos) [SelfSymbol MessageSymbol] NewBody nil Pos)] ))
+                  {Show 'transformed method:'}
+                  {DumpAST.dumpAST R}
+               end
+               Parents NewMeths NewAttrs NewFeats NewProps PrintName FSym
+               Flags Methods Pos
+            in
+               fClass(FSym Flags Methods Pos)=AST
+               Parents=fConst(nil pos)
+               NewMeths=fRecord(fConst('#' Pos) {List.mapInd Methods fun {$ Ind I} {TransformMethod Ind I Params} end } )
+               {Show 'NewMeths = '}
+               {DumpAST.dumpAST NewMeths _}
+               NewAttrs=fConst('attr'() pos)
+               NewFeats=fConst('feat'() pos)
+               NewProps=fConst(nil pos)
+               PrintName=fConst(printname pos)
+               %ok:
+               {DesugarStat fApply( fConst(OoExtensions.'class' Pos) [Parents NewMeths NewAttrs NewFeats NewProps PrintName FSym] Pos) Params}
+            end
+         in
+            {DesugarClass AST Params}
          [] fSkip(_) then
             AST
          %else
@@ -1592,6 +1679,8 @@ define
                %{Show 'assigning procId '#ProcId#' to '}
                %{System.showInfo {Sym toVS($)}}
                {Sym setProcId(ProcId)}
+               AST
+            [] fSkip(_) then
                AST
             else
                {DefaultPass AST AssignScope ProcId}
@@ -2430,10 +2519,13 @@ define
    in
       {Show 'Will assign Ys'}
       YCounter={YAssigner Args}
+      {Show 'Done Assigning Y'}
       if YCounter>0 then
          % Use List.forAllInd
          {For 0 YCounter-1 1
             proc {$ I}
+            {Show I}
+            {Show {Nth Args I+1}}
               Prefix:={List.append @Prefix [move(x(I) y({{Nth Args I+1}.1 get(yindex $)}) )]}
             end}
       end
