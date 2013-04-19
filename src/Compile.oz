@@ -869,9 +869,14 @@ define
                % to be able to restore it after we traversed this method
                {Params.env backup()}
                % Declare all args
-               NewArgs={List.map Args  fun{$ fMethArg(Arg Default)}
-                                                fMethArg({NamerForDecls Arg Params} Default)
-                                             end }
+               NewArgs={List.map Args  fun{$ I}
+                                          case I
+                                          of fMethArg(Arg Default) then
+                                             fMethArg({NamerForDecls Arg Params} {NamerForBody Default Params})
+                                          [] fMethColonArg(F V Default) then
+                                             fMethColonArg({NamerForBody F Params} {NamerForDecls V Params} {NamerForBody Default Params})
+                                          end
+                                       end }
                % Traverse body with args in environment
                NewBody={NamerForBody Body Params}
                {Params.env restore()}
@@ -1245,12 +1250,36 @@ define
          [] fClass(_ _ _ _) then
             fun {DesugarClass AST Params}
                fun {TransformMethod Ind fMeth(Signature=fRecord(FName=fConst(Name _) Args) Body Pos) Params}
+                  % Takes one method signature and an index, and build its element of the '#' record containing
+                  % the class' methods.
+                  % The value returned is also a '#'-record, the first value being the method's name, the second being a
+                  % proc expression taking 2 arguments:
+                  % - self
+                  % - the message requesting the method invocation
+                  % Due to this 'proxy' procedure, the symbols in the body do not correspond to the procedure arguments anymore.
+                  % That's why the body is prefixed with unifications of the method's arguments with the proc's message's values
+                  % meth foo(X Y)
+                  %  {Show X Y}
+                  % end
+                  % is transformed in
+                  % proc {Foo Self M}
+                  %    X=M.1
+                  %    Y=M.2
+                  % in
+                  %    {Show X Y}
+                  % end
                   NewArgs
                   SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
                   fun {BuildMessage Args Params}
-                     {List.foldL Args fun{$ Acc fMethArg(Var Default)}
+                     % Build message record corresponding to the call
+                     {List.foldL Args fun{$ Acc Arg }
                                          %FIXME handle defaults
-                                         {Record.adjoin Acc Name(Var)}
+                                         case Arg
+                                         of fMethArg(Var Default) then
+                                            {Record.adjoin Acc Name(Var)}
+                                         [] fMethColonArg(fConst(F _) V Default) then
+                                            {Record.adjoin Acc Name(F:V)}
+                                          end
                                       end
                                       Name()}
                   end
@@ -1261,7 +1290,19 @@ define
                   MessageSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
                   Message={BuildMessage Args Params}
-                  Decls = {List.mapInd Args fun {$ Ind fMethArg(Sym Default)} Sym#fEq(Sym fOpApply('.' [MessageSymbol fConst(Ind pos)] pos) pos) end}
+                  Decls = {List.mapInd Args  fun {$ Ind I}
+                                                case I
+                                                of fMethArg(Sym fNoDefault) then
+                                                   Sym#fEq(Sym fOpApply('.' [MessageSymbol fConst(Ind pos)] pos) pos)
+                                                [] fMethArg(Sym fDefault(Default _)) then
+                                                   Sym#fEq(Sym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol fConst(Ind pos)] pos) fOpApply('.' [MessageSymbol fConst(Ind pos) ] pos) Default pos) pos)
+                                                [] fMethColonArg(F Sym fNoDefault) then
+                                                   Sym#fEq(Sym fOpApply('.' [MessageSymbol F ] pos) pos)
+                                                [] fMethColonArg(F Sym fDefault(Default _)) then
+                                                   Sym#fEq(Sym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol F] pos) fOpApply('.' [MessageSymbol F ] pos) Default pos) pos)
+
+                                                end
+                                             end}
                   if {List.length Decls}>0 then
                      NewBody=fLocal( {WrapInFAnd {List.map Decls fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [Body] {List.map Decls fun{$ _#Init} Init end }}} Pos)
                   else
