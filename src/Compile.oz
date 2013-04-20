@@ -13,6 +13,7 @@ import
    Boot_Record at 'x-oz://boot/Record'
    Boot_Thread at 'x-oz://boot/Thread'
    Boot_Exception at 'x-oz://boot/Exception'
+   Boot_Name at 'x-oz://boot/Name'
    Boot_Value at 'x-oz://boot/Value'
    DumpAST at '../lib/DumpAST.ozf'
    % for nested environments debugging
@@ -861,7 +862,7 @@ define
          %------------
             fConst(V P)
 
-         [] fClass(Var Flags Methods Pos) then
+         [] fClass(Var Attributes Methods Pos) then
             fun {NameMethod fMeth(fRecord(Name Args) Body Pos) Params}
                NewArgs NewBody
             in
@@ -885,7 +886,7 @@ define
             NewMethods
          in
             NewMethods={List.map Methods fun {$ I} {NameMethod I Params} end }
-            fClass( {NamerForBody Var Params} Flags NewMethods Pos)
+            fClass( {NamerForBody Var Params} {NamerForBody Attributes Params} NewMethods Pos)
 
          %---
          else
@@ -1103,8 +1104,12 @@ define
          [] fAnd(First Second) then
             % if the fAnd is an expression, only the second part is treated as expression
             fAnd({DesugarStat First Params} {DesugarExpr Second Params})
-         [] fAt(Cell Pos) then
+
+         [] fAt(Cell Pos) andthen @(Params.'self')==unit then
+            % Not in a class because Params.self is unit
             fApply( fConst(Boot_Value.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
+         [] fAt(Cell Pos) then
+            fApply( fConst(Boot_Value.catAccessOO Pos) [@(Params.'self') {DesugarExpr Cell Params}] Pos)
 
          [] fOpApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
@@ -1247,7 +1252,7 @@ define
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
          [] fCase(Val Clauses Else Pos) then
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
-         [] fClass(_ _ _ _) then
+         [] fClass(FSym AttributesAndProperties Methods Pos) then
             fun {DesugarClass AST Params}
                fun {TransformMethod Ind fMeth(Signature=fRecord(FName=fConst(Name _) Args) Body Pos) Params}
                   % Takes one method signature and an index, and build its element of the '#' record containing
@@ -1290,7 +1295,13 @@ define
                   MessageSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
                   Message={BuildMessage Args Params}
+
                   Decls = {List.mapInd Args  fun {$ Ind I}
+                            % If a default value is provided, inject code in the AST to check if a value was provided,
+                            % ie if the feature is present in the message.
+                            % If it is a fMethArg, the feature is numeric and found in Ind
+                            % It is is a fMethColonArg, the feature is found in its first value.
+                            % Except for the distinction in the feature, both cases have the same code.
                                                 case I
                                                 of fMethArg(Sym fNoDefault) then
                                                    Sym#fEq(Sym fOpApply('.' [MessageSymbol fConst(Ind pos)] pos) pos)
@@ -1308,19 +1319,42 @@ define
                   else
                      NewBody=Body
                   end
-                  R=fColon(fConst(Ind Pos) fRecord(fConst('#' Pos) [FName fProc(fDollar(Pos) [SelfSymbol MessageSymbol] NewBody nil Pos)] ))
+                  % Desugar the body with the self symbol set.
+                  % This will transform @bla in catAccessOO
+                  % FIXME: check that we can still use cells
+                  (Params.'self'):=SelfSymbol
+                  R=fColon(fConst(Ind Pos) fRecord(fConst('#' Pos) [FName fProc(fDollar(Pos) [SelfSymbol MessageSymbol] {DesugarStat NewBody Params} nil Pos)] ))
+                  (Params.'self'):=unit
+
                   {Show 'transformed method:'}
                   {DumpAST.dumpAST R}
                end
-               Parents NewMeths NewAttrs NewFeats NewProps PrintName FSym
-               Flags Methods Pos
+
+               fun {TransformAttribute Rec Params}
+                  case Rec
+                  of '#'(F V) then
+                     fColon(F V)
+                  else
+                     fColon(Rec {Boot_Name.newUnique 'ooFreeFlag'})
+                  end
+               end
+
+
+               Parents NewMeths NewAttrs NewFeats NewProps PrintName
             in
-               fClass(FSym Flags Methods Pos)=AST
                Parents=fConst(nil pos)
                NewMeths=fRecord(fConst('#' Pos) {List.mapInd Methods fun {$ Ind I} {TransformMethod Ind I Params} end } )
                {Show 'NewMeths = '}
                {DumpAST.dumpAST NewMeths _}
-               NewAttrs=fConst('attr'() pos)
+               {List.forAll AttributesAndProperties  proc {$ I}
+                                                        case I
+                                                        of fAttr(L _) then
+                                                           NewAttrs=fRecord(fConst('attr' pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
+                                                        end
+                                                     end}
+               %NewAttrs=fConst('attr'() pos)
+               {Show 'NewAttrs:'}
+               {DumpAST.dumpAST NewAttrs _}
                NewFeats=fConst('feat'() pos)
                NewProps=fConst(nil pos)
                PrintName=fConst(printname pos)
@@ -1339,7 +1373,7 @@ define
       {Show '-------'}
       {Show 'Desugar'}
       {Show '-------'}
-      {DesugarStat AST params}
+      {DesugarStat AST params('self':{NewCell unit})}
    end
 
    %#################
