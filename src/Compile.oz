@@ -265,9 +265,11 @@ define
       case L
       of X|Xs then
          fRecord(fConst('|' pos)
-                 '|'(X {ListToAST Xs}))
+                   [fColon(fConst(1 pos) X)
+                   fColon(fConst(2 pos) {ListToAST Xs})] )
       [] nil then
-         nil
+         % end of list
+         fConst(nil pos)
       end
    end
 
@@ -644,7 +646,7 @@ define
 
 
          fun {HandlePatternArgs AST Params}
-            % Function called by NamerForBody when it encounters a function of
+            % Function called by NamerForBody when it encounters a function or
             % procedure with pattern arguments.
             % It first builds 2 lists, which will be used if patterns are present in the arguments
             % (in the other case, the original arguments list is used):
@@ -863,37 +865,53 @@ define
             fConst(V P)
 
          [] fClass(Var Attributes Methods Pos) then
-            fun {NameMethod fMeth(fRecord(Name Args) Body Pos) Params}
+            fun {NameMethod Method  Params}
                NewArgs NewBody
             in
-               % Args are available only to the method, so we backup the environment
-               % to be able to restore it after we traversed this method
-               {Params.env backup()}
-               % Declare all args
-               NewArgs={List.map Args  fun{$ I}
-                                          case I
-                                          of fMethArg(Arg Default) then
-                                             fMethArg({NamerForDecls Arg Params} {NamerForBody Default Params})
-                                          [] fMethColonArg(F V Default) then
-                                             fMethColonArg({NamerForBody F Params} {NamerForDecls V Params} {NamerForBody Default Params})
-                                          end
-                                       end }
-               % Traverse body with args in environment
-               NewBody={NamerForBody Body Params}
-               {Params.env restore()}
-               fMeth(fRecord( {NamerForBody Name Params} NewArgs) NewBody Pos)
+               {Show 'Mthod to be named:'}
+               {DumpAST.dumpAST Method _}
+               case Method
+               of fMeth(fRecord(Name Args) Body Pos) then
+                  % Args are available only to the method, so we backup the environment
+                  % to be able to restore it after we traversed this method
+                  {Params.env backup()}
+                  % Declare all args
+                  NewArgs={List.map Args  fun{$ I}
+                                             case I
+                                             of fMethArg(Arg Default) then
+                                                fMethArg({NamerForDecls Arg Params} {NamerForBody Default Params})
+                                             [] fMethColonArg(F V Default) then
+                                                fMethColonArg({NamerForBody F Params} {NamerForDecls V Params} {NamerForBody Default Params})
+                                             end
+                                          end }
+                  % Traverse body with args in environment
+                  NewBody={NamerForBody Body Params}
+                  {Params.env restore()}
+                  fMeth(fRecord( {NamerForBody Name Params} NewArgs) NewBody Pos)
+               else
+                  Name Body MPos
+               in
+                  % Args are available only to the method, so we backup the environment
+                  fMeth(Name Body MPos)=Method
+                  % this is a method without argument
+                  fMeth(fRecord( {NamerForBody Name Params} nil) {NamerForBody Body Params} MPos)
+               end
             end
             NewMethods
+            NewAttributes
          in
             NewMethods={List.map Methods fun {$ I} {NameMethod I Params} end }
-            fClass( {NamerForBody Var Params} {NamerForBody Attributes Params} NewMethods Pos)
+            NewAttributes={List.map Attributes fun {$ I} {NamerForBody I Params} end }
+            {Show 'NamerNewAttributes:'}
+            {DumpAST.dumpAST NewAttributes _}
+            fClass( {NamerForBody Var Params} NewAttributes NewMethods Pos)
 
          %---
          else
          %---
-            {Show 'Default pass for next ast'}
-            {Show AST}
-            {Show '..............................................'}
+            %{Show 'Default pass for next ast'}
+            %{Show AST}
+            %{Show '..............................................'}
             {DefaultPass AST NamerForBody Params}
          end
       end
@@ -961,7 +979,7 @@ define
          in
             % Feature.2 is most of the time the position, but not alway.
             % We check it
-            if {Record.is Feature.2} andthen {Label Feature.2}==pos then
+            if {Record.width Feature}>1 andthen {Record.is Feature.2} andthen {Label Feature.2}==pos then
                Pos = Feature.2
             else
                Pos = pos
@@ -1351,9 +1369,8 @@ define
                end
 
 
-               Parents NewMeths NewAttrs NewFeats NewProps PrintName
+               Parents NewParents NewMeths NewAttrs NewFeats NewProps PrintName
             in
-               Parents=fConst(nil pos)
                NewMeths=fRecord(fConst('#' Pos) {List.mapInd Methods fun {$ Ind I} {TransformMethod Ind I Params} end } )
                {Show 'NewMeths = '}
                {DumpAST.dumpAST NewMeths _}
@@ -1363,16 +1380,26 @@ define
                                                            NewAttrs=fRecord(fConst('attr' pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
                                                         [] fFeat(L _) then
                                                            NewFeats=fRecord(fConst('feat' pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
+                                                        [] fFrom(L _) then
+                                                           Parents=L
+
                                                         end
                                                      end}
-               %NewAttrs=fConst('attr'() pos)
-               {Show 'NewFeats:'}
-               {DumpAST.dumpAST NewFeats _}
+               if {Not {IsDet NewAttrs}} then
+                  NewAttrs=fConst('attr'() pos)
+               end
+               if {Not {IsDet NewFeats}} then
+                  NewFeats=fConst('feat'() pos)
+               end
+               if {Not {IsDet Parents}} then
+                     NewParents=fConst(nil pos)
+                  else
+                     NewParents={ListToAST {List.map Parents fun{$ I}{DesugarExpr I Params} end}}
+               end
                %NewFeats=fConst('feat'() pos)
                NewProps=fConst(nil pos)
                PrintName=fConst(printname pos)
-               %ok:
-               {DesugarStat fApply( fConst(OoExtensions.'class' Pos) [Parents NewMeths NewAttrs NewFeats NewProps PrintName FSym] Pos) Params}
+               {DesugarStat fApply( fConst(OoExtensions.'class' Pos) [ NewParents NewMeths NewAttrs NewFeats NewProps PrintName FSym] Pos) Params}
             end
          in
             {DesugarClass AST Params}
