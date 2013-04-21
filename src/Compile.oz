@@ -1109,6 +1109,7 @@ define
             % Not in a class because Params.self is unit
             fApply( fConst(Boot_Value.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
          [] fAt(Cell Pos) then
+            % When in a class, Params.self has been set to Self. See TransformMethod
             fApply( fConst(Boot_Value.catAccessOO Pos) [@(Params.'self') {DesugarExpr Cell Params}] Pos)
 
          [] fOpApply(Op Args Pos) then
@@ -1119,8 +1120,11 @@ define
             % both Op and Args must be expression and expressions list respectively
             fApply({DesugarOp Op Args Pos} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
 
-         [] fColonEquals(Cell Val Pos) then
+         [] fColonEquals(Cell Val Pos) andthen @(Params.'self')==unit then
             fApply( fConst(Boot_Value.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+
+         [] fColonEquals(Cell Val Pos) then
+            fApply( fConst(Boot_Value.catExchangeOO Pos) [ @(Params.'self') {DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
          [] fBoolCase( Cond TrueCode fNoElse(_) Pos) then
             % Cond is a value, hence an expression.
@@ -1178,8 +1182,8 @@ define
          [] fAtom(_ _) then
             raise namerLeftFAtomIntactAtDesugar end
          else
-         {DumpAST.dumpAST AST _}
-         raise unhandledRecordInDesugarExpr end
+            {DumpAST.dumpAST AST _}
+            raise unhandledRecordInDesugarExpr end
          end
       end
 
@@ -1227,8 +1231,10 @@ define
             % Need to Desugar the top-level fProc, eg in the case of a statement function (fun {$ ..}),
             % so that the $ also gets desugared
             fProc(FSym {List.append Args [ReturnSymbol]} {DesugarStat {HandleLazyFlag ReturnSymbol Body Flags Pos} Params} Flags Pos)
-         [] fColonEquals(Cell Val Pos) then
+         [] fColonEquals(Cell Val Pos) andthen @(Params.'self')==unit then
             fApply( fConst(Boot_Value.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+         [] fColonEquals(Cell Val Pos) then
+            fApply( fConst(Boot_Value.catAssignOO Pos) [@(Params.'self') {DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
          [] fBoolCase( Cond TrueCode fNoElse(_) Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
@@ -1273,6 +1279,11 @@ define
                   % in
                   %    {Show X Y}
                   % end
+                  % The Body is also desugared with the SelfSymbol passed in Params.
+                  % This is needed, eg for desugaring @attribute in catAccessOO rather than in catAccess.
+                  % The attributes have to be placed in a record with label 'attr'. The features in that record are the
+                  % attributes, the values being their respective initial value, on the result of
+                  % a call to {Boot_Name.newUnique 'ooFreeFlag'}
                   NewArgs
                   SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
                   fun {BuildMessage Args Params}
@@ -1335,7 +1346,7 @@ define
                   of '#'(F V) then
                      fColon(F V)
                   else
-                     fColon(Rec {Boot_Name.newUnique 'ooFreeFlag'})
+                     fColon(Rec fConst({Boot_Name.newUnique 'ooFreeFlag'} pos))
                   end
                end
 
@@ -1350,12 +1361,14 @@ define
                                                         case I
                                                         of fAttr(L _) then
                                                            NewAttrs=fRecord(fConst('attr' pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
+                                                        [] fFeat(L _) then
+                                                           NewFeats=fRecord(fConst('feat' pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
                                                         end
                                                      end}
                %NewAttrs=fConst('attr'() pos)
-               {Show 'NewAttrs:'}
-               {DumpAST.dumpAST NewAttrs _}
-               NewFeats=fConst('feat'() pos)
+               {Show 'NewFeats:'}
+               {DumpAST.dumpAST NewFeats _}
+               %NewFeats=fConst('feat'() pos)
                NewProps=fConst(nil pos)
                PrintName=fConst(printname pos)
                %ok:
