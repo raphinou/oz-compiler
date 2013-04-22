@@ -5,6 +5,10 @@
 \usepackage{pgf}
 \usepackage[margin=false,inline=true]{fixme}
 \usepackage{listings} % DO NOT USE DRAFT DOCUMENT AS IT WILL NOT DISPLAY THE CODE
+\usepackage{tikz}
+\usetikzlibrary{arrows,automata,shapes}
+\tikzstyle{block} = [rectangle, draw, fill=blue!20, 
+    text width=5em, text centered, rounded corners, minimum height=4em]
 \setcounter{secnumdepth}{3} 
 
 
@@ -68,21 +72,27 @@ The Mozart2 virtual machine works with four types of registers. The description 
 \subsection{Abstractions}\label{sec:vm:abstractions}
 An Oz procedure is represented in the virtual machine by what is called an abstraction. An Oz program itself is implicitly placed in what is called a top level abstraction.
 An abstraction holds references to G registers and to its code area. This code area has references to its K registers and the code itself. 
-\begin{verbatim}
-+-----------+
-|Abstraction|
-|-----------|             +--------+
-| CodeArea  |------------>|CodeArea|
-| G0        |             |--------|
-| G1        |             | Code   |------->ByteCode
-| .         |             | K0     |
-| .         |             | K1     |
-| Gn        |             | .      |
-+-----------+             | .      |
-                          | Kn     |
-                          +--------+
-\end{verbatim}
 
+\begin{figure}[h]
+\begin{tikzpicture}[auto,every matrix/.style={ampersand replacement=\&,column sep=2cm,row sep=2cm},
+                             to/.style={->,>=stealth',shorten >=1pt,semithick,font=\sffamily\footnotesize}]
+  \node[block](abstraction) at (0,0) {Abstraction\\\line(1,0){25}\\
+                             CodeArea\\
+                             $G_0$\\
+                             $G_1$\\
+                             \dots\\};
+  \node[block](codearea) at (4,-1) {CodeArea\\\line(1,0){25}\\
+                             Code\\
+                             $K_0$\\
+                             $K_1$\\
+                             \dots\\};
+  \node[auto](bytecode) at (7,-2){Bytecode};
+
+  \draw[to]  (abstraction.east)+(0,5pt) -- (codearea.north west);
+  \draw[to]  (codearea.east)+(0,7pt)  --   (bytecode);
+\end{tikzpicture}
+\caption{Internals of the virtual machine}
+\end{figure}
 Capturing the global variables at the abstraction level is what provides
 closures: a procedure captures the environment it was defined in.
 The CodeArea is not stored in the abstraction itself, but is referenced from
@@ -131,6 +141,31 @@ CodeArea --+
 G0=5
 \end{verbatim}
 
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}[auto,every matrix/.style={ampersand replacement=\&,column sep=2cm,row sep=2cm},
+                             to/.style={->,>=stealth',shorten >=1pt,semithick,font=\sffamily\footnotesize}]
+  \node[block](abstraction) at (0,0) {Abstraction\\\line(1,0){25}\\
+                             CodeArea\\
+                             $G_0=2$\\
+                             };
+  \node[block](codearea) at (4,-1) {CodeArea\\\line(1,0){25}\\
+                             Code\\
+                             $K(2)$\\
+                             };
+  \node[auto](bytecode) at (7,-2){Bytecode};
+
+  \node[block](abstraction2) at (0,-3) {Abstraction\\\line(1,0){25}\\
+                             CodeArea\\
+                             $G_0=5$\\
+                             };
+
+  \draw[to]  (abstraction.east)+(0,5pt) -- (codearea.north west);
+  \draw[to]  (abstraction2.east)+(0,5pt) -- (codearea.north west);
+  \draw[to]  (codearea.east)+(0,7pt)  --   (bytecode);
+\end{tikzpicture}
+\caption{Multiple Abstractions referring to the same CodeArea}
+\end{figure}
 
 
 \section{Target Language}
