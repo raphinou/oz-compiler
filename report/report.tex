@@ -14,7 +14,8 @@
 \title{Oz Compiler}
 \begin{document}
 % configure listings package to handle code as Oz code
-\lstset{language=Oz}
+%\lstset{language=Oz}
+\lstset{language=Oz,basicstyle=\ttfamily\small,columns=fullflexible}
 
 
 % requires memoir
@@ -352,7 +353,7 @@ It makes absolutely no sense to put a nesting marker as second argument to a cal
 \lstinline[mathescape]!{F 2 $\$$}! because the call itself is already an expression.
 
 
-\subsection{Cells}
+\subsection{Cells}\label{sec:input:cells}
 \subsubsection{Assignation}
 fColonEquals(Cell Val Pos) %FIXME
 \subsubsection{Read}
@@ -531,6 +532,162 @@ like unification instructions.
 Note that just like unifications (and unlike \lstinline!local..in..end!), the variable implicitly declared can be at the
 left as well as at the right side of the equal sign. So the pattern
 \lstinline!rec(V=inner(a b ...))! is equivalent to \lstinline!rec(inner(a b ...)=V)!
+
+
+\subsection{Classes}
+Let's illustrated the AST we get for a class definition with an example:
+
+\begin{lstlisting}
+   class C
+      meth init skip end
+      meth hello(A1)
+         {Show 'hello'}
+         {Show A1}
+      end
+   end
+\end{lstlisting}
+which results in this AST:
+\begin{lstlisting}
+
+   fClass(
+      fVar('C' pos )
+      nil
+      |(
+         fMeth(
+            fAtom(init pos )
+            fSkip(pos )
+            pos)
+         |(
+            fMeth(
+               fRecord(
+                  fAtom(hello pos )
+                  |(
+                     fMethArg(
+                        fVar('A1' pos )
+                        fNoDefault)
+                     nil))
+               fAnd(
+                  fApply(
+                     fVar('Show' pos )
+                     |(
+                        fAtom(hello pos )
+                        nil)
+                     pos)
+                  fApply(
+                     fVar('Show' pos )
+                     |(
+                        fVar('A1' pos )
+                        nil)
+                     pos))
+               pos)
+            nil))
+      pos)
+\end{lstlisting}
+
+We see that class definitions are found in 
+\lstinline!fClass(ClassVar SpecsList MethodsList Pos)!.
+A method is found in records \lstinline!fMeth(Signature Body Pos)!.
+For methods without argument, \lstinline!Signature! is simply the method name.
+In the example, this is illustrated by the \lstinline!init! method.
+For methods with arguments, \lstinline!Signature! is the AST of a record which label is the method name, and the
+values in the record are the method arguments found in 
+\lstinline!fMethArg(Var DefaultValue)!, where \lstinline!DefaultValue! is
+\lstinline!fNoDefault! if none was provided.
+This is illustrated by the method \lstinline!hello(A1)!.
+
+The class of this example had no feature or attribute defined, hence the empty
+list as second value in the record.
+Both attribute and features are placed in this list. Attributes are placed in
+\lstinline!fAttr(AttrsList)! records and features are placed in
+\lstinline!fFeat(FeatsList)! records. Both these records have one feature which
+value is a list. Each attribute and feature corresponds to one item in its
+respective list. If the attribute or feature has a default value, its
+corresponding item is a record with label \lstinline!'#'! and two values: the
+first is the name of the attribute or feature, the second is the default value.
+If no default value is defined, the item in the list is simply the name of the
+attribute or the feature.
+Let's look at an example. A class with the following attributes and feature
+definition
+\begin{lstlisting}
+      attr
+         count:0
+         state
+      feat
+         type:repeater
+  
+\end{lstlisting}
+will have its list of attributes and features looking like this:
+\begin{lstlisting}
+      |(
+         fAttr(
+            |(
+               #(
+                  fAtom(count pos )
+                  fInt(0 pos ))
+               |(
+                  fAtom(state pos )
+                  nil))
+            pos)
+         |(
+            fFeat(
+               |(
+                  #(
+                     fAtom(type pos )
+                     fAtom(repeater pos ))
+                  nil)
+               pos)
+            nil))
+\end{lstlisting}
+We see that the \lstinline!count! attribute is placed in a '\#' record, but not
+the \lstinline!state! attribute.
+We also see clearly that all attributes are placed in one \lstinline!fAttr!
+record, and all features in on \lstinline!fFeat! record.
+
+This list also contains more information: the parents of the class, as well as
+the properties of the class. These are located in \lstinline!fFrom(ParentsList)!. 
+Here is an example from a class inheriting from classes \lstinline!A! and
+\lstinline!B!. In Oz, this class will be defined by
+\begin{lstlisting}
+  class C from A B
+    ..
+  end
+\end{lstlisting}
+and this will result in this element in the list
+\begin{lstlisting}
+           fFrom(
+            |(
+               fVar('A' pos )
+               |(
+                  fVar('B' pos )
+                  nil))
+            pos)
+\end{lstlisting}
+
+The properties of a class are also present in that list, under \lstinline!fProp!
+records. A class having the locking property would have this \lstinline!fProp! record:
+
+\begin{lstlisting}
+           fProp(
+               |(
+                  fAtom(locking pos )
+                  nil)
+               pos)
+\end{lstlisting}
+
+Assignation to attributes can be done in two ways. The first has the same syntax
+as cell updates, described in Section \ref{sec:input:cells}:
+\begin{lstlisting}
+  my_attr:=NewVal
+\end{lstlisting}
+and is found in the AST just as a cell update operation under a node
+\lstinline!fColonEquals!.
+
+The second uses the syntax \lstinline!<-!:
+\begin{lstlisting}
+  my_attr<-NewVal
+\end{lstlisting}
+and is found in the AST under a node \lstinline!fAssign(LHS RHS pos)!.
+
 
 
 \chapter{Compiler}
@@ -730,6 +887,14 @@ The namer thus replaces pattern variables by a synthetic symbol, and wraps the b
 %FIXME: add patternmatching in fun/proc args + explain why some fsym are visited
 %twice
 
+
+
+\subsubsection{Classes}
+The work of the namer on classes is straight-forward. It goes through the record
+\lstinline!fClass(Var Specs Methods Pos)! and names variables as would expect:
+method arguments are named as declarations i.e. it adds mappings to the
+environment which are then used when traversing the body of the method.
+It also goes through the attributes, features, properties and parents.
 
 
 \subsubsection{Compiler Code Notes}
@@ -1156,6 +1321,100 @@ end
 \end{lstlisting}
 
 This form will then be handled by later passes of the compiler.
+\subsubsection{Classes}
+Thanks to the support by the virtual machine of classes, handling classes in the
+compiler revolves in desugaring the class definition in a call to
+\lstinline!OoExtensions.'class'!. 
+The AST node \lstinline!fClass(FSym Specs Methods Pos)! gets transformed in 
+\lstinline!fApply( fConst(OoExtensions.'class' Pos) [ Parents Meths Attrs Feats Props PrintName FSym] Pos)!.
+The \lstinline!Desugar! function just has to correctly build the arguments of
+the call. Of course, the arguments are themselves ASTs. So an argument that is a
+list will be in fact a \lstinline!fRecord!.
+
+\lstinline!Parents! is simply a list of the parents of the class. The elements
+of the list are simply the \lstinline!fSym! record holding the symbols corresponding to the
+parent classes.
+
+\lstinline!Meths! is a \#-tuple with one item of the form \lstinline!name#Proc! for each
+method, where \lstinline!name! is the method name, and Proc is a procedure with
+2 arguments implementing the method. The two arguments of the method are
+\lstinline!self!,
+which is the object on which the method is called, and \lstinline!M!, the message
+corresponding to the call. It is the message that contains all argument values.
+It is important to note that the symbols used inside the body of the method
+don't correspond to the arguments of the procedure implementing the method.
+This mismatch is corrected by unifying symbols in the method body with values
+found in the message. Here is an illustration:
+\begin{lstlisting}
+  meth foo(X Y)
+     {Show X+Y}
+  end 
+\end{lstlisting}
+will be implemented by this method:
+\begin{lstlisting}
+  proc {Foo Self> M}
+     X Y
+  in
+     X = M.1
+     Y = M.2
+     {Show X+Y}
+  end  
+\end{lstlisting}
+Of course, the compiler handles keyed arguments, where the features of the
+message \lstinline!M! are not only numeric.
+
+Handling default values needs special care. The unification of the symbol with its default value may only be done
+if no value was provided in the message \lstinline!M!. But this can only be done at run time, hence the compiler
+has to inject code in the AST to check if a value was provided for the method argument.
+Here is the code injected in the AST, where \lstinline!Index! is the index of the argument that is handled and 
+\lstinline!MessageSymbol! is the symbol corresponding the \lstinline!self!:
+\begin{lstlisting}
+      fEq(Sym 
+          fBoolCase(fApply(fConst(Value.hasFeature pos) 
+                           [MessageSymbol fConst(Index pos)] pos)
+                    fOpApply('.' [MessageSymbol fConst(Index pos) ] pos)
+                    Default 
+                    pos) 
+          pos)
+\end{lstlisting}
+which, written in Oz, is:
+\begin{lstlisting}
+  Sym=if {Value.hasFeature MessageSymbol Index} then 
+         MessageSymbol.Index 
+      else
+         Default
+      end
+\end{lstlisting}
+
+The body of the method is desugared with an additional bit of information compared to normal procedures: the symbol corresponding to \lstinline!self!, the object on which the method is called. 
+The availability of \lstinline!self! is not the only difference in the desugarisation of the methods' bodies. Some operators also have another meaning inside methods, like for example \lstinline!@!.
+In code outside methods, \lstinline!@! is desugared in a call to
+\lstinline!Boot_Value.catAccess!, but in methods, it has to be desugared in a
+call to \lstinline!Boot_Value.catAccessOO!! There is a similar change for other
+operators like \lstinline!:=! and the exchange operation.
+Some operators are only available in methods, such as the attribute assignation
+operator \lstinline!<-!. It is desugared in 
+\lstinline!{BootObject.attrAssign Self LHS RHS}!.
+
+\lstinline!Attrs! is a record with label \lstinline!attr!.
+For each attribute of the class, there is a feature-value pair in that record.
+The feature is the name of the attribute, the value is the default value
+provided in the class definition, or the result to a call to
+\lstinline!{Boot_Name.newUnique 'ooFreeFlag'}!
+
+\lstinline!Feats! is a record with label \lstinline!feat! built exactly in the
+same way as \lstinline!Attrs!, but with the features present in the class
+definition.
+
+%FIXME: need more explanations
+\lstinline!Props! is the list of properties of the class. Items are atoms.
+
+\lstinline!PrintName! is an atom which is the name of the class, or '' if it is
+an anonymous class.
+
+And that's it for handling classes in the compiler, the virtual machine will
+handle everything linked to classes for us.
+
 \subsubsection{Compiler Code Notes}
 The desugar pass is implemented by a function named \lstinline!Desugar!. It defines multiple local functions:
 \begin{description}
@@ -1256,6 +1515,26 @@ will result in an AST for this code:
     { NewVar B }
   end
 \end{lstlisting}
+
+If a nesting marker is found in a record argument, one more step is required:
+declaring a new symbol and putting it in the place of the nesting marker.
+\begin{lstlisting}
+  Res={P rec($)}
+\end{lstlisting}
+will be translated in
+\begin{lstlisting}
+  Res=local
+         DollarSymbol
+      in
+         local 
+            Arg=rec(DollarSymbol)
+         in
+            {P Arg}
+            DollarSymbol
+         end
+      end
+\end{lstlisting}
+% FIXME: do I try to limit the nesting of local..in..end?
 
 \subsubsection{Declarations (local)}
 The unnester will not touch at the declaration part of a \lstinline!local..in..end! instruction. It will only unnest the body.
