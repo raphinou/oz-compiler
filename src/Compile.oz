@@ -1473,6 +1473,7 @@ define
             % See T defined earlier. Done to pass parser
             fApply( fConst(OoExtensions.'class' Pos) {List.append {List.take L 6} [FSym]}  Pos)
          [] fApply(Proc Args Pos) then
+             % All argument are all symbols when we get here
              %enters the assignation target in the proc call
              %Res = {P Arg} -> {P Arg Res}
             fun {InjectSym FSym Args HadDollar}
@@ -1523,28 +1524,54 @@ define
          % Transforms the AST such that fApply args are all elementary (fSym or
          % fConst). Creates new symbols unified with complex arguments. Wraps
          % the fApply in fLocals for each new symbol created.
+         % To handle fDollars in record arguments, the transformation is done in 2 steps.
+         % 1) unnest arguments and replace fDollar by a new sym DollarSym if it is encountered
+         % 2) if a fDollar was found, wrap all the Code obtained in step 1 in a 'local DollarSym in Code DollarSym end'
+         % The two steps are necessary because:
+         % - if no fDollar is found, no DollarSym should be declared
+         % - if a fDollar is found, the DollarSym should be declared outside of the record.
          % does not use Params
-         fun {UnnestFApplyInt FApplyAST NewArgsList ArgsRest}
-            % Unnest all arguments one by one.
+         fun {CheckDollarInRecord AST DollarSym}
+            % Looks in AST for fDollar.
+            % If found, creates a new symbol which replaces the fDollar and is place in DollarSym
+            case AST
+            of fRecord(L Features) then
+               fRecord(L {List.map Features fun {$ I} {CheckDollarInRecord I DollarSym} end })
+            [] fColon(F V) then
+               fColon(F {CheckDollarInRecord V DollarSym})
+            [] fDollar(_) then
+               NewSym=fSym({New SyntheticSymbol init(Pos)} Pos)
+            in
+               DollarSym:=NewSym
+               @DollarSym
+            else
+               AST
+            end
+         end
+         fun {UnnestFApplyInt FApplyAST NewArgsList ArgsRest DollarSym}
+            % Unnest all arguments one by one. This is Step 1
             % Elementary arguments are left untouched
             % Complex arguments are extracted from the arguments list by:
             % - declaring a new symbol
             % - unifying this new symbol with the argument
             % - replacing the argument by the new symbol in the argument list.
+            % If a fDollar is found in a record, this function simply extracts the
+            % whole record from the argument list, with the fDollar replaced by a new DollarSym.
+            % The declaration of the DollarSym is done in step 2
 
             case ArgsRest
             of X|Xs then
                % The recursive calls haven't reached the end of the argument list.
                % Handle the head of the remaining list, and make a recursive call
                if {IsElementary X} then
-                 {UnnestFApplyInt FApplyAST X|NewArgsList Xs}
+                 {UnnestFApplyInt FApplyAST X|NewArgsList Xs DollarSym}
                else
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
                   % If the argument is not $, include a unification before
                   {UnnesterInt fLocal(NewSymbol
-                                      fAnd( fEq(NewSymbol X Pos)
-                                            {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs}) Pos)
+                                      fAnd( fEq(NewSymbol {CheckDollarInRecord X DollarSym}  Pos)
+                                            {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
                                Params}
                end
             else
@@ -1555,9 +1582,9 @@ define
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
                   % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
-                  {UnnesterInt fLocal( NewSymbol
-                                       fAnd( fEq(NewSymbol {UnnestFApply Op Params} Pos)
-                                             fApply(NewSymbol {List.reverse NewArgsList} Pos))
+                  {UnnesterInt fLocal( fAnd(NewSymbol)
+                                            fAnd(fEq(NewSymbol {UnnestFApply Op Params} Pos)
+                                                 fApply(NewSymbol {List.reverse NewArgsList} Pos))
                                        Pos)
                                Params}
                else
@@ -1569,9 +1596,15 @@ define
 
             end
          end
+         DollarSym={NewCell unit}
+         Tmp
       in
-         {UnnestFApplyInt AST nil Args}
-
+         Tmp={UnnestFApplyInt AST nil Args DollarSym}
+         if @DollarSym==unit then
+            Tmp
+         else
+            fLocal(@DollarSym fAnd(Tmp @DollarSym)  Pos)
+         end
       end
 
       fun {UnnestFEq AST=fEq(LHS RHS Pos) Params}
