@@ -8,7 +8,7 @@ import
    CompilerSupport(newAbstraction makeArity ) at 'x-oz://system/CompilerSupport.ozf'
    % Boot_Object provides:
    % attrExchangeFun attrGet attrPut cellOrAttrExchangeFun cellOrAttrGet cellOrAttrPut getClass is new
-   %Boot_Object at 'x-oz://boot/Object'
+   Boot_Object at 'x-oz://boot/Object'
    Boot_CompilerSupport at 'x-oz://boot/CompilerSupport'
    Boot_Record at 'x-oz://boot/Record'
    Boot_Thread at 'x-oz://boot/Thread'
@@ -864,7 +864,7 @@ define
          %------------
             fConst(V P)
 
-         [] fClass(Var Attributes Methods Pos) then
+         [] fClass(Var Specs Methods Pos) then
             fun {NameMethod Method  Params}
                NewArgs NewBody
             in
@@ -872,6 +872,7 @@ define
                {DumpAST.dumpAST Method _}
                case Method
                of fMeth(fRecord(Name Args) Body Pos) then
+                  % Method with arguments
                   % Args are available only to the method, so we backup the environment
                   % to be able to restore it after we traversed this method
                   {Params.env backup()}
@@ -891,6 +892,8 @@ define
                else
                   Name Body MPos
                in
+                  % Method without arguments
+                  % It is transformed in the same form as methods with arguments, but with an empty arguments list
                   % Args are available only to the method, so we backup the environment
                   fMeth(Name Body MPos)=Method
                   % this is a method without argument
@@ -898,20 +901,20 @@ define
                end
             end
             NewMethods
-            NewAttributes
+            NewSpecs
          in
             NewMethods={List.map Methods fun {$ I} {NameMethod I Params} end }
-            NewAttributes={List.map Attributes fun {$ I} {NamerForBody I Params} end }
+            NewSpecs={List.map Specs fun {$ I} {NamerForBody I Params} end }
             {Show 'NamerNewAttributes:'}
-            {DumpAST.dumpAST NewAttributes _}
-            fClass( {NamerForBody Var Params} NewAttributes NewMethods Pos)
+            {DumpAST.dumpAST NewSpecs _}
+            fClass( {NamerForBody Var Params} NewSpecs NewMethods Pos)
 
          %---
          else
          %---
-            %{Show 'Default pass for next ast'}
-            %{Show AST}
-            %{Show '..............................................'}
+            {Show 'Default pass for next ast'}
+            {Show AST}
+            {Show '..............................................'}
             {DefaultPass AST NamerForBody Params}
          end
       end
@@ -963,7 +966,6 @@ define
          [] '\\=' then
             fConst(Value.Op Pos)
          else
-            % Return Op if it shouldn't be desugared because it is not an operator
             {DesugarExpr Op Params}
          end
       end
@@ -1408,6 +1410,20 @@ define
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
          [] fClass(FSym AttributesAndProperties Methods Pos) then
             {DesugarClass AST Params}
+         [] fAssign(LHS RHS Pos) andthen @(Params.'self')==unit then
+            raise assignAttributeNeedsSelf end
+         [] fAssign(LHS RHS Pos) then
+            fApply( fConst(Boot_Object.attrPut Pos) [@(Params.'self') {DesugarExpr LHS Params} {DesugarExpr RHS Params}] Pos)
+         [] fObjApply(LHS RHS Pos) andthen @(Params.'self')==unit then
+               raise staticCallNeedsSelf end
+         [] fObjApply(LHS RHS Pos) then
+                             {DesugarStat
+                                fApply(
+                                   fApply(fConst(Value.'.' Pos)
+                                      [ fApply(fConst(Value.'.' Pos) [LHS fConst({Boot_Name.newUnique 'ooFallback'} Pos)] Pos)
+                                        fConst(apply Pos) ] Pos)
+                                   [RHS @(Params.'self') LHS] Pos)
+                                Params}
          [] fSkip(_) then
             AST
          %else
@@ -1525,19 +1541,11 @@ define
                else
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
-                  %case X
-                  %of fDollar(_) then
-                  %   % If the argument is $, replace it by the new sym without adding a unification
-                  %   {UnnesterInt fLocal( NewSymbol
-                  %                        {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs} Pos)
-                  %                Params}
-                  %else
-                     % If the argument is not $, include a unification before
-                     {UnnesterInt fLocal(NewSymbol
-                                         fAnd( fEq(NewSymbol X Pos)
-                                               {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs}) Pos)
-                                  Params}
-                  %end
+                  % If the argument is not $, include a unification before
+                  {UnnesterInt fLocal(NewSymbol
+                                      fAnd( fEq(NewSymbol X Pos)
+                                            {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs}) Pos)
+                               Params}
                end
             else
                % All unnested arguments are now found in NewArgsList
