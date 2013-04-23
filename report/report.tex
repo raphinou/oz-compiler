@@ -35,6 +35,8 @@
 \tableofcontents
 
 %FIXME: add reference to next transformation for each node
+%FIXME: add explanations of helper functions, like GetPos
+% FIXME: add functional procedures description
 
 \chapter{Introduction}
 \section{Initial State}
@@ -321,7 +323,9 @@ fLocal(
 
 \subsection{Procedures}\label{sec:input:procedures}
 \subsubsection{Definitions}
-Procedures are found in records of the form fProc(Name Arguments Body Flags Pos), where the Arguments and Body features are AST subtrees. %FIXME: what can be Name? fVar, $. Other possibilities?
+Procedures are found in records of the form \lstinline!fProc(Name Arguments Body Flags Pos)!, 
+where the \lstinline!Arguments! and \lstinline!Body! features are AST subtrees. 
+%FIXME: what can be Name? fVar, $. Other possibilities?
 Example:
 
 \subsubsection{Calls}
@@ -334,13 +338,13 @@ Example:
 \end{lstlisting}
 
 will result in the AST portion:
-\begin{verbatim}
+\begin{lstlisting}
 fApply(
        fVar(Compute _)
        |(fInt(1 _)
          |(fInt( 2 _)
            |fInt( 3 _))))
-\end{verbatim}
+\end{lstlisting}
 
 \subsection{Functions}\label{sec:input:functions}
 Function definitions are found in the AST in fFun records, with the same features found in fProc records. Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
@@ -1203,6 +1207,26 @@ The desugar step of lazy function simply revolves in wrapping in a thread a call
    end
 \end{lstlisting} 
 
+\subsubsection{Procedures}\label{sec:arch:desugar:procedures}
+The only special operation in desugaring procedure definitions, is in the case
+of functional procedures. These procedures have the nesting marker as one of
+their formal parameters. At the call, the argument passed in place of the
+nesting marker will be unified with the body of the procedure which much be an
+expression. 
+Understanding this makes the transformation immediate. For example, this procedure
+\begin{lstlisting}
+      proc {Succ In $}
+         In+1
+      end
+\end{lstlisting}
+
+will be desugared in
+
+\begin{lstlisting}
+      proc {Succ In R}
+         R=In+1
+      end
+\end{lstlisting}
 \subsubsection{Records}\label{sec:arch:desugar:records}
 As mentioned in the description of records in Section \ref{sec:input:records}, the features can be left out, and are in that case implicit, with increasing integer values starting at 1. The Desugar pass will make this features explicit.
 
@@ -1430,6 +1454,9 @@ operators like \lstinline!:=! and the exchange operation.
 Some operators are only available in methods, such as the attribute assignation
 operator \lstinline!<-!. It is desugared in 
 \lstinline!{BootObject.attrAssign Self LHS RHS}!.
+
+Just as procedures, methods can have the nesting marker as formal parameter. The transformation needed
+is exactly the same as explained in Section \ref{sec:arch:desugar:procedures} for functional procedures.
 
 \lstinline!Attrs! is a record with label \lstinline!attr!.
 For each attribute of the class, there is a feature-value pair in that record.
@@ -2390,7 +2417,7 @@ Possibly include some measure?
 
 \begin{appendices} 
 
-  \chapter{Pattern Variables}\label{appendix:patternvariables}
+\chapter{Pattern Variables}\label{appendix:patternvariables}
 %FIXME: arrange layout
 Statements:
 $
