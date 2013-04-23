@@ -1761,6 +1761,25 @@ define
       end
 
 
+      fun {UnnestFCase fCase(TestedValue Clauses Else Pos) Params}
+      %------------------------------------------------------------------
+         % if the condition is elementary, simply unnest both branches
+         % if the condition is non elementary, create a new symbol to be used as the condition.
+         if {IsElementary TestedValue} then
+            fCase(TestedValue {List.map Clauses fun{$ I} {UnnesterInt I Params} end } {UnnesterInt Else Params}  Pos)
+         else
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            % FIXME: can as well call unnester on body alone, as this is what this call will do
+            {UnnesterInt fLocal( NewSymbol
+                                 fAnd( fEq( NewSymbol TestedValue Pos)
+                                       fCase(NewSymbol Clauses Else Pos))
+                                 Pos)
+                         Params}
+         end
+      end
+
+
       fun {UnnestFRecord AST Params}
       %----------------------------------------------
          % Similar reasoning as UnnestFApply
@@ -1844,6 +1863,8 @@ define
             {UnnestFApply AST Params}
          [] fBoolCase(_ _ _ _) then
             {UnnestFBoolCase AST Params}
+         [] fCase(_ _ _ _) then
+            {UnnestFCase AST Params}
          [] fRecord(_ _) then
             % FIXME:  is this really the place to constantise the record.
             % This requires the unnest function to be called on both sides of fEq before it gets treated....
