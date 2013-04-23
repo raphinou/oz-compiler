@@ -404,6 +404,8 @@ define
             {PVE E}
          [] fFun(E _ _ _ _ ) then
             {PVE E}
+         [] fClass(E _ _ _) then
+            {PVE E}
          [] fEq(LHS _ _) then
             {PVE LHS}
          else
@@ -423,12 +425,19 @@ define
       [] fAnd(S E) then
          {Record.adjoin {PVS S} {PVE E}}
       [] fLocal(Decls Body _) then
-         % Get last feature in fAnd hierarchy
-         % Body2 is the body except the last instruction
-         % ({PVS Body2} + {PVE Last}) - {PVS Decls}
+         % FIXME: see Sebastien's tip
          {Record.subtractList {PVE Body}  {Record.arity {PVS Decls} }}
       [] fEq(LHS RHS) then
          {Record.adjoin {PVE LHS} {PVE RHS}}
+      [] fRecord(_ Features) then
+         {List.foldL Features  fun {$ Acc I}
+                                    case I
+                                    of fColon(F V ) then
+                                       {Record.adjoin {PVE V} Acc}
+                                    else
+                                       {Record.adjoin {PVE I} Acc}
+                                    end
+                                 end pv()}
       else
          pv()
       end
@@ -495,9 +504,9 @@ define
 
             CodeInDeclatationsAST={WrapInFAnd CodeInDeclarations}
             if CodeInDeclatationsAST==unit then
-               NewBody={DeclsFlattener Body}
+               NewBody={DeclsFlattenerInt Body Params}
             else
-               NewBody=fAnd({DeclsFlattener CodeInDeclatationsAST} {DeclsFlattener Body})
+               NewBody=fAnd({DeclsFlattenerInt CodeInDeclatationsAST Params} {DeclsFlattenerInt Body Params})
             end
 
             % Put all transformed parts in the new fLocal
@@ -514,6 +523,9 @@ define
          end
       end
    in
+      {Show '---------------'}
+      {Show 'DeclsFlattener'}
+      {Show '---------------'}
       {DeclsFlattenerInt AST unit}
    end
 
@@ -2286,14 +2298,29 @@ define
             Arity={CompilerSupport.makeArity Label {List.map OrderedFeaturesList fun{$ L#_} L end } }
             if Arity\=false then
                % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
-               OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
+               % VM bug workaround
+               if {Record.label {RegForSym LHS Params}}==k then
+                  OpCodes = move({RegForSym LHS Params} x(0))|createRecordUnify(k(Arity) {List.length OrderedFeaturesList} x(0))|nil
+               else
+                  OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
+               end
             else
                if Label=='|' andthen {List.map OrderedFeaturesList fun {$ L#_} L end}==[1 2] then
                   % in this case we need to create a cons
-                  OpCodes = createConsUnify({RegForSym LHS Params})
+                  % VM bug workaround
+                  if {Record.label {RegForSym LHS Params}}==k then
+                     OpCodes = move({RegForSym LHS Params} x(0))|createConsUnify(k(Label) {List.length OrderedFeaturesList} x(0))|nil
+                  else
+                     OpCodes = createConsUnify({RegForSym LHS Params})
+                  end
                else
                   % if makeArity returned false, it means we need to create a tuple, because the feature was all numeric
-                  OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
+                  % VM bug workaround
+                  if {Record.label {RegForSym LHS Params}}==k then
+                     OpCodes = move({RegForSym LHS Params} x(0))|createTupleUnify(k(Label) {List.length OrderedFeaturesList} x(0))|nil
+                  else
+                     OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
+                  end
                end
             end
             % after create...Unify, we need to pass values through arrayFills, ordered according to the features.
