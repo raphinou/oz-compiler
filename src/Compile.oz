@@ -893,11 +893,7 @@ define
          [] fClass(Var Specs Methods Pos) then
             fun {NameMethod Method  Params}
                NewArgs NewBody
-            in
-               {Show 'Mthod to be named:'}
-               {DumpAST.dumpAST Method _}
-               case Method
-               of fMeth(fRecord(Name Args) Body Pos) then
+               fun {NameMethodWithArgs Type Name Args Body Params}
                   % Method with arguments
                   % Args are available only to the method, so we backup the environment
                   % to be able to restore it after we traversed this method
@@ -914,7 +910,16 @@ define
                   % Traverse body with args in environment
                   NewBody={NamerForBody Body Params}
                   {Params.env restore()}
-                  fMeth(fRecord( {NamerForBody Name Params} NewArgs) NewBody Pos)
+                  fMeth(Type( {NamerForBody Name Params} NewArgs) NewBody Pos)
+               end
+            in
+               {Show 'Mthod to be named:'}
+               {DumpAST.dumpAST Method _}
+               case Method
+               of fMeth(fRecord(Name Args) Body Pos) then
+                  {NameMethodWithArgs fRecord Name Args Body Params}
+               [] fMeth(fOpenRecord(Name Args) Body Pos) then
+                  {NameMethodWithArgs fOpenRecord Name Args Body Params}
                else
                   Name Body MPos
                in
@@ -1143,7 +1148,7 @@ define
          end
       end
       fun {DesugarClass fClass(FSym AttributesAndProperties Methods Pos) Params}
-         fun {TransformMethod Ind fMeth(Signature=fRecord(FName=fConst(Name _) Args) Body Pos) Params}
+         fun {TransformMethod Ind fMeth(Signature Body Pos) Params}
             % Takes one method signature and an index, and build its element of the '#' record containing
             % the class' methods.
             % The value returned is also a '#'-record, the first value being the method's name, the second being a
@@ -1176,7 +1181,7 @@ define
             %   indeed a nesting marker in the arguments list
             NewArgs
             SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
-            fun {BuildMessage Args Params}
+            fun {BuildMessage Name Args Params}
                % Build message record corresponding to the call
                {List.foldL Args fun{$ Acc Arg }
                                    %FIXME handle defaults
@@ -1197,8 +1202,24 @@ define
             R
             MessageSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
             DollarSym={NewCell unit}
+            FName
+            Name
+            Args
          in
-            Message={BuildMessage Args Params}
+            case Signature
+            of fRecord(InFName=fConst(InName _) InArgs) then
+               FName=InFName
+               Name=InName
+               Args=InArgs
+            [] fOpenRecord(InFName=fConst(InName _) InArgs) then
+               % FIXME: in this case, we should inject code to check that the features we get in the message
+               % cover the required features found in the definition
+
+               FName=InFName
+               Name=InName
+               Args=InArgs
+            end
+            Message={BuildMessage Name Args Params}
 
             Decls = {List.mapInd Args  fun {$ Ind I}
                       % If a default value is provided, inject code in the AST to check if a value was provided,
@@ -1231,7 +1252,6 @@ define
             end
             % Desugar the body with the self symbol set.
             % This will transform @bla in catAccessOO
-            % FIXME: check that we can still use cells
             (Params.'self'):=SelfSymbol
             R=fColon(fConst(Ind Pos) fRecord(fConst('#' Pos) [FName fProc(fDollar(Pos) [SelfSymbol MessageSymbol] {DesugarStat NewBody Params} nil Pos)] ))
             (Params.'self'):=unit
