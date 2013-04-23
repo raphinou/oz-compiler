@@ -1263,7 +1263,14 @@ define
          [] fApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
             fApply({DesugarOp Op Args Pos Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
-
+         [] fObjApply(LHS RHS Pos) then
+            {DesugarExpr
+               fApply(
+                  fApply(fConst(Value.'.' Pos)
+                     [ fApply(fConst(Value.'.' Pos) [LHS fConst({Boot_Name.newUnique 'ooFallback'} Pos)] Pos)
+                       fConst(apply Pos) ] Pos)
+                  [RHS @(Params.'self') LHS] Pos)
+               Params}
          [] fColonEquals(Cell Val Pos) andthen @(Params.'self')==unit then
             fApply( fConst(Boot_Value.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
@@ -1582,9 +1589,9 @@ define
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
                   % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
-                  {UnnesterInt fLocal( fAnd(NewSymbol)
-                                            fAnd(fEq(NewSymbol {UnnestFApply Op Params} Pos)
-                                                 fApply(NewSymbol {List.reverse NewArgsList} Pos))
+                  {UnnesterInt fLocal( NewSymbol
+                                       fAnd(fEq(NewSymbol {UnnestFApply Op Params} Pos)
+                                            fApply(NewSymbol {List.reverse NewArgsList} Pos))
                                        Pos)
                                Params}
                else
