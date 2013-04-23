@@ -545,6 +545,17 @@ define
       %   env = mapping of var names to symbols built in parents
       % Body and declarations are handled by 2 distinct functions: NamerForDecls
       % and NamerForBody.
+      fun {NamerForMethDecls AST Params}
+         % Namer for class method headers
+         % Only accepts fDollar in addition to what NamerForDecls does
+         case AST
+         of fDollar(_) then
+            AST
+         else
+            {NamerForDecls AST Params}
+         end
+      end
+
 
       fun {NamerForDecls AST Params}
       %-----------------------------
@@ -558,6 +569,9 @@ define
             % assign symbol in declarations
             Sym={Params.env setSymbol(Name Pos $)}
             fSym( Sym Pos)
+         [] fDollar(_) then
+            % Leave netsing marker in declarations of functional procedures
+            AST
          %--------------------
          [] fAnd(First Second) then
          %--------------------
@@ -970,6 +984,36 @@ define
          end
       end
 
+      fun {HandleDollarArg AST DollarSym}
+         % Replace nesting marker argument by a new symbol
+         % Used for methods and procs
+         case AST
+         of fDollar(_) then
+            Pos = {GetPos AST}
+         in
+            if @DollarSym\=unit then
+               raise multipleNestingMarkersInFunctionalMethodDefinition end
+            end
+            DollarSym:=fSym({New SyntheticSymbol init(Pos)} Pos)
+            @DollarSym
+         else
+            AST
+         end
+      end
+      fun {InjectDollarIfNeeded Body DollarSym}
+         % Unify the symbol put in place of the nesting marker argument with the body.
+         % Used for methods and procs
+         if DollarSym==unit then
+         {Show debug}
+         {Show notInjectingdollarsymunificatio}
+            Body
+         else
+         {Show debug}
+         {Show injectingdollarsymunificatio}
+            {DumpAST.dumpAST fEq(DollarSym Body {GetPos Body})}
+         end
+      end
+
       fun {DesugarRecordFeatures Feature Params}
       %-----------------------------------------
          % Assign features if not specified, starting with index 1
@@ -1111,6 +1155,13 @@ define
             % The attributes have to be placed in a record with label 'attr'. The features in that record are the
             % attributes, the values being their respective initial value, on the result of
             % a call to {Boot_Name.newUnique 'ooFreeFlag'}
+            % Note that it is possible to define functional methods by putting a nesting marker
+            % in the arguments list in the definition of the method
+            % These methods' bodies are expressions.
+            % This is handled by functions
+            % - HandleDollarArg which replaces the dollard arg by a symbol
+            % - InjectDollarIfNeeded which add unification of the dollar symbol with the method body if there was
+            %   indeed a nesting marker in the arguments list
             NewArgs
             SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
             fun {BuildMessage Args Params}
@@ -1126,11 +1177,14 @@ define
                                 end
                                 Name()}
             end
+
+
             Message
             NewBody
             Decls
             R
             MessageSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+            DollarSym={NewCell unit}
          in
             Message={BuildMessage Args Params}
 
@@ -1140,22 +1194,28 @@ define
                       % If it is a fMethArg, the feature is numeric and found in Ind
                       % It is is a fMethColonArg, the feature is found in its first value.
                       % Except for the distinction in the feature, both cases have the same code.
-                                          case I
-                                          of fMethArg(Sym fNoDefault) then
-                                             Sym#fEq(Sym fOpApply('.' [MessageSymbol fConst(Ind pos)] pos) pos)
-                                          [] fMethArg(Sym fDefault(Default _)) then
-                                             Sym#fEq(Sym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol fConst(Ind pos)] pos) fOpApply('.' [MessageSymbol fConst(Ind pos) ] pos) Default pos) pos)
-                                          [] fMethColonArg(F Sym fNoDefault) then
-                                             Sym#fEq(Sym fOpApply('.' [MessageSymbol F ] pos) pos)
-                                          [] fMethColonArg(F Sym fDefault(Default _)) then
-                                             Sym#fEq(Sym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol F] pos) fOpApply('.' [MessageSymbol F ] pos) Default pos) pos)
+                                             NewSym
+                                          in
+                                             case I
+                                             of fMethArg(Sym fNoDefault) then
+                                                NewSym={HandleDollarArg Sym DollarSym}
+                                                NewSym#fEq(NewSym fOpApply('.' [MessageSymbol fConst(Ind pos)] pos) pos)
+                                             [] fMethArg(Sym fDefault(Default _)) then
+                                                NewSym={HandleDollarArg Sym DollarSym}
+                                                NewSym#fEq(NewSym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol fConst(Ind pos)] pos) fOpApply('.' [MessageSymbol fConst(Ind pos) ] pos) Default pos) pos)
+                                             [] fMethColonArg(F Sym fNoDefault) then
+                                                NewSym={HandleDollarArg Sym DollarSym}
+                                                NewSym#fEq(NewSym fOpApply('.' [MessageSymbol F ] pos) pos)
+                                             [] fMethColonArg(F Sym fDefault(Default _)) then
+                                                NewSym={HandleDollarArg Sym DollarSym}
+                                                NewSym#fEq(NewSym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol F] pos) fOpApply('.' [MessageSymbol F ] pos) Default pos) pos)
 
-                                          end
-                                       end}
+                                             end
+                                          end}
             if {List.length Decls}>0 then
-               NewBody=fLocal( {WrapInFAnd {List.map Decls fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [Body] {List.map Decls fun{$ _#Init} Init end }}} Pos)
+               NewBody=fLocal( {WrapInFAnd {List.map Decls fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [{InjectDollarIfNeeded Body @DollarSym}] {List.map Decls fun{$ _#Init} Init end }}} Pos)
             else
-               NewBody=Body
+               NewBody={InjectDollarIfNeeded Body @DollarSym}
             end
             % Desugar the body with the self symbol set.
             % This will transform @bla in catAccessOO
@@ -1381,7 +1441,15 @@ define
          [] fEq(LHS RHS Pos) then
             fEq({DesugarExpr LHS Params} {DesugarExpr RHS Params} Pos)
          [] fProc(FSym Args Body Flags Pos) then
-            fProc({DesugarExpr FSym Params} Args {DesugarStat Body Params} Flags Pos)
+            % Only special thing is to handle the possible nesting marker in the arguments list.
+            % In that case the nesting marker is replaced by a new symbol, and the body is unified with that symbol.
+            % We use functions HandleDollarArg and InjectDollarIfNeeded, which are also used for functional methods
+            DollarSym={NewCell unit}
+            NewArgs
+         in
+            NewArgs={List.map Args fun{$ I} {HandleDollarArg I DollarSym} end}
+
+            fProc({DesugarExpr FSym Params} NewArgs {DesugarStat {InjectDollarIfNeeded Body @DollarSym}  Params} Flags Pos)
          [] fFun(FSym Args Body Flags Pos) then
             ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
@@ -1488,6 +1556,9 @@ define
                %list, either in the dollar location or as last argument.
                case Args
                of fDollar(_)|Rs then
+                  if HadDollar then
+                     raise multipleNestingMarkersInCallArguments end
+                  end
                   FSym|{InjectSym FSym Rs true}
                [] R|Rs then
                   R|{InjectSym FSym Rs HadDollar}
