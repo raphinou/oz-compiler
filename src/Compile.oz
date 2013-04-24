@@ -563,6 +563,10 @@ define
          case AST
          of fDollar(_) then
             AST
+         [] fWildcard(Pos) then
+            NewSym=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            NewSym
          else
             {NamerForDecls AST Params}
          end
@@ -733,10 +737,9 @@ define
                   % The function's variable has to be declared explicitely in the declaration part.
                   % That's why we call NamerForBody on the Name
                   {NamerForBody Name Params}
-                  % Formal parameters are declarations, that's why we call NameForDecls
                   % FIXME: we can replace the 2 list visits by one
                   % Use the new arguments list
-                  {List.map {List.reverse @(ArgsDesc.args)} fun {$ I} {NamerForDecls I Params} end }
+                  {List.map {List.reverse @(ArgsDesc.args)} fun {$ I} {NamerForMethDecls I Params} end }
                   % Wrap body in fCases
                   {NamerForBody {WrapInFCases Body @(ArgsDesc.patterns) Pos} Params}
                   Flags
@@ -747,8 +750,7 @@ define
                   % The function's variable has to be declared explicitely in the declaration part.
                   % That's why we call NamerForBody on the Name
                   {NamerForBody Name Params}
-                  % Formal parameters are declarations, that's why we call NameForDecls
-                  {List.map Args fun {$ I} {NamerForDecls I Params} end }
+                  {List.map Args fun {$ I} {NamerForMethDecls I Params} end }
                   {NamerForBody Body Params}
                   Flags
                   Pos
