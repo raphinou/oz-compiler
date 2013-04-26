@@ -35,12 +35,12 @@ define
          'pos("'#A#'" '#B#' '#C#')'
       [] pos(A B C D E F) then
          'pos("'#A#'" '#B#' '#C#' "'#D#'" '#E#' '#F#')'
-      elseif {IsChunk V} andthen {HasFeature V compiler_internal__} then
-         'chunk'
       elseif {IsLiteral V} then
          {Value.toVirtualString V 1 1}
       elseif {IsObject V} then
          {V toVS($)}
+      elseif {IsChunk V} then %andthen {HasFeature V compiler_internal__} then
+         'chunk'
       elseif {IsProcedure V} then
          'procedure'
       else
@@ -66,7 +66,11 @@ define
       else
          NewIndent = Indent#'   '
       in
-         {System.showInfo Indent#{Label AST}#'('}
+         if {Label AST}=='#' then
+            {System.showInfo Indent#'#('}
+         else
+            {System.showInfo Indent#{Label AST}#'('}
+         end
          {Record.forAll AST proc {$ X} {DumpASTEx X NewIndent} end}
          {System.showInfo Indent#')'}
       end
