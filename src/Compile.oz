@@ -919,7 +919,8 @@ define
                   [] fOpenRecord(Name Args) then
                      fOpenRecord( {NameMethodLabelInt Name Params} Args)
                   [] fEq(M V Pos) then
-                     fEq({NameMethodLabelInt M Params} {NamerForDecls V Params} Pos)
+                     % Do not name V here, only name it when naming the body as this has to be available in the body on this method only
+                     fEq({NameMethodLabelInt M Params} V Pos)
                   end
                end
             in
@@ -932,7 +933,6 @@ define
                   % Method with arguments
                   % Args are available only to the method, so we backup the environment
                   % to be able to restore it after we traversed this method
-                  {Params.env backup()}
                   % Declare all args
                   NewArgs={List.map Args  fun{$ I}
                                              case I
@@ -944,30 +944,60 @@ define
                                           end }
                   % Traverse body with args in environment
                   NewBody={NamerForBody Body Params}
-                  {Params.env restore()}
                   %fMeth(Type(Name NewArgs) NewBody Pos)
                   NewArgs#NewBody
                end
             in
                {Show 'Mthod to be named:'}
                {DumpAST.dumpAST Method _}
+               % the env backup and restore is at this level to be able to name the variable capturin the method head
                case Method
                of fMeth(fRecord(Name Args) Body Pos) then
-                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  NewArgs
+                  NewBody
+                  NamedH
+                  R
                in
-                  fMeth(fRecord(Name NewArgs) NewBody Pos)
+                  {Params.env backup()}
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  R=fMeth(fRecord(Name NewArgs) NewBody Pos)
+                  {Params.env restore()}
+                  R
                [] fMeth(fOpenRecord(Name Args) Body Pos) then
-                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  NewArgs
+                  NewBody
+                  NamedH
+                  R
                in
-                  fMeth(fOpenRecord(Name NewArgs) NewBody Pos)
+                  {Params.env backup()}
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  R=fMeth(fOpenRecord(Name NewArgs) NewBody Pos)
+                  {Params.env restore()}
+                  R
                [] fMeth(fEq(fRecord(Name Args) H Pos) Body MPos) then
-                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  NewArgs
+                  NewBody
+                  NamedH
+                  R
                in
-                  fMeth(fEq(fRecord(Name NewArgs) H Pos) NewBody MPos)
+                  {Params.env backup()}
+                  NamedH={NamerForDecls H Params}
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  R=fMeth(fEq(fRecord(Name NewArgs) NamedH Pos) NewBody MPos)
+                  {Params.env restore()}
+                  R
                [] fMeth(fEq(fOpenRecord(Name Args) H Pos) Body MPos) then
-                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  NewArgs
+                  NewBody
+                  NamedH
+                  R
                in
-                  fMeth(fEq(fOpenRecord(Name NewArgs) H Pos) NewBody MPos)
+                  {Params.env backup()}
+                  NamedH={NamerForDecls H Params}
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+                  R=fMeth(fEq(fOpenRecord(Name NewArgs) NamedH Pos) NewBody MPos)
+                  {Params.env restore()}
+                  R
                else
                   Name Body MPos
                in

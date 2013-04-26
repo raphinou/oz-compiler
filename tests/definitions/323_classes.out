@@ -1,0 +1,6 @@
+echo(test)
+test
+'Multiple args possible'
+echoall(first second third)
+'First:'
+first
