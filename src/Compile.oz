@@ -895,7 +895,7 @@ define
             fConst(V P)
 
          [] fClass(Var Specs Methods Pos) then
-            fun {NameMethodLabel Method Params}
+            fun {NameMethodLabel fMeth(M Body Pos) Params}
                % Function naming method labels
                % Declarations to wrap the class in are accumulated in Params.decls
                % Initialisation code to be put before the class code, but inside the declarations, is accumulated in Params.init
@@ -914,30 +914,21 @@ define
                      NewSym
                   [] fEscape(V _) then
                      {NamerForBody V Params}
+                  [] fRecord(Name Args) then
+                     fRecord( {NameMethodLabelInt Name Params} Args)
+                  [] fOpenRecord(Name Args) then
+                     fOpenRecord( {NameMethodLabelInt Name Params} Args)
+                  [] fEq(M V Pos) then
+                     fEq({NameMethodLabelInt M Params} {NamerForDecls V Params} Pos)
                   end
                end
             in
-               %Accumulates symbols to be declared for dynamic and private methods in Params.decls
-               % and initialisation code of these symbole in Params.init
-               case Method
-               of fMeth(fRecord(Name Args) Body Pos) then
-                  fMeth(fRecord({NameMethodLabelInt Name Params} Args) Body Pos)
-               [] fMeth(fOpenRecord(Name Args) Body Pos) then
-                  fMeth(fOpenRecord({NameMethodLabelInt Name Params} Args) Body Pos)
-               else
-                  Name Body MPos
-               in
-                  % Method without arguments
-                  % It is transformed in the same form as methods with arguments, but with an empty arguments list
-                  % Args are available only to the method, so we backup the environment
-                  fMeth(Name Body MPos)=Method
-                  fMeth({NameMethodLabelInt Name Params} Body MPos)
-               end
+               fMeth({NameMethodLabelInt M Params} Body Pos)
             end
 
             fun {NameMethod Method Params}
                NewArgs NewBody
-               fun {NameMethodWithArgs Type Name Args Body Params}
+               fun {NameMethodWithArgs Args Body Params}
                   % Method with arguments
                   % Args are available only to the method, so we backup the environment
                   % to be able to restore it after we traversed this method
@@ -954,16 +945,29 @@ define
                   % Traverse body with args in environment
                   NewBody={NamerForBody Body Params}
                   {Params.env restore()}
-                  fMeth(Type(Name NewArgs) NewBody Pos)
+                  %fMeth(Type(Name NewArgs) NewBody Pos)
+                  NewArgs#NewBody
                end
             in
                {Show 'Mthod to be named:'}
                {DumpAST.dumpAST Method _}
                case Method
                of fMeth(fRecord(Name Args) Body Pos) then
-                  {NameMethodWithArgs fRecord Name Args Body Params}
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+               in
+                  fMeth(fRecord(Name NewArgs) NewBody Pos)
                [] fMeth(fOpenRecord(Name Args) Body Pos) then
-                  {NameMethodWithArgs fOpenRecord Name Args Body Params}
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+               in
+                  fMeth(fOpenRecord(Name NewArgs) NewBody Pos)
+               [] fMeth(fEq(fRecord(Name Args) H Pos) Body MPos) then
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+               in
+                  fMeth(fEq(fRecord(Name NewArgs) H Pos) NewBody MPos)
+               [] fMeth(fEq(fOpenRecord(Name Args) H Pos) Body MPos) then
+                  NewArgs#NewBody={NameMethodWithArgs Args Body Params}
+               in
+                  fMeth(fEq(fOpenRecord(Name NewArgs) H Pos) NewBody MPos)
                else
                   Name Body MPos
                in
@@ -1088,13 +1092,9 @@ define
          % Unify the symbol put in place of the nesting marker argument with the body.
          % Used for methods and procs
          if DollarSym==unit then
-         {Show debug}
-         {Show notInjectingdollarsymunificatio}
             Body
          else
-         {Show debug}
-         {Show injectingdollarsymunificatio}
-            {DumpAST.dumpAST fEq(DollarSym Body {GetPos Body})}
+            fEq(DollarSym Body {GetPos Body})
          end
       end
 
@@ -1265,27 +1265,43 @@ define
             %                    Name()}
             %end
             %Message
+            fun {NameAndArgs Signature}
+               case Signature
+               of fRecord(InFName InArgs) then
+                  InFName#InArgs
+               [] fOpenRecord(InFName InArgs) then
+                  % FIXME: in this case, we should inject code to check that the features we get in the message
+                  % cover the required features found in the definition
+                  InFName#InArgs
+               [] fEq(M V Pos) then
+                  {NameAndArgs M}
+               end
+            end
+
+            fun {GetHeaderSymbol Signature}
+               case Signature
+               of fEq(M V Pos) then
+                  V
+               else
+                  unit
+               end
+            end
+
             NewBody
             Decls
             R
             MessageSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+            HeaderSymbol
             DollarSym={NewCell unit}
             FName
             Name
             Args
+            DeclsWithMethHeader
          in
-            case Signature
-            of fRecord(InFName InArgs) then
-               FName=InFName
-               Args=InArgs
-            [] fOpenRecord(InFName InArgs) then
-               % FIXME: in this case, we should inject code to check that the features we get in the message
-               % cover the required features found in the definition
-
-               FName=InFName
-               Args=InArgs
-            end
             %Message={BuildMessage Name Args Params}
+            FName#Args={NameAndArgs Signature}
+            HeaderSymbol={GetHeaderSymbol Signature}
+
 
             Decls = {List.mapInd Args  fun {$ Ind I}
                       % If a default value is provided, inject code in the AST to check if a value was provided,
@@ -1311,8 +1327,13 @@ define
 
                                              end
                                           end}
+            if HeaderSymbol\=unit then
+               DeclsWithMethHeader={List.append [ HeaderSymbol#fEq(HeaderSymbol MessageSymbol pos)] Decls }
+            else
+               DeclsWithMethHeader=Decls
+            end
             if {List.length Decls}>0 then
-               NewBody=fLocal( {WrapInFAnd {List.map Decls fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [{InjectDollarIfNeeded Body @DollarSym}] {List.map Decls fun{$ _#Init} Init end }}} Pos)
+               NewBody=fLocal( {WrapInFAnd {List.map DeclsWithMethHeader fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [{InjectDollarIfNeeded Body @DollarSym}] {List.map DeclsWithMethHeader fun{$ _#Init} Init end }}} Pos)
             else
                NewBody={InjectDollarIfNeeded Body @DollarSym}
             end
