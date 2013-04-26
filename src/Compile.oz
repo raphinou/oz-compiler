@@ -979,9 +979,14 @@ define
             NamedLabelsMethods
             NewSpecs
             NewParams={Record.adjoin Params params(decls:{NewCell nil} init:{NewCell nil})}
+            NamedClass
             ClassWithInit
             ClassWithDecls
          in
+            % First name the class, then backup the env, and then name the methods.
+            % This is needed for private methods indicated by the same variable name as the
+            % class. See test 321
+            NamedClass={NamerForBody Var Params}
             {NewParams.env backup()}
             % Name method first, so the private methods are available in the methods bodies
             NamedLabelsMethods={List.map Methods fun {$ I} {NameMethodLabel I NewParams} end }
@@ -990,9 +995,9 @@ define
             {Show 'NamerNewAttributes:'}
             {DumpAST.dumpAST NewSpecs _}
             if @(NewParams.init)\=nil then
-               ClassWithInit={WrapInFAnd {List.append [fClass({NamerForBody Var Params} NewSpecs NewMethods Pos)] @(NewParams.init)}}
+               ClassWithInit={WrapInFAnd {List.append [fClass(NamedClass NewSpecs NewMethods Pos)] @(NewParams.init)}}
             else
-               ClassWithInit=fClass( {NamerForBody Var Params} NewSpecs NewMethods Pos)
+               ClassWithInit=fClass( NamedClass NewSpecs NewMethods Pos)
             end
             if @(NewParams.decls)\=nil then
                ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} ClassWithInit Pos)

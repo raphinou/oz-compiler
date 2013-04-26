@@ -1,5 +1,4 @@
 % private method which has same name has its containing class
-% --SKIP TEST--
 local
  C L A I
 in
