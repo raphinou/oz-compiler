@@ -910,7 +910,7 @@ define
                      NewSym=fSym({Params.env setSymbol(V Pos $)} Pos)
                   in
                      (Params.decls):=NewSym|@(Params.decls)
-                     (Params.init):=fApply( fConst(NewName Pos) [NewSym] Pos)
+                     (Params.init):=fApply( fConst(NewName Pos) [NewSym] Pos)|@(Params.init)
                      NewSym
                   [] fEscape(V _) then
                      {NamerForBody V Params}
@@ -954,7 +954,7 @@ define
                   % Traverse body with args in environment
                   NewBody={NamerForBody Body Params}
                   {Params.env restore()}
-                  fMeth(Type( Name NewArgs) NewBody Pos)
+                  fMeth(Type(Name NewArgs) NewBody Pos)
                end
             in
                {Show 'Mthod to be named:'}
@@ -990,7 +990,7 @@ define
             {Show 'NamerNewAttributes:'}
             {DumpAST.dumpAST NewSpecs _}
             if @(NewParams.init)\=nil then
-               ClassWithInit={WrapInFAnd [fClass( {NamerForBody Var Params} NewSpecs NewMethods Pos) @(NewParams.init) ]}
+               ClassWithInit={WrapInFAnd {List.append [fClass({NamerForBody Var Params} NewSpecs NewMethods Pos)] @(NewParams.init)}}
             else
                ClassWithInit=fClass( {NamerForBody Var Params} NewSpecs NewMethods Pos)
             end
