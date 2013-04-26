@@ -1,5 +1,5 @@
-% private and dynamic method labels
-% also tests otherwise method
+% private method which has same name has its containing class
+% --SKIP TEST--
 local
  C L A I
 in
@@ -13,7 +13,7 @@ in
          {Show private}
          {Show M}
       end
-      meth D(M)
+      meth C(M)
          {Show private2}
          {Show M}
       end
@@ -21,7 +21,7 @@ in
          {self B(M)}
       end
       meth whisper2(M)
-         {self D(M)}
+         {self C(M)}
       end
       meth otherwise(M)
          {Show otherwise}
