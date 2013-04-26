@@ -701,6 +701,8 @@ define
             {Params.env backup()}
 
             %Extract needed lists
+            % Acc.args accumulates effective parameters to be present in transformed declaration
+            % Acc.patterns accumulates value#pattern pairs that will be used to wrap the body in case tests
             ArgsDesc={List.foldL Args   fun {$ Acc I}
                                           case I
                                           of fRecord(_ _) then
@@ -893,7 +895,47 @@ define
             fConst(V P)
 
          [] fClass(Var Specs Methods Pos) then
-            fun {NameMethod Method  Params}
+            fun {NameMethodLabel Method Params}
+               % Function naming method labels
+               % Declarations to wrap the class in are accumulated in Params.decls
+               % Initialisation code to be put before the class code, but inside the declarations, is accumulated in Params.init
+               %
+               % fVar labels are replaced by a new symbol, which will be declared and initialised to a new name value
+               % fEscape labels use the environment to find the symbol to use
+               fun {NameMethodLabelInt Name Params}
+                  case Name
+                  of fAtom(L Pos) then
+                     fConst(L Pos)
+                  [] fVar(V Pos) then
+                     NewSym=fSym({Params.env setSymbol(V Pos $)} Pos)
+                  in
+                     (Params.decls):=NewSym|@(Params.decls)
+                     (Params.init):=fApply( fConst(NewName Pos) [NewSym] Pos)
+                     NewSym
+                  [] fEscape(V _) then
+                     {NamerForBody V Params}
+                  end
+               end
+            in
+               %Accumulates symbols to be declared for dynamic and private methods in Params.decls
+               % and initialisation code of these symbole in Params.init
+               case Method
+               of fMeth(fRecord(Name Args) Body Pos) then
+                  fMeth(fRecord({NameMethodLabelInt Name Params} Args) Body Pos)
+               [] fMeth(fOpenRecord(Name Args) Body Pos) then
+                  fMeth(fOpenRecord({NameMethodLabelInt Name Params} Args) Body Pos)
+               else
+                  Name Body MPos
+               in
+                  % Method without arguments
+                  % It is transformed in the same form as methods with arguments, but with an empty arguments list
+                  % Args are available only to the method, so we backup the environment
+                  fMeth(Name Body MPos)=Method
+                  fMeth({NameMethodLabelInt Name Params} Body MPos)
+               end
+            end
+
+            fun {NameMethod Method Params}
                NewArgs NewBody
                fun {NameMethodWithArgs Type Name Args Body Params}
                   % Method with arguments
@@ -912,7 +954,7 @@ define
                   % Traverse body with args in environment
                   NewBody={NamerForBody Body Params}
                   {Params.env restore()}
-                  fMeth(Type( {NamerForBody Name Params} NewArgs) NewBody Pos)
+                  fMeth(Type( Name NewArgs) NewBody Pos)
                end
             in
                {Show 'Mthod to be named:'}
@@ -930,17 +972,35 @@ define
                   % Args are available only to the method, so we backup the environment
                   fMeth(Name Body MPos)=Method
                   % this is a method without argument
-                  fMeth(fRecord( {NamerForBody Name Params} nil) {NamerForBody Body Params} MPos)
+                  fMeth(fRecord( Name nil) {NamerForBody Body Params} MPos)
                end
             end
             NewMethods
+            NamedLabelsMethods
             NewSpecs
+            NewParams={Record.adjoin Params params(decls:{NewCell nil} init:{NewCell nil})}
+            ClassWithInit
+            ClassWithDecls
          in
-            NewMethods={List.map Methods fun {$ I} {NameMethod I Params} end }
-            NewSpecs={List.map Specs fun {$ I} {NamerForBody I Params} end }
+            {NewParams.env backup()}
+            % Name method first, so the private methods are available in the methods bodies
+            NamedLabelsMethods={List.map Methods fun {$ I} {NameMethodLabel I NewParams} end }
+            NewMethods={List.map NamedLabelsMethods fun {$ I} {NameMethod I NewParams} end }
+            NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
             {Show 'NamerNewAttributes:'}
             {DumpAST.dumpAST NewSpecs _}
-            fClass( {NamerForBody Var Params} NewSpecs NewMethods Pos)
+            if @(NewParams.init)\=nil then
+               ClassWithInit={WrapInFAnd [fClass( {NamerForBody Var Params} NewSpecs NewMethods Pos) @(NewParams.init) ]}
+            else
+               ClassWithInit=fClass( {NamerForBody Var Params} NewSpecs NewMethods Pos)
+            end
+            if @(NewParams.decls)\=nil then
+               ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} ClassWithInit Pos)
+            else
+               ClassWithDecls=ClassWithInit
+            end
+            {NewParams.env restore()}
+            ClassWithDecls
 
          %---
          else
@@ -1183,22 +1243,23 @@ define
             %   indeed a nesting marker in the arguments list
             NewArgs
             SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
-            fun {BuildMessage Name Args Params}
-               % Build message record corresponding to the call
-               {List.foldL Args fun{$ Acc Arg }
-                                   %FIXME handle defaults
-                                   case Arg
-                                   of fMethArg(Var Default) then
-                                      {Record.adjoin Acc Name(Var)}
-                                   [] fMethColonArg(fConst(F _) V Default) then
-                                      {Record.adjoin Acc Name(F:V)}
-                                    end
-                                end
-                                Name()}
-            end
 
 
-            Message
+            % FIXME: useless code left here just in case
+            %fun {BuildMessage Name Args Params}
+            %   % Build message record corresponding to the call
+            %   {List.foldL Args fun{$ Acc Arg }
+            %                       %FIXME handle defaults
+            %                       case Arg
+            %                       of fMethArg(Var Default) then
+            %                          {Record.adjoin Acc Name(Var)}
+            %                       [] fMethColonArg(fConst(F _) V Default) then
+            %                          {Record.adjoin Acc Name(F:V)}
+            %                        end
+            %                    end
+            %                    Name()}
+            %end
+            %Message
             NewBody
             Decls
             R
@@ -1209,19 +1270,17 @@ define
             Args
          in
             case Signature
-            of fRecord(InFName=fConst(InName _) InArgs) then
+            of fRecord(InFName InArgs) then
                FName=InFName
-               Name=InName
                Args=InArgs
-            [] fOpenRecord(InFName=fConst(InName _) InArgs) then
+            [] fOpenRecord(InFName InArgs) then
                % FIXME: in this case, we should inject code to check that the features we get in the message
                % cover the required features found in the definition
 
                FName=InFName
-               Name=InName
                Args=InArgs
             end
-            Message={BuildMessage Name Args Params}
+            %Message={BuildMessage Name Args Params}
 
             Decls = {List.mapInd Args  fun {$ Ind I}
                       % If a default value is provided, inject code in the AST to check if a value was provided,
