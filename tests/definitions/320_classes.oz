@@ -1,4 +1,5 @@
 % private and dynamic method labels
+% also tests otherwise method
 local
  C L A I
 in
@@ -15,9 +16,14 @@ in
       meth whisper(M)
          {self B(M)}
       end
+      meth otherwise(M)
+         {Show otherwise}
+         {Show M}
+      end
    end
    I={New C init}
    {I echo(test)}
    {I whisper(shhhh)}
+   {I bla(hehe)}
 end
 
