@@ -1041,6 +1041,19 @@ define
             {NewParams.env restore()}
             ClassWithDecls
 
+         [] fFOR(Patterns Body Pos) then
+            fun {TransformForPatterns Args Body}
+               case Args
+               of forPattern(V forGeneratorList(L))|Ps then
+                  fApply(fConst(ForAll Pos) [L fProc(fDollar(Pos) [V] {TransformForPatterns Ps Body} nil  Pos)] Pos)
+               %[] forPattern(V forGeneratorInt(Start Stop))|Ps then
+               % FIXME
+               [] nil then
+                  Body
+               end
+            end
+         in
+            {NamerForBody {TransformForPatterns Patterns Body} Params}
          %---
          else
          %---
