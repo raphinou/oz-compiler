@@ -36,7 +36,6 @@
 
 %FIXME: add reference to next transformation for each node
 %FIXME: add explanations of helper functions, like GetPos
-% FIXME: add functional procedures description
 
 \chapter{Introduction}
 \section{Initial State}
@@ -727,7 +726,75 @@ The second uses the syntax \lstinline!<-!:
 \end{lstlisting}
 and is found in the AST under a node \lstinline!fAssign(LHS RHS pos)!.
 
+\label{compilerinput:classes:headcapture}The method head can also be captured and made available to its body,as in 
+\begin{lstlisting}
+   meth echo(First ...)=H
+      Body
+   end  
+\end{lstlisting}
+At run time, the H variable will give access to the message sent to the object, with the actual arguments list.
+\begin{lstlisting}
+               fMeth(
+                  fEq(
+                     fOpenRecord(
+                        fAtom(echo pos )
+                        |(
+                           fMethArg(
+                              fVar('First' pos )
+                              fNoDefault)
+                           nil))
+                     fVar('H' pos )
+                     pos)
+                  BodyAST
+                  Pos)
+\end{lstlisting}
 
+Method can also be defined as private by using a variable name as their label:
+\begin{lstlisting}
+   meth A(V)
+      Body
+   end
+\end{lstlisting}
+resulting in the AST
+
+\begin{lstlisting}
+   fMeth(
+      fRecord(
+         fVar('A' pos )
+         |(
+            fMethArg(
+               fVar('V' pos )
+               fNoDefault)
+            nil))
+      BodyAST
+      pos)
+\end{lstlisting}
+The method \lstinline!A! will be bound to a new name, only visible in the class
+definition's scope (see Section \ref{sec:arch:namer:classes} for details).
+
+Method can also have dynamic labels assigned, by escaping the variable holding
+the label to use:
+\begin{lstlisting}
+  meth !A(V)
+     Body
+  end
+\end{lstlisting}
+which results in the AST:
+\begin{lstlisting}
+    fMeth(
+       fRecord(
+          fEscape(
+             fVar('A' pos)
+             pos)
+          |(
+             fMethArg(
+                fVar('V' pos)
+                fNoDefault)
+             nil))
+       BodyAST
+       pos)
+
+\end{lstlisting}
 
 \chapter{Compiler}
 \section{Architecture}
@@ -774,6 +841,7 @@ For example, in unification, only the left hand side variable gets declared, and
 Luckily, this has been clearly formalised by the Oz implementers and published on the web\footnote[]{http://www.mozart-oz.org/documentation/notation/node6.html}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
 
 \subsection{Namer}\label{sec:arch:namer}
+%FIXME: add fFOR
 The namer  basically replaces all occurrences of a variable's \lstinline!fVar! by \lstinline!fSym! records holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
 
 In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVar!s by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
@@ -928,12 +996,124 @@ The namer thus replaces pattern variables by a synthetic symbol, and wraps the b
 
 
 
-\subsubsection{Classes}
-The work of the namer on classes is straight-forward. It goes through the record
-\lstinline!fClass(Var Specs Methods Pos)! and names variables as would expect:
+\subsubsection{Classes}\label{sec:arch:namer:classes}
+The work of the namer on classes is in most cases straight-forward. It goes through the record
+\lstinline!fClass(Id Specs Methods Pos)! and names variables as one would expect:
 method arguments are named as declarations i.e. it adds mappings to the
 environment which are then used when traversing the body of the method.
 It also goes through the attributes, features, properties and parents.
+
+Difficulties arise though when methods have dynamic names, are private and/or
+capture their head.
+
+For method with a dynamic name, the namer simply has to use the binding for the
+escaped variable in the current environment.
+
+Private methods have their label defined as a variable. The namer will transform this by 
+declaring a new symbol for the variable and bind it to a new name.
+The transformation can be illustrated in Oz code, transforming
+
+\begin{lstlisting}
+   class C
+      meth init skip end
+      meth A()
+         Body
+      end
+   end
+\end{lstlisting}
+
+in
+
+\begin{lstlisting}
+  local
+     A
+   in
+      A={NewName}
+      class C
+         meth init skip end
+         meth !A()
+            Body
+         end
+      end
+\end{lstlisting}
+
+Not also that the variable being the label of the method can have the same name
+as the class! Inside the class the variable will reference the method, and not the class, 
+as illustrated in: 
+\begin{lstlisting}
+   class C
+      meth init skip end
+      meth C(M)
+         {Show M}
+      end
+      meth whisper(M)
+         {self C(M)}
+      end
+   end
+\end{lstlisting}
+We see here that the private methods' variables are available inside the class, overriding the mapping to the class' \lstinline!C!.
+ We can conclude that the namer has to define a new environment when entering the class.
+
+Let's now look at the situation when the method head is captured (see page
+\pageref{compilerinput:classes:headcapture} for the AST form).
+Here is code illustrating the specific points needing attention:
+\begin{lstlisting}
+   class C
+      meth init skip end
+      meth echo(F ...)=C
+         {Show C}
+      end
+      meth whisper(F ...)=C
+         {Show F}
+      end
+      meth clone()
+        {New C ini}
+      end
+   end
+\end{lstlisting}
+These attention points are:
+\begin{itemize}
+  \item the same variable name can be used by multiple methods to store their
+    respective method heads
+  \item the variable holding the method head has to be available only to the
+    method defining it
+  \item the variable can have the same name as the class in which the method is
+    defined (\lstinline!C! in method \lstinline!clone! references the class \lstinline!C!)
+\end{itemize}
+
+The conclusion is again that when the namer enters a method, it has to define a new environment.
+
+Having covered all special behaviour to support, we can now look at how the namer works to 
+respect these constraints.
+
+We have seen that the namer has to be able to declare and initialise new
+variables which will be available inside the class only. As a consequence, the
+namer will maintain a list of symbols to be declared with their respective
+initialisation code.
+
+The namer starts by naming the class.
+
+It then creates a new environment, and names all method labels (and only the
+labels, not the arguments, not the variable capturing the method head).
+Variables named in this step will be available to all methods of the class.
+They correspond to labels of private methods, and their initialisation code is
+simply unifying them with a new name.
+
+It will then go through all methods again to name their respective arguments,
+body and possible method head capture variable. For each method it will take
+these actions in order
+\begin{enumerate}
+  \item create new environment
+  \item name the method head capture variable as declaration if it was defined
+  \item name the method's arguments as declaration
+  \item name the body
+  \item restore the previous environment
+\end{enumerate}
+
+I then wraps the class definition in a \lstinline!local..in..end! declaring the
+variables to be declared collected while traversing the class (these are
+variables that were encountered as method label), and prepend the class
+definition by the initialisation code collected:
 
 
 \subsubsection{Compiler Code Notes}
@@ -1422,6 +1602,7 @@ will be implemented by this method:
 Of course, the compiler handles keyed arguments, where the features of the
 message \lstinline!M! are not only numeric.
 
+%FIXME : precision on method head capture 
 Handling default values needs special care. The unification of the symbol with its default value may only be done
 if no value was provided in the message \lstinline!M!. But this can only be done at run time, hence the compiler
 has to inject code in the AST to check if a value was provided for the method argument.
@@ -1647,6 +1828,31 @@ in
    end
 end
 \end{lstlisting}
+
+\subsubsection{Case}
+Unnesting \lstinline!case! instructions is very similar to unnesting
+\lstinline!if..then..else! instructions. If the value tested is not elementary,
+it has to be extracted and replaced by a new variable unified with it.
+\begin{lstlisting}
+case {Label R}
+of l then
+   {Show 'L record'}
+end
+\end{lstlisting}
+
+\begin{lstlisting}
+local
+   V
+in
+   V = {Label R}
+   case V 
+   of l then
+      {Show 'L record'}
+   end
+end
+\end{lstlisting}
+   
+
 \subsubsection{Records}\label{sec:arch:unnester:records}
 The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
 Here is an example where the value of a feature is an if expression.
