@@ -10,6 +10,7 @@
 \tikzstyle{block} = [rectangle, draw, fill=blue!20, 
     text width=5em, text centered, rounded corners, minimum height=4em]
 \setcounter{secnumdepth}{3} 
+\setcounter{tocdepth}{3} 
 
 
 \fxsetup{theme=color}
@@ -1156,12 +1157,58 @@ declares a function \lstinline!HandlePatternArgs!
 to apply the described transformation of functions and procedures with patterns
 arguments. 
 
-The most complex code however in the \lstinline!Namer! is for handling \lstinline!fCase! nodes as it needs to 
+Handling \lstinline!fCase! nodes also requires more work as it needs to 
 \begin{itemize}
   \item declare new capture variables
   \item handle guards by, amongst other things, introducing a new symbol
   \item add guards corresponding to escaped variables in patterns
 \end{itemize}
+
+And finally, the work of the namer in case of classes involves several steps as described
+Section \ref{sec:arch:namer:classes}.
+Several functions are defined to help these steps. \lstinline!NameMethodLabelInt!
+is the function used when traversing the methods list the first time to name
+only the method labels.
+\lstinline!NameMethod! is used when traversing the methods the second time to
+name the arguments and the body.
+
+Once these functions are defined, the namer's code for classes is quite simple,
+and can be included here to illustrate the different steps:
+
+% FIXME: hasn't this code changed?
+\begin{lstlisting}
+            % Name class, then switch to a new environment when inside the class
+            NamedClass={NamerForBody Var Params}
+            {NewParams.env backup()}
+            % Name method first, so the private methods are available in the methods bodies
+            NamedLabelsMethods={List.map Methods fun {$ I} {NameMethodLabel I NewParams} end }
+            % Name methods arguments and bodies. Remember each method creates
+            % its own environment
+            NewMethods={List.map NamedLabelsMethods fun {$ I} {NameMethod I NewParams} end }
+            % Name attributes, features,..
+            NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
+
+            % Add initialisation code if needed
+            if @(NewParams.init)\=nil then
+               ClassWithInit={WrapInFAnd {List.append [fClass(NamedClass NewSpecs NewMethods Pos)] @(NewParams.init)}}
+            else
+               ClassWithInit=fClass( NamedClass NewSpecs NewMethods Pos)
+            end
+
+            % Add declaration code if needed
+            if @(NewParams.decls)\=nil then
+               ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} ClassWithInit Pos)
+            else
+               ClassWithDecls=ClassWithInit
+            end
+
+            % Restore previous environment
+            {NewParams.env restore()}
+
+            % Return new AST for class
+            ClassWithDecls
+  
+\end{lstlisting}
 
 
 
@@ -1575,7 +1622,8 @@ of the list are simply the \lstinline!fSym! record holding the symbols correspon
 parent classes.
 
 \lstinline!Meths! is a \#-tuple with one item of the form \lstinline!name#Proc! for each
-method, where \lstinline!name! is the method name, and Proc is a procedure with
+method, where \lstinline!name! is the method name, and Proc is a procedure
+(which we will characterise as a ``proxy'' procedure) with
 2 arguments implementing the method. The two arguments of the method are
 \lstinline!self!,
 which is the object on which the method is called, and \lstinline!M!, the message
@@ -1602,7 +1650,12 @@ will be implemented by this method:
 Of course, the compiler handles keyed arguments, where the features of the
 message \lstinline!M! are not only numeric.
 
-%FIXME : precision on method head capture 
+As described on page \pageref{compilerinput:classes:headcapture}, the message
+corresponding to the method call can be captured and made available to the body of the
+method. The message being the second argument of the ``proxy'' procedure, it is
+easy to make it available in the method body by prepending it with a unification
+of the header capture symbol and the message symbol itself.
+
 Handling default values needs special care. The unification of the symbol with its default value may only be done
 if no value was provided in the message \lstinline!M!. But this can only be done at run time, hence the compiler
 has to inject code in the AST to check if a value was provided for the method argument.
@@ -1668,9 +1721,34 @@ The desugar pass is implemented by a function named \lstinline!Desugar!. It defi
   \item[HandleLazyFlag] will wrap the body of a function in a thread if needed, as described in Section \ref{sec:arch:desugar:functions}.
   \item[DesugarExpr] called by \lstinline!Desugar! to desugar expressions
   \item[DesugarStat] called by \lstinline!Desugar! to desugar statements
+  \item[DesugarClass] is handling class definitions 
 \end{description}
 
 The program itself being a statement, the function Desugar simply call DesugarStat on the AST of the whole program. This will trigger further calls to DesugarExpr and DesugarStat that will traverse and transform the whole AST.
+
+%FIXME: do I keep this? Should I add more explanations of other functions, like
+% TransformRecord
+\lstinline!DesugarClass! defines multiple local functions:
+\begin{description}
+  \item[TransformMethod] Takes one method signature and an index, and build its
+    element of the '\#' record containing the class' methods. The Body is also desugared with the SelfSymbol passed in Params.
+    This is needed, eg for desugaring @attribute in catAccessOO rather than in
+    catAccess. In this case, \lstinline!DesugarOp! will check if
+    \lstinline!self! is available to decide which result to produce.
+    Functional methods, defined with one of their formal parameters being the
+    nesting marker, are also handled by this function, using functions
+    \lstinline!HandleDollarArg! and \lstinline!InjectDollarIfNeeded! also used
+    to work on function procedures.
+    As we've seen, several constructs (like parameters default values, method head capture, nesting marker
+    as formal parameter) need to inject symbol declarations and initialisations
+    in a method's body. It is \lstinline!TransformMethod! that manages all this,
+    constructing a list of pair \lstinline!Symbol#InitCode! which is then used
+    to inject declaration and initialisation code in the body of the method.
+  \item[TransformAttribute] will set the default value to 
+    \lstinline!{Boot_Name.newUnique 'ooFreeFlag'}! if none was provided.
+\end{description}
+With these functions defined, the code of \lstinline!DesugarClass! is greatly
+simplified and easy to understand.
 
 \subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
