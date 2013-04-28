@@ -998,6 +998,17 @@ define
                   R=fMeth(fEq(fOpenRecord(Name NewArgs) NamedH Pos) NewBody MPos)
                   {Params.env restore()}
                   R
+               [] fMeth(fEq(L H Pos) Body MPos) then
+                  NewBody
+                  NamedH
+                  R
+               in
+                  {Params.env backup()}
+                  NamedH={NamerForDecls H Params}
+                  NewBody={NamerForBody Body Params}
+                  R=fMeth(fEq(L NamedH Pos) NewBody MPos)
+                  {Params.env restore()}
+                  R
                else
                   Name Body MPos
                in
@@ -1045,7 +1056,7 @@ define
             fun {TransformForPatterns Args Body}
                case Args
                of forPattern(V forGeneratorList(L))|Ps then
-                  fApply(fConst(ForAll Pos) [L fProc(fDollar(Pos) [V] {TransformForPatterns Ps Body} nil  Pos)] Pos)
+                  {NamerForBody fApply(fConst(ForAll Pos) [L fProc(fDollar(Pos) [V] {TransformForPatterns Ps Body} nil  Pos)] Pos) Params}
                %[] forPattern(V forGeneratorInt(Start Stop))|Ps then
                % FIXME
                [] nil then
@@ -1309,6 +1320,7 @@ define
             %end
             %Message
             fun {NameAndArgs Signature}
+               % Extract Identifier and Arguments of the method from its signature
                case Signature
                of fRecord(InFName InArgs) then
                   InFName#InArgs
@@ -1318,10 +1330,13 @@ define
                   InFName#InArgs
                [] fEq(M V Pos) then
                   {NameAndArgs M}
+               else
+                  Signature#nil
                end
             end
 
             fun {GetHeaderSymbol Signature}
+               % Returns Symbol which will hold a reference to the method head
                case Signature
                of fEq(M V Pos) then
                   V
@@ -1375,7 +1390,7 @@ define
             else
                DeclsWithMethHeader=Decls
             end
-            if {List.length Decls}>0 then
+            if {List.length DeclsWithMethHeader}>0 then
                NewBody=fLocal( {WrapInFAnd {List.map DeclsWithMethHeader fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [{InjectDollarIfNeeded Body @DollarSym}] {List.map DeclsWithMethHeader fun{$ _#Init} Init end }}} Pos)
             else
                NewBody={InjectDollarIfNeeded Body @DollarSym}
