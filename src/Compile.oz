@@ -331,7 +331,7 @@ define
       fun {GetPosInList L}
          case L
          of X|Xs then
-            if {Record.label X}==pos then
+            if {Record.is X} andthen {Record.label X}==pos then
                X
             else
                {GetPosInList Xs}
@@ -1057,8 +1057,19 @@ define
                case Args
                of forPattern(V forGeneratorList(L))|Ps then
                   {NamerForBody fApply(fConst(ForAll Pos) [L fProc(fDollar(Pos) [V] {TransformForPatterns Ps Body} nil  Pos)] Pos) Params}
-               %[] forPattern(V forGeneratorInt(Start Stop))|Ps then
-               % FIXME
+               [] forPattern(V forGeneratorInt(Start End Step))|Ps then
+                  fun {ExplicitStep Step}
+                     case Step
+                     of unit then
+                        % Start is a global
+                        fConst(1 {GetPos Start})
+                     else
+                        Step
+                     end
+                  end
+               in
+                  {NamerForBody fApply(fConst(For Pos) [Start End {ExplicitStep Step} fProc(fDollar(Pos) [V] {TransformForPatterns Ps Body} nil  Pos)] Pos) Params}
+               %[] forPattern(V forGeneratorC(Start Cond Next))|Ps then
                [] nil then
                   Body
                end
@@ -1676,6 +1687,8 @@ define
                                         fConst(apply Pos) ] Pos)
                                    [RHS @(Params.'self') LHS] Pos)
                                 Params}
+         [] fRaise(E Pos) then
+            fApply(fConst(Exception.'raise' Pos) [ E ] Pos)
          [] fSkip(_) then
             AST
          %else
