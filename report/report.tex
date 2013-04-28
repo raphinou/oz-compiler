@@ -797,6 +797,130 @@ which results in the AST:
 
 \end{lstlisting}
 
+\subsection{Loops}
+There are three forms of the \lstinline!for..in..do..end! statement, working
+respectively on list, ranges, and C-like for loops conditions.
+\subsubsection{Iterating over lists}
+The Oz syntax is best illustrated by an example:
+\begin{lstlisting}
+   for Var in L do {Show Var} end
+\end{lstlisting}
+\lstinline!Var! is bound to each element of L in turn, and the code executed.
+Hence this code will show all elements of the list L.
+
+Multiple list can be iterated:
+\begin{lstlisting}
+   for I in L J in L2 do {Show I#J} end
+\end{lstlisting}
+but note that both lists are iterated in parallel, and the loop ends once the
+end of one of the list is reached. The number of time the body of the loop is
+called is thus the number of elements of the smallest list.
+
+The AST of the first \lstinline!for! example is:
+\begin{lstlisting}
+   fFOR(
+      |(
+         forPattern(
+            fVar('Var' pos )
+            forGeneratorList(
+               fVar('L' pos )))
+         nil
+      )
+      fApply(
+         fVar('Show' pos )
+         |(
+            fVar('Var' pos )
+            nil)
+         pos)
+      pos)
+\end{lstlisting}
+
+The first value in the \lstinline!fFor! record is the list of patterns, one
+for each list. Each item of this list is a \lstinline!forPattern! record, with
+its first value being the variable that will be available in the loop, and the
+second value an \lstinline!fGeneratorList! record referencing the list over which to
+iterate.
+The second value in the \lstinline!fFor! record is the code to be executed for
+each element of the list.
+
+\subsubsection{Iterating over ranges}
+Here is an example of a \lstinline!for! loop iterating over integers from 1 to 5
+with a step of 2, resulting the execution of the body of the loop for integers 1
+3 and 5:
+\begin{lstlisting}
+   for I in 1..5;2 do {Show I} end
+\end{lstlisting}
+
+\begin{lstlisting}
+   fFOR(
+      |(
+         forPattern(
+            fVar('I' pos )
+            forGeneratorInt(
+               fInt(1 pos )
+               fInt(5 pos )
+               fInt(2 pos )))
+         nil)
+      fApply(
+         fVar('Show' pos )
+         |(
+            fVar('I' pos )
+            nil)
+         pos)
+      pos)
+\end{lstlisting}
+
+The AST is very similar to the first loop form, only the
+\lstinline!fGeneratorList! record is replaced by a \lstinline!forGeneratorInt!
+record holding the specification of the range and step to use.
+
+\subsubsection{C-style for loops}
+Iterating over integers from 1 to 5 with a step of 2 can also be written in the C-style for loop:
+\begin{lstlisting}
+   for I in  1;I<4;I+1 do  {Show I} end
+\end{lstlisting}
+It takes a generator comprised of 3 expressions: \lstinline!E1;E2;E3! where
+\lstinline!E1! is the start value, \lstinline!E2! is the test condition, the
+looping continuing as long at it evaluates to true, and \lstinline!E3! is the
+next value's expression.
+It is found in the AST as:
+\begin{lstlisting}
+fFOR(
+      |(
+         forPattern(
+            fVar('I' pos )
+            forGeneratorC(
+               fInt(1 pos )
+               fOpApply(
+                  '<'
+                  |(
+                     fVar('I' pos )
+                     |(
+                        fInt(4 pos )
+                        nil))
+                  pos)
+               fOpApply(
+                  '+'
+                  |(
+                     fVar('I' pos )
+                     |(
+                        fInt(1 pos )
+                        nil))
+                  pos)))
+         nil)
+      fApply(
+         fVar('Show' pos )
+         |(
+            fVar('I' pos )
+            nil)
+         pos)
+      pos)
+  
+\end{lstlisting}
+
+The notable difference is the generator record now being
+\lstinline!forGeneratorC! holding the three expressions.
+
 \chapter{Compiler}
 \section{Architecture}
 The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument the AST, and they return the transformed AST.
@@ -1750,6 +1874,8 @@ The program itself being a statement, the function Desugar simply call DesugarSt
 With these functions defined, the code of \lstinline!DesugarClass! is greatly
 simplified and easy to understand.
 
+\subsubsection{For loops}
+% FIXME: todo
 \subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:arch:unnester:unification}
