@@ -1719,8 +1719,8 @@ The desugar pass is implemented by a function named \lstinline!Desugar!. It defi
   \item[TransformRecord] called to transform records as described above, just after it has been desugared.
   \item[IsConstantRecord] called by \lstinline!TransformRecord! to determine if the record for which the AST is passed as argument is a record with constant label, features and values
   \item[HandleLazyFlag] will wrap the body of a function in a thread if needed, as described in Section \ref{sec:arch:desugar:functions}.
-  \item[DesugarExpr] called by \lstinline!Desugar! to desugar expressions
-  \item[DesugarStat] called by \lstinline!Desugar! to desugar statements
+  \item[DesugarExpr] called to desugar expressions
+  \item[DesugarStat] called to desugar statements
   \item[DesugarClass] is handling class definitions 
 \end{description}
 
