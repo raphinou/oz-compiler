@@ -1069,6 +1069,9 @@ define
                   end
                in
                   {NamerForBody fApply(fConst(For Pos) [Start End {ExplicitStep Step} fProc(fDollar(Pos) [V] {TransformForPatterns Ps Body} nil  Pos)] Pos) Params}
+               % FIXME C generator
+               % and break/continue http://www.mozart-oz.org/home/doc/loop/node1.html#chapter.official
+               %
                %[] forPattern(V forGeneratorC(Start Cond Next))|Ps then
                [] nil then
                   Body
