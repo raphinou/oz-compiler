@@ -530,7 +530,7 @@ define
    end
 
    % FIXME : we add Show manually to the base environment.
-   AugmentedBase={AdjoinAt Base 'Show' Show}
+   AugmentedBase={AdjoinAt {AdjoinAt Base 'Show' Show} 'OS' OS}
    % Key is a name known only by the compiler, and used to protect date, notably in the pattern matching code.
    Key = {NewName}
 
@@ -809,7 +809,7 @@ define
             else
                % this variable is not declared
                % TODO issue an error
-               %raise unnamedVariable end
+               raise unnamedVariable end
                AST
             end
 
@@ -1107,6 +1107,8 @@ define
             else
                NamedTry
             end
+         [] fOpApply(Op Args Pos) then
+            fOpApply(Op {List.map Args fun {$ I} {NamerForBody I Params} end} Pos)
          %---
          else
          %---
@@ -1167,6 +1169,8 @@ define
             fConst(Int.Op Pos)
          [] ':=' then
             fConst(Value.catExchange Pos)
+         [] '~' then
+            fConst(Number.Op Pos)
          else
             {DesugarExpr Op Params}
          end
@@ -1654,6 +1658,8 @@ define
             @(Params.'self')
          [] fRaise(E Pos) then
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
+         [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
+            {DesugarExpr fApply(fConst(Boot_Value.'dotAssign' Pos1) [LHS CHS RHS] Pos2) Params}
          [] fDotAssign(LHS RHS Pos) then
             {DesugarExpr fApply(fConst(Boot_Value.'dotAssign' Pos) [LHS RHS] Pos) Params}
          [] fSym(_ _) then
@@ -1804,6 +1810,8 @@ define
                         Params}
          [] fRaise(E Pos) then
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
+         [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
+            {DesugarStat fApply(fConst(Boot_Value.'dotAssign' Pos1) [LHS CHS RHS] Pos2) Params}
          [] fDotAssign(LHS RHS Pos) then
             {DesugarStat fApply(fConst(Boot_Value.'dotAssign' Pos) [LHS RHS] Pos) Params}
          [] fSkip(_) then
