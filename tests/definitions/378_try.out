@@ -1,0 +1,9 @@
+abort(halt completeMatch)
+abort(weeez otherValueOfExc)
+raising#failure(myError)
+myError
+raising#failure(myError)
+myError
+raising#failure(myError)
+'Failure'
+myError

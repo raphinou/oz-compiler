@@ -559,7 +559,7 @@ define
       % and NamerForBody.
       fun {NamerForMethDecls AST Params}
          % Namer for class method headers
-         % Only accepts fDollar in addition to what NamerForDecls does
+         % Only accepts fDollar and fWildcard in addition to what NamerForDecls does
          case AST
          of fDollar(_) then
             AST
@@ -1080,25 +1080,39 @@ define
             end
          in
             {NamerForBody {TransformForPatterns Patterns Body} Params}
-         [] fTry(Body fCatch(Clauses) Finally Pos) then
-            fTry( {NamerForBody Body Params}
+         [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
+            % User NamerForCaptures for the pattern in Clause,
+            % as this will be desugared in a case instruction using the same clauses
+            NewParams={Record.adjoin Params params(captures:{NewCell nil})}
+            NamedTry
+         in
+            NamedTry=fTry( {NamerForBody Body Params}
                   fCatch( {List.map Clauses  fun {$ fCaseClause(Val Body)}
                      NewVal NewBody
                   in
-                     {Params.env backup()}
-                     NewVal={NamerForDecls Val Params}
-                     NewBody={NamerForBody Body Params}
-                     {Params.env restore()}
+                     {NewParams.env backup()}
+                     NewVal={NamerForCaptures Val NewParams}
+                     NewBody={NamerForBody Body NewParams}
+                     {NewParams.env restore()}
                      fCaseClause(NewVal NewBody)
-                  end})
+                  end}
+                          CatchPos)
                   {NamerForBody Finally Params}
                   Pos)
+            if {List.length @(NewParams.captures)}>0 then
+               fLocal( {WrapInFAnd @(NewParams.captures)}
+                        NamedTry
+                        Pos
+                     )
+            else
+               NamedTry
+            end
          %---
          else
          %---
-            {Show 'Default pass for next ast'}
-            {Show AST}
-            {Show '..............................................'}
+            %{Show 'Default pass for next ast'}
+            %{Show AST}
+            %{Show '..............................................'}
             {DefaultPass AST NamerForBody Params}
          end
       end
@@ -1591,10 +1605,14 @@ define
          [] fClass(FSym AttributesAndProperties Methods Pos) then
             {DesugarClass AST Params}
          [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
+            %FIXME: handle multiple caseclauses
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(  NewSymbol
-                     fTry({DesugarExpr Body Params} fCatch(fCaseClause(NewSymbol {DesugarExpr fCase(NewSymbol Clauses fNoElse(CatchPos) CatchPos) Params} ) CatchPos) {DesugarStat fNoFinally Params} Pos)
+                     % add a else banch to the case, which will re-raise the exception when it was not catched by a pattern
+                                                                                                                       % FIXME: this raise is followed by unit to avoid problems with Exception.raise getting 2 arguments because it is in an expression location...
+
+                     fTry({DesugarExpr Body Params} fCatch([fCaseClause(NewSymbol {DesugarExpr fCase(NewSymbol Clauses fRaise(NewSymbol Pos) CatchPos) Params} )] CatchPos) fNoFinally Pos)
                      Pos)
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
             % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
@@ -1743,10 +1761,11 @@ define
                                    [RHS @(Params.'self') LHS] Pos)
                                 Params}
          [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
+            %FIXME: handle multiple caseclauses
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(  NewSymbol
-                     fTry({DesugarStat Body Params} fCatch(fCaseClause(NewSymbol {DesugarStat fCase(NewSymbol Clauses fNoElse(CatchPos) CatchPos) Params} ) CatchPos) {DesugarStat fNoFinally Params} Pos)
+                     fTry({DesugarStat Body Params} fCatch( [fCaseClause(NewSymbol {DesugarStat fCase(NewSymbol Clauses fNoElse(CatchPos) CatchPos) Params} )] CatchPos ) fNoFinally Pos)
                      Pos)
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
             % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
@@ -1820,13 +1839,17 @@ define
 
       fun {BindVarToExpr FSym AST Params}
       %----------------------------------
-         T=OoExtensions.'class'
+         ClassExt=OoExtensions.'class'
+         Raise=Exception.'raise'
       in
          % Handles the binding of a variables to a complex expression
          case AST
          of fProc(fDollar(_) Args Body Flags Pos) then
             {UnnesterInt fProc(FSym Args Body Flags Pos) Params }
-         [] fApply( fConst(!T Pos) L Pos) then
+         [] fApply(fConst(!Raise _) _ _) then
+            % simply keep the raise, cf http://www.mozart-oz.org/documentation/notation/node6.html#label27
+            AST
+         [] fApply( fConst(!ClassExt Pos) L Pos) then
             % See T defined earlier. Done to pass parser
             fApply( fConst(OoExtensions.'class' Pos) {List.append {List.take L 6} [FSym]}  Pos)
          [] fApply(Proc Args Pos) then
@@ -1872,16 +1895,13 @@ define
             % record has already been unnested before the call to BindVarToExpr (see call to BindVarToExpr for fRecord), just return the fEq
             %FIXME: set pos!
             fEq(FSym AST {GetPos AST})
-         [] fTry(Body fCatch(fCaseClause(E Case) CatchPos) Finally Pos) then
+         [] fTry(Body fCatch([fCaseClause(E Case)] CatchPos) Finally Pos) then
             % Introduce new symbol to avoid corner case of test 372
             NewSym=fSym({New SyntheticSymbol init(Pos)} Pos)
             BodyPos={GetPos Body}
          in
             % Inject unification in the code tried and in the catch clauses
-            {UnnesterInt fTry(fLocal( NewSym fAnd(fEq(NewSym Body BodyPos) fEq(FSym NewSym BodyPos)) BodyPos) fCatch(fCaseClause(E fEq(FSym Case Pos)) CatchPos) Finally Pos) Params}
-         [] fRaise(_ _) then
-            % simply keep the raise, cf http://www.mozart-oz.org/documentation/notation/node6.html#label27
-            AST
+            {UnnesterInt fTry(fLocal( NewSym fAnd(fEq(NewSym Body BodyPos) fEq(FSym NewSym BodyPos)) BodyPos) fCatch([fCaseClause(E fEq(FSym Case Pos))] CatchPos) Finally Pos) Params}
          else
             {Show "FSym:"}
             {DumpAST.dumpAST FSym _}
@@ -2632,7 +2652,7 @@ define
          %----------------
          [] fEq(LHS RHS _) then
          %----------------
-            [unify({RegForSym LHS  Params} {RegForSym RHS  Params})]
+            [unify({PermRegForSym LHS  Params} {PermRegForSym RHS  Params})]
 
          %--------------------------------------
          [] fBoolCase(FSym TrueCode FalseCode _) then
@@ -3030,7 +3050,7 @@ define
             {HandleCase Clauses Params}|
             nil
 
-         [] fTry(Body fCatch(fCaseClause(E Case) CatchPos) Finally Pos) then
+         [] fTry(Body fCatch([fCaseClause(E Case)] CatchPos) Finally Pos) then
             TryLabel={GenLabel}
             EndLabel={GenLabel}
          in
@@ -3053,7 +3073,7 @@ define
             raise unhandledRecordType end
          else
             {DumpAST.dumpAST AST _}
-            raise unexpectedASTInCodeGentIn end
+            raise unexpectedASTInCodeGenInt end
          end
       end
       InitialParams = {Record.adjoin params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0}) CallParams}
@@ -3102,6 +3122,8 @@ define
                   if {Sym get(yindex $)}==nil then
                      {Sym set(yindex @Counter)}
                      Counter:=@Counter+1
+                     {Show yAssigned}
+                     {DumpAST.dumpAST X _}
                   end
                else
                   {DefaultPassNoParams X YAssigner _}
