@@ -1054,6 +1054,7 @@ define
 
          [] fFOR(Patterns Body Pos) then
             fun {TransformForPatterns Args Body}
+               % FIXME: can this desugar be moved to desugar?
                case Args
                of forPattern(V forGeneratorList(L))|Ps then
                   {NamerForBody fApply(fConst(ForAll Pos) [L fProc(fDollar(Pos) [V] {TransformForPatterns Ps Body} nil  Pos)] Pos) Params}
@@ -1079,6 +1080,19 @@ define
             end
          in
             {NamerForBody {TransformForPatterns Patterns Body} Params}
+         [] fTry(Body fCatch(Clauses) Finally Pos) then
+            fTry( {NamerForBody Body Params}
+                  fCatch( {List.map Clauses  fun {$ fCaseClause(Val Body)}
+                     NewVal NewBody
+                  in
+                     {Params.env backup()}
+                     NewVal={NamerForDecls Val Params}
+                     NewBody={NamerForBody Body Params}
+                     {Params.env restore()}
+                     fCaseClause(NewVal NewBody)
+                  end})
+                  {NamerForBody Finally Params}
+                  Pos)
          %---
          else
          %---
@@ -1576,11 +1590,48 @@ define
             fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} fEq(NewSymbol Else Pos) Pos) Params} NewSymbol) Pos)
          [] fClass(FSym AttributesAndProperties Methods Pos) then
             {DesugarClass AST Params}
+         [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            fLocal(  NewSymbol
+                     fTry({DesugarExpr Body Params} fCatch(fCaseClause(NewSymbol {DesugarExpr fCase(NewSymbol Clauses fNoElse(CatchPos) CatchPos) Params} ) CatchPos) {DesugarStat fNoFinally Params} Pos)
+                     Pos)
+         [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
+            % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
+            % put the try-finally expression, without its Finally code, in a new try expression
+            % with no finally code catching all exceptions.
+            % After executing this new try expression, execute the Finally
+            % then check if the finally was successful by looking at the value of the try expression.
+            % The new try expression will have a record with label ok and value of the try-finally as
+            % first value if the execution of the original try was successful.
+            % If success, return value of the try-finally expression. Else, re-raise the exception.
+            Temp1=fSym({New SyntheticSymbol init(CatchPos)} CatchPos)
+            Temp2=fSym({New SyntheticSymbol init(CatchPos)} CatchPos)
+         in
+            {DesugarExpr
+                        fLocal(Temp1
+                           fAnd(
+                              fLocal(Temp2
+                                     fEq(Temp1
+                                         fTry(fRecord(fConst(ok Pos) [fColon(fConst(1 Pos) fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos))])
+                                              fCatch([fCaseClause(Temp2 fRecord(fConst(ex Pos) [fColon(fConst(1 CatchPos) Temp2)]))] CatchPos)
+                                              fNoFinally
+                                              Pos)
+                                         Pos)
+                                     Pos)
+                              fAnd(Finally
+                                   fBoolCase( fOpApply('==' [fApply(fConst(Record.label Pos) [Temp1] Pos)  fConst(ok Pos)] Pos )
+                                              fOpApply('.' [Temp1 fConst(1 Pos)] Pos)
+                                              fRaise(fOpApply('.' [Temp1 fConst(1 Pos)] Pos) Pos)
+                                              Pos)))
+                           Pos)
+                        Params}
          [] fSelf(_) andthen @(Params.'self')==unit then
             raise selfUsedOutsideMethod end
          [] fSelf(_)  then
             @(Params.'self')
-
+         [] fRaise(E Pos) then
+            fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -1614,6 +1665,7 @@ define
          of fAnd(First Second) then
             % if the fAnd is a statement, both parts are treated as statements
             fAnd({DesugarStat First Params} {DesugarStat Second Params})
+
 
          [] fLocal(Decls Body Pos) then
             % for fLocal, declarations are always statements.
@@ -1690,9 +1742,46 @@ define
                                         fConst(apply Pos) ] Pos)
                                    [RHS @(Params.'self') LHS] Pos)
                                 Params}
+         [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
+            NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            fLocal(  NewSymbol
+                     fTry({DesugarStat Body Params} fCatch(fCaseClause(NewSymbol {DesugarStat fCase(NewSymbol Clauses fNoElse(CatchPos) CatchPos) Params} ) CatchPos) {DesugarStat fNoFinally Params} Pos)
+                     Pos)
+         [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
+            % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
+            % put the try-finally statement, without its Finally code, in a try expression
+            % with no finally code catching all exceptions. The try expression will have a value of unit
+            % if the execution of the original try was successful.
+            % After executing this new try expression, execute the Finally
+            % then check if the finally was successful by looking at the value of the try expression.
+            % If success, do nothing. Else, re-raise the exception.
+            Temp1=fSym({New SyntheticSymbol init(CatchPos)} CatchPos)
+            Temp2=fSym({New SyntheticSymbol init(CatchPos)} CatchPos)
+         in
+            {DesugarStat
+                        fLocal(Temp1
+                           fAnd(
+                              fLocal(Temp2
+                                     fEq(Temp1
+                                         fTry(fAnd(fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos)  fConst(unit Pos))
+                                              fCatch([fCaseClause(Temp2 fRecord(fConst(ex Pos) [fColon(fConst(1 CatchPos) Temp2)]))] CatchPos)
+                                              fNoFinally
+                                              Pos)
+                                         Pos)
+                                     Pos)
+                              fAnd(Finally
+                                   fBoolCase( fOpApply('==' [Temp1 fConst(unit Pos)] Pos )
+                                              fSkip(unit)
+                                              fRaise(fOpApply('.' [Temp1 fConst(1 Pos)] Pos) Pos)
+                                              Pos)))
+                           Pos)
+                        Params}
          [] fRaise(E Pos) then
-            fApply(fConst(Exception.'raise' Pos) [ E ] Pos)
+            fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
          [] fSkip(_) then
+            AST
+         [] fNoFinally then
             AST
          %else
          %   {DefaultPass AST DesugarInt Params}
@@ -1770,7 +1859,7 @@ define
             % Recursive call to get to the end of the sequence
             %FIXME: set Pos
             %FIXME: place the recursive call depper in the subtree (on the fEq)?
-            {UnnesterInt fAnd(First fEq(FSym Second pos)) Params}
+            {UnnesterInt fAnd(First fEq(FSym Second {GetPos Second})) Params}
          [] fLocal(Decls Body Pos) then
             % the value of a local..in..end is the value of the last expression in the body
             {UnnesterInt fLocal(Decls fEq(FSym Body Pos) Pos) Params}
@@ -1782,9 +1871,21 @@ define
          [] fRecord(_ _) then
             % record has already been unnested before the call to BindVarToExpr (see call to BindVarToExpr for fRecord), just return the fEq
             %FIXME: set pos!
-            fEq(FSym AST pos)
+            fEq(FSym AST {GetPos AST})
+         [] fTry(Body fCatch(fCaseClause(E Case) CatchPos) Finally Pos) then
+            % Introduce new symbol to avoid corner case of test 372
+            NewSym=fSym({New SyntheticSymbol init(Pos)} Pos)
+            BodyPos={GetPos Body}
+         in
+            % Inject unification in the code tried and in the catch clauses
+            {UnnesterInt fTry(fLocal( NewSym fAnd(fEq(NewSym Body BodyPos) fEq(FSym NewSym BodyPos)) BodyPos) fCatch(fCaseClause(E fEq(FSym Case Pos)) CatchPos) Finally Pos) Params}
+         [] fRaise(_ _) then
+            % simply keep the raise, cf http://www.mozart-oz.org/documentation/notation/node6.html#label27
+            AST
          else
+            {Show "FSym:"}
             {DumpAST.dumpAST FSym _}
+            {Show "AST:"}
             {DumpAST.dumpAST AST _}
             raise unexpectedASTForBindVarToExpr end
          end
@@ -2929,8 +3030,30 @@ define
             {HandleCase Clauses Params}|
             nil
 
+         [] fTry(Body fCatch(fCaseClause(E Case) CatchPos) Finally Pos) then
+            TryLabel={GenLabel}
+            EndLabel={GenLabel}
+         in
+            setupExceptionHandler(TryLabel)|
+            %FIXME
+            %Ugly: we move the exception in x(0) to its permanent register
+            % and the Case opcodes will move it from its permanent register
+            % back to x(0).
+            % The case opcodes do that because guards could have overriden x(0).
+            % There should be a better solution...
+            move(x(0) {PermRegForSym E Params})|
+            {CodeGenInt Case Params}|
+            branch(EndLabel)|
+            lbl(TryLabel)|
+            {CodeGenInt Body Params}|
+            popExceptionHandler|
+            lbl(EndLabel)|
+            nil
          [] fRecord(fConst(_ _) _) then
             raise unhandledRecordType end
+         else
+            {DumpAST.dumpAST AST _}
+            raise unexpectedASTInCodeGentIn end
          end
       end
       InitialParams = {Record.adjoin params(indecls:false opCodes:{NewCell nil} currentIndex:{NewCell 0}) CallParams}
