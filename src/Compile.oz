@@ -1163,6 +1163,10 @@ define
             fConst(Value.Op Pos)
          [] '\\=' then
             fConst(Value.Op Pos)
+         [] 'mod' then
+            fConst(Int.Op Pos)
+         [] ':=' then
+            fConst(Value.catExchange Pos)
          else
             {DesugarExpr Op Params}
          end
@@ -1650,6 +1654,8 @@ define
             @(Params.'self')
          [] fRaise(E Pos) then
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
+         [] fDotAssign(LHS RHS Pos) then
+            {DesugarExpr fApply(fConst(Boot_Value.'dotAssign' Pos) [LHS RHS] Pos) Params}
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -1798,6 +1804,8 @@ define
                         Params}
          [] fRaise(E Pos) then
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
+         [] fDotAssign(LHS RHS Pos) then
+            {DesugarStat fApply(fConst(Boot_Value.'dotAssign' Pos) [LHS RHS] Pos) Params}
          [] fSkip(_) then
             AST
          [] fNoFinally then
@@ -2652,6 +2660,7 @@ define
          %----------------
          [] fEq(LHS RHS _) then
          %----------------
+            % Use permanent register to avoid strange errors, eg in test 378
             [unify({PermRegForSym LHS  Params} {PermRegForSym RHS  Params})]
 
          %--------------------------------------
