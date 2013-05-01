@@ -1660,8 +1660,6 @@ define
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
          [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
             {DesugarExpr fApply(fConst(Boot_Value.'dotAssign' Pos1) [LHS CHS RHS] Pos2) Params}
-         [] fDotAssign(LHS RHS Pos) then
-            {DesugarExpr fApply(fConst(Boot_Value.'dotAssign' Pos) [LHS RHS] Pos) Params}
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
