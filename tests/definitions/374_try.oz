@@ -1,18 +1,27 @@
 % try-finally expressions
-local
-   V
-in
+% Exception raised
+{Show try raise stopHere end b
+      catch
+         stopHere then
+         'stopped'
+      finally
+         {Show 'and finished'}
+      end}
 
-   V=try raise stopHere end b
-   catch
-      stopHere then
-      'stopped'
-   finally
-      {Show 'and finished'}
-   end
-   {Show '--'}
-   {Show V}
-   {Show '--'}
-
-end
+% Success
+{Show try allOk
+      catch
+         stopHere then
+         'stopped'
+      finally
+         {Show 'and finished'}
+      end}
+% Success with integer value
+{Show try 3
+      catch
+         stopHere then
+         'stopped'
+      finally
+         {Show 'and finished'}
+      end}
 
