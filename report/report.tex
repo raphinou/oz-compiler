@@ -250,7 +250,14 @@ arrayFill(x(0))
 arrayFill(x(1))
 \end{lstlisting}
 
-
+\subsection{Exceptions}
+There is an opcode to setup an exception handler and jump to a label:
+\begin{lstlisting}
+  setupExceptionHandler(DestLabel)
+\end{lstlisting}
+If the code executed from \lstinline!DestLabel! raises an exception befire  the exception handler
+is removed with \lstinline!popExceptionHandler!, the execution will jump to the
+opcode following the instruction \lstinline!setupExceptionHandler!.
 
 \section{Compiler input}\label{section:compilerinput}
 %FIXME: add index for all record labels in the AST
@@ -921,6 +928,65 @@ fFOR(
 The notable difference is the generator record now being
 \lstinline!forGeneratorC! holding the three expressions.
 
+\subsection{Exceptions}\label{sec:input:exceptions}
+\subsubsection{Raise}
+An exception can be raised with the instruction \lstinline!raise E end!, where
+\lstinline!E! is a record value. %FIXME: is an exception always a record?
+A raise instruction is found in the AST under a node \lstinline!fRaise(E pos)!.
+Its next transformation takes place in the desugar step (see Section
+\ref{sec:arch:desugar:exceptions}).
+
+Code possibly raising exceptions can be wrapped in a try-catch-finally
+instruction of this form:
+\begin{lstlisting}
+   try Code
+   catch
+      Pat1 then
+      Code1
+   [] Pat2 then
+      Code2
+   finally
+      FinalCode
+   end
+\end{lstlisting}
+
+We can see that the catch part specifies multiple clauses each with a pattern
+against which the exception raised will be tested, and code which will be
+executed if the pattern effectively matched. \lstinline!finally! introduces code
+that will be executed in all cases after \lstinline!Code! and the possible
+matching catch clause.
+
+It results in this AST:
+\begin{lstlisting}
+   fTry(
+      Body
+      fCatch(
+         |(
+            fCaseClause(
+               Pat1
+               Code1)
+            |(
+               fCaseClause(
+                  Pat2
+                  Code2)
+               nil))
+         pos)
+      FinalCode
+      pos)
+\end{lstlisting}
+
+which exactly mirrors the Oz code: \lstinline!fTry! holds the AST of the body,
+which is code possibly throwing an exception, the \lstinline!fCatch! record containing the list of
+clauses, and the \lstinline!finally! code. The \lstinline!finally! may be left
+out of the Oz code, in which case \lstinline!FinalCode! is the record
+\lstinline!fNoFinally!.
+Clauses of a catch are present in the AST in the same form as clauses of a case
+instruction (see Section \ref{sec:input:patternmatching}), i.e. a
+\lstinline!fCaseClause! record holding the pattern and the code to execute if
+the pattern matches. This similarity will be exploited by the compiler, notably
+in the namer, which is the next transformation to be applied to an
+\lstinline!fTry! node (see Section \ref{sec:arch:namer:exceptions}).
+
 \chapter{Compiler}
 \section{Architecture}
 The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument the AST, and they return the transformed AST.
@@ -1091,7 +1157,7 @@ patterns, and all code infrastructure was already in place. Putting this
 transformation in the \lstinline!Desugar! pass would have introduced code duplication and
 incur a performance cost.
 
-
+% FIXME: add example?
 
 \subsubsection{Pattern Arguments}
 Functions and procedures in Oz can be defined with pattern arguments, which
@@ -1241,11 +1307,40 @@ variables that were encountered as method label), and prepend the class
 definition by the initialisation code collected:
 
 
+\subsubsection{Exceptions}\label{sec:arch:namer:exceptions}
+The AST received by the namer for a try instruction is:
+\begin{lstlisting}
+   fTry(
+      Code
+      fCatch(
+         |(
+            fCaseClause(
+               Pat1
+               Code1)
+            |(
+               fCaseClause(
+                  Pat2
+                  Code2)
+               nil))
+         pos)
+      FinalCode
+      pos)
+\end{lstlisting}
+
+The namer will traverse \lstinline!Code! and \lstinline!Finally! and name variables based on existing
+mappings present in the environment. The patterns of a catch clause is
+handled exactly (in the sense that it is the same compiler code that is called)
+as the pattern of a case clause (see Section \ref{sec:arch:namer:patternmatching}).
+A new environment is created for each clause, to which the pattern might add
+bindings, which are then available when naming the code of the clause.
+New symbols are possibly introduced by the patterns, which then have to be
+declared in a wrapping \lstinline!local..in..end! instruction.
+
 \subsubsection{Compiler Code Notes}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
 These local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
 Notice that NamerForBody calls NamerForDecls when a function or procedure is
-defines, and NamerForCaptures when captures are present in patterns. Here is for
+defines, and NamerForCaptures patterns \lstinline!fCaseClause!s. Here is for
 example the (redacted) code handling a definition in non-declaration part of a
 function with no pattern argument:
 
@@ -1287,9 +1382,14 @@ Handling \lstinline!fCase! nodes also requires more work as it needs to
   \item handle guards by, amongst other things, introducing a new symbol
   \item add guards corresponding to escaped variables in patterns
 \end{itemize}
+The function \lstinline!NamerForCaptures! is called on the case patterns, collecting symbols
+to be declared in \lstinline!Params.captures!.
+New symbols introduced for for escaped variables are collected in
+\lstinline!Params.guardsSymbols!. 
+%FIXME: is this well explained earlier? why do escaped vars introduce guards with new symbols?
 
-And finally, the work of the namer in case of classes involves several steps as described
-Section \ref{sec:arch:namer:classes}.
+As for the work of the namer in case of classes, it involves several steps as described
+in Section \ref{sec:arch:namer:classes}.
 Several functions are defined to help these steps. \lstinline!NameMethodLabelInt!
 is the function used when traversing the methods list the first time to name
 only the method labels.
@@ -1333,6 +1433,10 @@ and can be included here to illustrate the different steps:
             ClassWithDecls
   
 \end{lstlisting}
+
+The code traversing \lstinline!catch! patterns makes use of the same
+function used for naming \lstinline!case! clauses, namely
+\lstinline!NamerForCaptures!.
 
 
 
@@ -1876,6 +1980,165 @@ simplified and easy to understand.
 
 \subsubsection{For loops}
 % FIXME: todo
+\subsubsection{Exceptions}\label{sec:arch:desugar:exceptions}
+\lstinline!fRaise! nodes are desugared in a call to the builtin
+\lstinline!Exception.'raise'!. The exception is an expression, and desugared as
+such, transforming
+\begin{lstlisting}
+   fRaise(E pos)
+\end{lstlisting}
+in
+\begin{lstlisting}
+   fApply(
+          fConst(Exception.'raise' pos) 
+          [ {DesugarExpr E Params} ] 
+          pos)
+\end{lstlisting}
+
+As a reminder, here is the AST of a try instruction:
+\begin{lstlisting}
+   fTry(
+      Body
+      fCatch(
+         |(
+            fCaseClause(
+               Pat1
+               Code1)
+            |(
+               fCaseClause(
+                  Pat2
+                  Code2)
+               nil))
+         pos)
+      FinalCode
+      pos)
+\end{lstlisting}
+Desugaring an \lstinline!fTry! node without \lstinline!finally! code is not much
+more complex.  If the try instruction is an expression (resp. statement), the
+body and the clauses' code are desugared as expressions (resp. statements).
+A \lstinline!case! instruction is introduced, using the very same clauses as the
+catch, transforming\footnote[number]{Illustration code from http://www.mozart-oz.org/documentation/notation/node6.html\#label27}. 
+\begin{lstlisting}
+  try SE1 
+  catch C1 [] ... [] Cn 
+  [ finally S ] 
+end
+\end{lstlisting}
+
+in
+
+\begin{lstlisting}
+try SE1 
+catch X then 
+   case X of C1 [] ... [] Cn 
+   else 
+      raise X end 
+   end 
+[ finally S ] 
+end
+\end{lstlisting}
+
+As this code shows, the very same clauses can be reused for the case
+instruction, without the need of complex AST transformation.
+
+Note that an \lstinline!else! clause is introduced in the \lstinline!case!
+instruction. This is simply to re-raise the exception if no pattern match,
+meaning that the exception was not caught at this level.
+In the transformed code, note also that a new symbol, \lstinline!X! is
+introduced. This results in the new AST transformation for a try expression from
+\begin{lstlisting}
+   fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos)
+\end{lstlisting}
+to
+\begin{lstlisting}
+  fLocal(  NewSymbol
+           fTry({DesugarExpr Body Params} 
+                fCatch([fCaseClause(NewSymbol 
+                                    {DesugarExpr fCase(NewSymbol 
+                                                       Clauses 
+                                                       fRaise(NewSymbol Pos) 
+                                                       CatchPos) 
+                                                 Params})] 
+                       CatchPos) 
+                fNoFinally 
+                Pos)
+           Pos)
+\end{lstlisting}
+
+Desugaring an \lstinline!fTry! node with a \lstinline!finally! block is more
+involved, and although the logic is similar, handling try-finally expressions and
+statements requires some differences of treatment.
+
+The transformation arises from the fact that the \lstinline!finally! code has to
+be executed, event when an exception was raised
+Let's examine the transformation of \lstinline!try! statements, which
+transforms this \lstinline!try! statement
+
+\begin{lstlisting}
+  try ...
+  finally S 
+  end
+\end{lstlisting}
+
+to
+
+\begin{lstlisting}
+  local X in 
+     X = try 
+            try ... end 
+            unit 
+         catch Y then ex(Y)
+         end 
+     S 
+     case X of ex(Z) then 
+        raise Z end 
+     else skip 
+     end 
+end  
+\end{lstlisting}
+
+
+A new variable (\lstinline!X!) is introduced and unified with a new try
+expression which body is a sequence made of the original try statement
+without its \lstinline!finally! code followed by \lstinline!unit!.
+This means that if execution of the original \lstinline!try! statement does not raise an
+exception, the variable \lstinline!X! will have the value \lstinline!unit!.
+The new try catches all exceptions, which can only be exceptions not caught
+by the original try expression, with one clause which body is a record with label
+\lstinline!ex! holding the caught exception as value.
+
+This construction ensures that the \lstinline!finally! code can be executed,
+even if there is an exception raised not caught by the original try.
+
+After the \lstinline!finally! code is executed, it is needed to check if the
+original \lstinline!try! executed successfully, in which case the \lstinline!X!
+variable has value \lstinline!unit!, or if it failed, in which case the variable
+\lstinline!X! is bound to a record with label \lstinline!ex! holding the
+exception. In the latter case, the exception needs to be re-raised held in the
+record needs to be re-raised.
+The next transformation of a try statement is done in the code generator,
+Section \ref{sec:arch:codegen:exceptions}
+
+We have seen that the original \lstinline!try! statement is transformed in an
+expression by putting it in a sequence which second element is simply the
+\lstinline!unit! expression. One might propose to handle \lstinline!try!
+expressions in the same way, and test if the value bound to \lstinline!X! is a
+record with label \lstinline!ex! to know if an exception was raised. 
+But we have to accept a \lstinline!try! expression which
+value is a record with lable \lstinline!ex!! The consequence is that the
+transformation applied in case of \lstinline!try! expressions is of the same
+vein, but with a different value for the new \lstinline!try! expression.
+The body of the new \lstinline!try! expression is simply a record of label
+\lstinline!ok! and holding as value the original try expression.
+Wrapping the value of the original \lstinline!try! expression in a record
+enables us to check, after execution of the \lstinline!finally! code, if the
+execution was successful or not.
+The next transformation applied to \lstinline!try! expressions take place in 
+the unnester (see Section \ref{sec:arch:unnester:exceptions}.
+
+
+
+
 \subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:arch:unnester:unification}
@@ -2104,6 +2367,107 @@ The unnester is implemented by a function called \lstinline!Unnester!. The unnes
   \item  \lstinline!UnnestFBoolCase! is called to unnest \lstinline!if..then..else! instructions.
 \end{itemize}
 If the unnester encounters a record in the AST for which no specific operation is prescribed, it recursively unnests each feature of the record.
+\subsubsection{Exceptions}\label{sec:arch:unnester:exceptions}
+\lstinline!raise! expressions at this stage are present in the form
+\lstinline!Sym=raise E end!, and this unification statement is simply replaced by
+\lstinline!raise E end! 
+
+A \lstinline!try! expression at this stage is found in the form 
+\begin{lstlisting}
+   Sym = try Body 
+       [ catch y then CatchExpr ] 
+       [ finally S ] 
+       end
+\end{lstlisting}
+and the unnesting simply consists of injecting the unification inside the
+\lstinline!try!'s body and inside each clause, resulting in:
+\begin{lstlisting}
+   try X in 
+      X = Body 
+      Sym = X 
+   [ catch y then Sym = CatchExpr ] 
+   [ finally S ] 
+   end
+\end{lstlisting}
+
+There is a subtlety though, in that the symbol originally unified with the \lstinline!try!
+expression, when injected in the \lstinline!try!, is not directly unified with
+the original body. This is to account for the special case of a procedure
+raising an exception after having bound \lstinline!Sym!. Here is an
+illustration, actually from the test suite of the compiler (see test 372):
+\begin{lstlisting}
+   local
+      proc {P ?X}
+         X = 42
+         raise exception end
+      end
+   
+      Y =
+      try {P}
+      catch exception then
+         error
+      end
+   in
+      {Show Y}
+   end
+\end{lstlisting}
+With a single assignation, the transformation would result in 
+\begin{lstlisting}
+   local
+      proc {P ?X}
+         X = 42
+         raise exception end
+      end
+   
+      try {P Y}
+      catch exception then
+         Y=error
+      end
+   in
+      {Show Y}
+   end
+\end{lstlisting}
+
+
+In this case \lstinline!Y! would be bound by
+the procedure to 42, before it raises an exception. 
+But when the exception is caught, \lstinline!Y! is again
+assigned, this time with \lstinline!error!.
+
+The double assignation solves this problem, by producing this code:
+\begin{lstlisting}
+   local
+      proc {P ?X}
+         X = 42
+         raise exception end
+      end
+   
+      try 
+         X
+      in 
+        X={P}
+        Y=X
+      catch exception then
+         Y=error
+      end
+   in
+      {Show Y}
+   end
+\end{lstlisting}
+
+When \lstinline!P! raises its exception, it hasn't bound \lstinline!Y! but the
+proxy variable \lstinline!X!. Once the statement \lstinline!Y=X! is reached, no
+exception can be raise anymore, and there is no risk of executing the
+assignation \lstinline!Y=error! in the \lstinline!catch! clause.
+
+
+Don't forget that the statement produced is then recursively unnested.
+
+The next transformation applied to these \lstinline!try! statements take place
+in the code generator, Section \ref{sec:arch:codegen:exceptions}.
+
+
+
 \subsection{Globaliser}\label{sec:arch:globaliser}            
 This pass handles the global variables of a procedure, that is, variables used by a procedure that it does not declare (implying that the declaration is done at an upper level). It is interesting to note that the concept of global variables is only defined for procedures.
 Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
@@ -2574,6 +2938,39 @@ some tests will cover only one clause.
 \subsubsection{Instructions Sequences}
 Generating opcodes for sequences of instructions consists in the generation in order of the opcodes for each element of the sequence. 
 When \lstinline!CodeGen! visits a node \lstinline!fAnd(First Second)! in the AST, it first generates the opcodes for \lstinline!First!, then for \lstinline!Second!.
+
+
+\subsubsection{Exceptions}\label{sec:arch:codegen:exceptions}
+The nodes present for the \lstinline!try! statements in the AST handled by the
+code generator are of the form
+\begin{lstlisting}
+   fTry(Body 
+        fCatch( [fCaseClause(E Case)] 
+                CatchPos) 
+        fNoFinally 
+        Pos)
+\end{lstlisting}
+It corresponds to the code
+\begin{lstlisting}
+  try Body catch E then Case end
+\end{lstlisting}
+and translates in opcodes as:
+\begin{lstlisting}
+  setupExceptionHandler(TryLabel)
+  {CodeGen Case}
+  branch(EndLabel)
+  lbl(TryLabel)
+  {CodeGen Body}
+  popExceptionHandler
+  lbl(EndLabel)
+\end{lstlisting}
+
+\lstinline!setupExceptionHandler(TryLabel)! triggers the virtual machine to setup an
+exception handler, and then jumps to the \lstinline!TryLabel!, which is the
+location of the opcodes for \lstinline!Body!. If an exception is raised, the
+execution jumps to the instruction following the setup of the handler. If the
+\lstinline!Body! executes sucessfully (without exception), the exception handler
+is removed, and execution continues passed the \lstinline!EndLabel!.
 
 
 \subsubsection{Compiler Code Notes}
