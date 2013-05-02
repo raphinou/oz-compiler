@@ -11,6 +11,7 @@ import
    %Debug at 'x-oz://boot/Debug'
    Compile at '../lib/Compile.ozf'
 define
+   SourceFile
    AST
    PrivateNarratorO
    NarratorO = {New Narrator.'class' init(?PrivateNarratorO)}
@@ -26,6 +27,7 @@ define
    case {Application.getArgs plain} of [FileName] then
      AST = {Compiler.parseOzFile FileName PrivateNarratorO
           GetSwitch EnvDictionary}
+     SourceFile=FileName
    end
    OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener AST.1} }}}}}} params() }
    {Show 'Generated OpCodes:'}
@@ -33,8 +35,8 @@ define
 
    % Build top level abstraction
    Arity = 0
-   PrintName = 'Q'
-   DebugData = d(file:'Truc.oz' line:32 column:3)
+   PrintName = 'Top Level Abstraction'
+   DebugData = d(file:SourceFile line:1 column:1)
    Switches = switches
 
    CodeArea VS

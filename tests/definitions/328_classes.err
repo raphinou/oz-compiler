@@ -1,0 +1,18 @@
+
+%********************** Error: object system ********************
+%**
+%** Inheritance from final class
+%**
+%** Final class used as parent: <Chunk>
+%** Class to be created:        'C2'
+%** remove prop final from parent class or change inheritance relation
+%**
+%** Call Stack:
+%** procedure 'Exception.raiseError' in 
+%** procedure 'CheckParents' in file "/home/sjrd/documents/projets/mozart2/lib/main/base/Object.oz", line 269, column 7, 
+%** procedure 'NewFullClass' in file "/home/sjrd/documents/projets/mozart2/lib/main/base/Object.oz", line 301, column 7, 
+%** procedure 'Top Level Abstraction' in file "definitions/328_classes.oz", line 1, column 1, 
+%** procedure in file "tests/TestRunner.oz", line 1, column 1, 
+%** procedure 'RootManager,Pickle/fast' in file "/home/sjrd/documents/projets/mozart2/lib/main/init/Module.oz", line 244, column 7, 
+%** procedure in file "/home/sjrd/documents/projets/mozart2/lib/main/base/Base.oz", line 82, column 22, 
+%**--------------------------------------------------------------
