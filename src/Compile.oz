@@ -144,6 +144,7 @@ define
       meth init(Pos)
          Symbol, init('' Pos)
          type:=synthetic
+         name:=''
       end
       meth toVS(?R)
          % Override this method to avoid problems with irrelevant attributes
@@ -1453,12 +1454,12 @@ define
             (Params.'self'):=SelfSymbol
             R=fColon(fConst(Ind Pos) fRecord(fConst('#' Pos) [FName fProc(fDollar(Pos) [SelfSymbol MessageSymbol] {DesugarStat NewBody Params} nil Pos)] ))
             (Params.'self'):=unit
+            R
 
-            {Show 'transformed method:'}
-            {DumpAST.dumpAST R}
          end
 
          fun {TransformAttribute Rec Params}
+            % Builds the feature-value pair for the attr and feat record
             case Rec
             of '#'(F V) then
                fColon(F V)
@@ -1469,8 +1470,11 @@ define
 
 
          Parents NewParents NewMeths NewAttrs NewFeats NewProps PrintName
+         ClassSym
       in
          NewMeths=fRecord(fConst('#' Pos) {List.mapInd Methods fun {$ Ind I} {TransformMethod Ind I Params} end } )
+
+         % Collect attributes, features, and attributes
          {List.forAll AttributesAndProperties  proc {$ I}
                                                   case I
                                                   of fAttr(L _) then
@@ -1479,9 +1483,9 @@ define
                                                      NewFeats=fRecord(fConst('feat' Pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
                                                   [] fFrom(L _) then
                                                      Parents=L
-
                                                   end
                                                end}
+         % Set default values if no attribute, feature, parent was collected in previous step
          if {Not {IsDet NewAttrs}} then
             NewAttrs=fConst('attr'() Pos)
          end
@@ -1493,9 +1497,15 @@ define
             else
                NewParents={ListToAST {List.map Parents fun{$ I}{DesugarExpr I Params} end}}
          end
-         %NewFeats=fConst('feat'() Pos)
          NewProps=fConst(nil Pos)
-         PrintName=fConst(printname Pos)
+         % FIXME: set PrintName
+         case FSym
+         of fDollar(_) then
+            PrintName=fConst('' Pos)
+         else
+            fSym(ClassSym _)=FSym
+            PrintName=fConst({ClassSym get(name $)} Pos)
+         end
          {DesugarStat fApply( fConst(OoExtensions.'class' Pos) [ NewParents NewMeths NewAttrs NewFeats NewProps PrintName FSym] Pos) Params}
       end
 
