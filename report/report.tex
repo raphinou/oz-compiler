@@ -465,7 +465,7 @@ results in
 \begin{lstlisting}
    fThread(Body pos)
 \end{lstlisting}
-\subsection{Locks}
+\subsection{Locks}\label{sec:input:locks}
 Oz enables the programmer to protect a critical section with a lock previously create with \lstinline!L={NewLock}!:
 \begin{lstlisting}
    lock L then
@@ -473,7 +473,9 @@ Oz enables the programmer to protect a critical section with a lock previously c
    end
 \end{lstlisting}
 
-This code results in a fLockThen record in the AST, with 3 features: the lock L, the body of the critical section, and the position in the code.
+This code results in a fLockThen record in the AST, with 3 features: the lock L,
+the body of the critical section, and the position in the code:
+\lstinline!fLock(L Body Pos)!.
 \subsection{If then else}
 The if..then..else construct is put in records:
 fBoolCase( Condition ThenCode ElseCode)
@@ -641,7 +643,7 @@ values in the record are the method arguments found in
 \lstinline!fNoDefault! if none was provided.
 This is illustrated by the method \lstinline!hello(A1)!.
 
-The class of this example had no feature or attribute defined, hence the empty
+The class of this example had no feature, attribute, parent or property defined, hence the empty
 list as second value in the record.
 Both attribute and features are placed in this list. Attributes are placed in
 \lstinline!fAttr(AttrsList)! records and features are placed in
@@ -690,7 +692,9 @@ We also see clearly that all attributes are placed in one \lstinline!fAttr!
 record, and all features in on \lstinline!fFeat! record.
 
 This list also contains more information: the parents of the class, as well as
-the properties of the class. These are located in \lstinline!fFrom(ParentsList)!. 
+the properties of the class. 
+
+The parents are located in \lstinline!fFrom(ParentsList)!. 
 Here is an example from a class inheriting from classes \lstinline!A! and
 \lstinline!B!. In Oz, this class will be defined by
 \begin{lstlisting}
@@ -719,6 +723,22 @@ records. A class having the locking property would have this \lstinline!fProp! r
                   nil)
                pos)
 \end{lstlisting}
+
+When a class has the \lstinline!locking! property, a lock is implicitly created,
+that can be used in a method with the \lstinline!lock! statement without
+specifying the lock object, as this:
+
+\begin{lstlisting}
+   meth update(A)
+      lock
+         ..
+      end
+   end
+\end{lstlisting}
+
+This \lstinline!lock! instruction is put in the AST as a node
+\lstinline!fLock(Body Pos)!. The next transformation to this node 
+takes place in the desugar step described page \pageref{desugar:classes:lock}.
 
 Assignation to attributes can be done in two ways. The first has the same syntax
 as cell updates, described in Section \ref{sec:input:cells}:
@@ -1851,7 +1871,7 @@ end
 \end{lstlisting}
 
 This form will then be handled by later passes of the compiler.
-\subsubsection{Classes}
+\subsubsection{Classes}\label{sec:arch:desugar:classes}
 Thanks to the support by the virtual machine of classes, handling classes in the
 compiler revolves in desugaring the class definition in a call to
 \lstinline!OoExtensions.'class'!. 
@@ -1861,9 +1881,14 @@ The \lstinline!Desugar! function just has to correctly build the arguments of
 the call. Of course, the arguments are themselves ASTs. So an argument that is a
 list will be in fact a \lstinline!fRecord!.
 
+Information to build the elements \lstinline!Parents!, \lstinline!Attrs!,
+\lstinline!Feats! and \lstinline!Props! come from the \lstinline!Specs! value in
+the \lstinline!fClass! node.
+
 \lstinline!Parents! is simply a list of the parents of the class. The elements
-of the list are simply the \lstinline!fSym! record holding the symbols corresponding to the
-parent classes.
+of the list are simply the \lstinline!fSym! record holding the symbols
+corresponding identifying the parent classes.
+
 
 \lstinline!Meths! is a \#-tuple with one item of the form \lstinline!name#Proc! for each
 method, where \lstinline!name! is the method name, and Proc is a procedure
@@ -1946,8 +1971,31 @@ provided in the class definition, or the result to a call to
 same way as \lstinline!Attrs!, but with the features present in the class
 definition.
 
-%FIXME: need more explanations
-\lstinline!Props! is the list of properties of the class. Items are atoms.
+\lstinline!Props! is similar to \lstinline!Parents! in that it is simply a list of properties of the class (\lstinline!final!,
+\lstinline!locking!). The \lstinline!locking! property implicitly declares a
+lock object for the class, which can then be used with the \lstinline!lock!
+instruction, which then appears in the AST as \lstinline!fLock(Body Pos)!, which
+differ from the nodes \lstinline!fLockThen! described in Section
+\ref{sec:input:locks}, also by not specifying the lock object. \lstinline!fLock!
+needs to be desugared to make the lock object explicit. The lock object of in a
+class instance can be obtained by a call to
+\lstinline!OoExtensions.'getObjLock'!, which can then be used in a
+\lstinline!fThenLock! instruction. In practice, the node
+\label{desugar:classes:lock}
+\begin{lstlisting}
+   fLock(Body Pos)
+\end{lstlisting}
+
+will be desugared in 
+
+\begin{lstlisting}
+   fLockThen( fApply(fConst(OoExtensions.'getObjLock' Pos) 
+                     [@(Params.'self')] 
+                     Pos)
+              Body 
+              Pos)  
+\end{lstlisting}
+which is itself desugared.
 
 \lstinline!PrintName! is an atom which is the name of the class, or '' if it is
 an anonymous class.
