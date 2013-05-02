@@ -1416,30 +1416,35 @@ define
                       % It is is a fMethColonArg, the feature is found in its first value.
                       % Except for the distinction in the feature, both cases have the same code.
                                              NewSym
+                                             Pos
                                           in
                                              case I
                                              of fMethArg(Sym fNoDefault) then
+                                                Pos={GetPos Sym}
                                                 NewSym={HandleDollarArg Sym DollarSym}
-                                                NewSym#fEq(NewSym fOpApply('.' [MessageSymbol fConst(Ind pos)] pos) pos)
+                                                NewSym#fEq(NewSym fOpApply('.' [MessageSymbol fConst(Ind Pos)] Pos) Pos)
                                              [] fMethArg(Sym fDefault(Default _)) then
+                                                Pos={GetPos Sym}
                                                 NewSym={HandleDollarArg Sym DollarSym}
-                                                NewSym#fEq(NewSym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol fConst(Ind pos)] pos) fOpApply('.' [MessageSymbol fConst(Ind pos) ] pos) Default pos) pos)
+                                                NewSym#fEq(NewSym fBoolCase(fApply(fConst(Value.hasFeature Pos) [MessageSymbol fConst(Ind Pos)] Pos) fOpApply('.' [MessageSymbol fConst(Ind Pos) ] Pos) Default Pos) Pos)
                                              [] fMethColonArg(F Sym fNoDefault) then
                                                 NewSym={HandleDollarArg Sym DollarSym}
-                                                NewSym#fEq(NewSym fOpApply('.' [MessageSymbol F ] pos) pos)
+                                                Pos={GetPos Sym}
+                                                NewSym#fEq(NewSym fOpApply('.' [MessageSymbol F ] Pos) Pos)
                                              [] fMethColonArg(F Sym fDefault(Default _)) then
+                                                Pos={GetPos Sym}
                                                 NewSym={HandleDollarArg Sym DollarSym}
-                                                NewSym#fEq(NewSym fBoolCase(fApply(fConst(Value.hasFeature pos) [MessageSymbol F] pos) fOpApply('.' [MessageSymbol F ] pos) Default pos) pos)
+                                                NewSym#fEq(NewSym fBoolCase(fApply(fConst(Value.hasFeature Pos) [MessageSymbol F] Pos) fOpApply('.' [MessageSymbol F ] Pos) Default Pos) Pos)
 
                                              end
                                           end}
             if HeaderSymbol\=unit then
-               DeclsWithMethHeader={List.append [ HeaderSymbol#fEq(HeaderSymbol MessageSymbol pos)] Decls }
+               DeclsWithMethHeader={List.append [ HeaderSymbol#fEq(HeaderSymbol MessageSymbol {GetPos HeaderSymbol})] Decls }
             else
                DeclsWithMethHeader=Decls
             end
             if {List.length DeclsWithMethHeader}>0 then
-               NewBody=fLocal( {WrapInFAnd {List.map DeclsWithMethHeader fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [{InjectDollarIfNeeded Body @DollarSym}] {List.map DeclsWithMethHeader fun{$ _#Init} Init end }}} Pos)
+               NewBody=fLocal( {WrapInFAnd {List.map DeclsWithMethHeader fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [{InjectDollarIfNeeded Body @DollarSym}] {List.map DeclsWithMethHeader fun{$ _#Init} Init end }}} {GetPos Body})
             else
                NewBody={InjectDollarIfNeeded Body @DollarSym}
             end
@@ -1458,7 +1463,7 @@ define
             of '#'(F V) then
                fColon(F V)
             else
-               fColon(Rec fConst({Boot_Name.newUnique 'ooFreeFlag'} pos))
+               fColon(Rec fConst({Boot_Name.newUnique 'ooFreeFlag'} {GetPos Rec}))
             end
          end
 
@@ -1466,33 +1471,31 @@ define
          Parents NewParents NewMeths NewAttrs NewFeats NewProps PrintName
       in
          NewMeths=fRecord(fConst('#' Pos) {List.mapInd Methods fun {$ Ind I} {TransformMethod Ind I Params} end } )
-         {Show 'NewMeths = '}
-         {DumpAST.dumpAST NewMeths _}
          {List.forAll AttributesAndProperties  proc {$ I}
                                                   case I
                                                   of fAttr(L _) then
-                                                     NewAttrs=fRecord(fConst('attr' pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
+                                                     NewAttrs=fRecord(fConst('attr' Pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
                                                   [] fFeat(L _) then
-                                                     NewFeats=fRecord(fConst('feat' pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
+                                                     NewFeats=fRecord(fConst('feat' Pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
                                                   [] fFrom(L _) then
                                                      Parents=L
 
                                                   end
                                                end}
          if {Not {IsDet NewAttrs}} then
-            NewAttrs=fConst('attr'() pos)
+            NewAttrs=fConst('attr'() Pos)
          end
          if {Not {IsDet NewFeats}} then
-            NewFeats=fConst('feat'() pos)
+            NewFeats=fConst('feat'() Pos)
          end
          if {Not {IsDet Parents}} then
-               NewParents=fConst(nil pos)
+               NewParents=fConst(nil Pos)
             else
                NewParents={ListToAST {List.map Parents fun{$ I}{DesugarExpr I Params} end}}
          end
-         %NewFeats=fConst('feat'() pos)
-         NewProps=fConst(nil pos)
-         PrintName=fConst(printname pos)
+         %NewFeats=fConst('feat'() Pos)
+         NewProps=fConst(nil Pos)
+         PrintName=fConst(printname Pos)
          {DesugarStat fApply( fConst(OoExtensions.'class' Pos) [ NewParents NewMeths NewAttrs NewFeats NewProps PrintName FSym] Pos) Params}
       end
 
