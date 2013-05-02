@@ -1675,6 +1675,8 @@ define
             AST
          [] fAtom(_ _) then
             raise namerLeftFAtomIntactAtDesugar end
+         [] fEq(LHS _ _) then
+            fAnd(AST LHS)
          else
             {DumpAST.dumpAST AST _}
             raise unhandledRecordInDesugarExpr end
