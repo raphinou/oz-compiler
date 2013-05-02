@@ -66,13 +66,17 @@ define
       else
          NewIndent = Indent#'   '
       in
-         if {Label AST}=='#' then
-            {System.showInfo Indent#'#('}
+         if {Label AST}=='export' then
+            {System.showInfo Indent#'#(...)'}
          else
-            {System.showInfo Indent#{Label AST}#'('}
+            if {Label AST}=='#' then
+               {System.showInfo Indent#'#('}
+            else
+               {System.showInfo Indent#{Label AST}#'('}
+            end
+            {Record.forAll AST proc {$ X} {DumpASTEx X NewIndent} end}
+            {System.showInfo Indent#')'}
          end
-         {Record.forAll AST proc {$ X} {DumpASTEx X NewIndent} end}
-         {System.showInfo Indent#')'}
       end
    end
 
