@@ -1351,24 +1351,9 @@ define
             % - HandleDollarArg which replaces the dollard arg by a symbol
             % - InjectDollarIfNeeded which add unification of the dollar symbol with the method body if there was
             %   indeed a nesting marker in the arguments list
-            SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
 
 
-            % FIXME: useless code left here just in case
-            %fun {BuildMessage Name Args Params}
-            %   % Build message record corresponding to the call
-            %   {List.foldL Args fun{$ Acc Arg }
-            %                       %FIXME handle defaults
-            %                       case Arg
-            %                       of fMethArg(Var Default) then
-            %                          {Record.adjoin Acc Name(Var)}
-            %                       [] fMethColonArg(fConst(F _) V Default) then
-            %                          {Record.adjoin Acc Name(F:V)}
-            %                        end
-            %                    end
-            %                    Name()}
-            %end
-            %Message
+
             fun {NameAndArgs Signature}
                % Extract Identifier and Arguments of the method from its signature
                case Signature
@@ -1398,6 +1383,7 @@ define
             NewBody
             Decls
             R
+            SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
             MessageSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
             HeaderSymbol
             DollarSym={NewCell unit}
@@ -1405,10 +1391,8 @@ define
             Args
             DeclsWithMethHeader
          in
-            %Message={BuildMessage Name Args Params}
             FName#Args={NameAndArgs Signature}
             HeaderSymbol={GetHeaderSymbol Signature}
-
 
             Decls = {List.mapInd Args  fun {$ Ind I}
                       % If a default value is provided, inject code in the AST to check if a value was provided,
@@ -1439,16 +1423,20 @@ define
 
                                              end
                                           end}
+            % Add method head capture if present
             if HeaderSymbol\=unit then
                DeclsWithMethHeader={List.append [ HeaderSymbol#fEq(HeaderSymbol MessageSymbol {GetPos HeaderSymbol})] Decls }
             else
                DeclsWithMethHeader=Decls
             end
+
+            % Declare needed symbols, if any
             if {List.length DeclsWithMethHeader}>0 then
                NewBody=fLocal( {WrapInFAnd {List.map DeclsWithMethHeader fun{$ Sym#_} Sym end}} {WrapInFAnd {List.append  [{InjectDollarIfNeeded Body @DollarSym}] {List.map DeclsWithMethHeader fun{$ _#Init} Init end }}} {GetPos Body})
             else
                NewBody={InjectDollarIfNeeded Body @DollarSym}
             end
+
             % Desugar the body with the self symbol set.
             % This will transform @bla in catAccessOO
             (Params.'self'):=SelfSymbol
@@ -1469,7 +1457,7 @@ define
          end
 
 
-         Parents NewParents NewMeths NewAttrs NewFeats NewProps PrintName
+         Parents NewParents NewMeths NewAttrs NewFeats Props NewProps PrintName
          ClassSym
       in
          NewMeths=fRecord(fConst('#' Pos) {List.mapInd Methods fun {$ Ind I} {TransformMethod Ind I Params} end } )
@@ -1483,6 +1471,8 @@ define
                                                      NewFeats=fRecord(fConst('feat' Pos) {List.map L fun {$ Attr} {TransformAttribute Attr Params} end })
                                                   [] fFrom(L _) then
                                                      Parents=L
+                                                  [] fProp(L _) then
+                                                     Props=L
                                                   end
                                                end}
          % Set default values if no attribute, feature, parent was collected in previous step
@@ -1497,8 +1487,13 @@ define
             else
                NewParents={ListToAST {List.map Parents fun{$ I}{DesugarExpr I Params} end}}
          end
-         NewProps=fConst(nil Pos)
-         % FIXME: set PrintName
+         if {Not {IsDet Props}} then
+               NewProps=fConst(nil Pos)
+            else
+               NewProps={ListToAST {List.map Props fun{$ I}{DesugarExpr I Params} end}}
+         end
+
+         % Set PrintName
          case FSym
          of fDollar(_) then
             PrintName=fConst('' Pos)
@@ -1757,6 +1752,11 @@ define
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)) Pos)
+
+         [] fLock(Body Pos) andthen @(Params.'self')\=unit then
+            {DesugarStat fLockThen(fApply(fConst(OoExtensions.'getObjLock' Pos) [@(Params.'self')] Pos) Body Pos) Params}
+         [] fLock(_ _) andthen @(Params.'self')==unit then
+            raise lockNeedsSelfInDesugarStat end
          [] fLockThen(Lock Body Pos) then
             % Create a wrapping proc taking no argument, and pass it to the builtin Base.lockIn
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
