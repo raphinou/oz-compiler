@@ -432,7 +432,7 @@ define
       [] fRecord(_ Features) then
          {List.foldL Features  fun {$ Acc I}
                                     case I
-                                    of fColon(F V ) then
+                                    of fColon(_ V) then
                                        {Record.adjoin {PVE V} Acc}
                                     else
                                        {Record.adjoin {PVE I} Acc}
@@ -661,6 +661,8 @@ define
             % Wrap Body in one fCase for each item of the list SymbolsAndPatterns,
             % its items being of the form Symbol#Pattern, where Symbol is the value
             % tested against Pattern.
+            % FIXME: change it to one fCase with pattern being a list, as described
+            % at http://www.mozart-oz.org/documentation/notation/node6.html#label22
             if {Not {List.is SymbolsAndPatterns}}then
                raise wrapInFCasesNeedsAList end
             else
@@ -955,7 +957,6 @@ define
                of fMeth(fRecord(Name Args) Body Pos) then
                   NewArgs
                   NewBody
-                  NamedH
                   R
                in
                   {Params.env backup()}
@@ -966,7 +967,6 @@ define
                [] fMeth(fOpenRecord(Name Args) Body Pos) then
                   NewArgs
                   NewBody
-                  NamedH
                   R
                in
                   {Params.env backup()}
@@ -1350,7 +1350,6 @@ define
             % - HandleDollarArg which replaces the dollard arg by a symbol
             % - InjectDollarIfNeeded which add unification of the dollar symbol with the method body if there was
             %   indeed a nesting marker in the arguments list
-            NewArgs
             SelfSymbol=fSym({New Symbol init('self' Pos)} Pos)
 
 
@@ -1378,7 +1377,7 @@ define
                   % FIXME: in this case, we should inject code to check that the features we get in the message
                   % cover the required features found in the definition
                   InFName#InArgs
-               [] fEq(M V Pos) then
+               [] fEq(M _ _) then
                   {NameAndArgs M}
                else
                   Signature#nil
@@ -1388,7 +1387,7 @@ define
             fun {GetHeaderSymbol Signature}
                % Returns Symbol which will hold a reference to the method head
                case Signature
-               of fEq(M V Pos) then
+               of fEq(_ V _) then
                   V
                else
                   unit
@@ -1402,7 +1401,6 @@ define
             HeaderSymbol
             DollarSym={NewCell unit}
             FName
-            Name
             Args
             DeclsWithMethHeader
          in
@@ -1610,7 +1608,8 @@ define
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} fEq(NewSymbol Else Pos) Pos) Params} NewSymbol) Pos)
-         [] fClass(FSym AttributesAndProperties Methods Pos) then
+         [] fClass(_ _ _ _) then
+            % fClass(FSym AttributesAndProperties Methods Pos)
             {DesugarClass AST Params}
          [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
             %FIXME: handle multiple caseclauses
@@ -1754,13 +1753,14 @@ define
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
          [] fCase(Val Clauses Else Pos) then
             fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
-         [] fClass(FSym AttributesAndProperties Methods Pos) then
+         [] fClass(_ _ _ _) then
+            % fClass(FSym AttributesAndProperties Methods Pos)
             {DesugarClass AST Params}
-         [] fAssign(LHS RHS Pos) andthen @(Params.'self')==unit then
+         [] fAssign(_ _ _) andthen @(Params.'self')==unit then
             raise assignAttributeNeedsSelf end
          [] fAssign(LHS RHS Pos) then
             fApply( fConst(Boot_Object.attrPut Pos) [@(Params.'self') {DesugarExpr LHS Params} {DesugarExpr RHS Params}] Pos)
-         [] fObjApply(LHS RHS Pos) andthen @(Params.'self')==unit then
+         [] fObjApply(_ _ _) andthen @(Params.'self')==unit then
                raise staticCallNeedsSelf end
          [] fObjApply(LHS RHS Pos) then
                              {DesugarStat
@@ -3065,7 +3065,7 @@ define
             {HandleCase Clauses Params}|
             nil
 
-         [] fTry(Body fCatch([fCaseClause(E Case)] CatchPos) Finally Pos) then
+         [] fTry(Body fCatch([fCaseClause(E Case)] _) fNoFinally _) then
             TryLabel={GenLabel}
             EndLabel={GenLabel}
          in
