@@ -1845,6 +1845,21 @@ define
    %#################
    fun {Unnester AST}
    %#################
+      % Functions to update Params.tail
+      % If a node is not in tail position, its childen are not in tail position
+      % if a node is in tail position, only its last child is in tail position.
+      % So one way to do it is reuse the parent's tail flag for the last child,
+      % and set it to false for all others
+      % It is just when entering a proc that we need to override the value with
+      % true for the body
+      fun {InTail Params}
+         {Record.adjoin Params params(tail:true)}
+      end
+      fun {NoTail Params}
+         {Record.adjoin Params params(tail:false)}
+      end
+
+
       fun {IsElementary AST}
       %---------------------
          % Only fConst and fSym are elementary
@@ -2074,14 +2089,15 @@ define
 
       fun {UnnestFCase fCase(TestedValue Clauses Else Pos) Params}
       %------------------------------------------------------------------
-         % if the condition is elementary, simply unnest both branches
+         % if the condition is elementary, simply unnest Clauses
+         % do not change the tail flag in Params, as all Clauses and Else code are in tail position if the
+         % case is in tail position
          % if the condition is non elementary, create a new symbol to be used as the condition.
          if {IsElementary TestedValue} then
             fCase(TestedValue {List.map Clauses fun{$ I} {UnnesterInt I Params} end } {UnnesterInt Else Params}  Pos)
          else
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            % FIXME: can as well call unnester on body alone, as this is what this call will do
             {UnnesterInt fLocal( NewSymbol
                                  fAnd( fEq( NewSymbol TestedValue Pos)
                                        fCase(NewSymbol Clauses Else Pos))
@@ -2105,6 +2121,11 @@ define
             % - declaring a new symbol
             % - unifying this new symbol with the argument
             % - replacing the argument by the new symbol in the argument list.
+            % To declare all symbols with one fLocal, we collect all info in a list
+            % of items FV#Decls#Uni with three components:
+            % - FV is the Feature-Value pair to be put in the record definition
+            % - Decls is the symbol to be declared, replacing the complex value in FV if any. unit if none
+            % - Uni is the unification needed to unnest this pair, unit if none.
 
             % FIXME: set Pos!
             % fRecords do not have a position feature, so currently no position is set!
@@ -2117,34 +2138,67 @@ define
                % Handle the head of the remaining list, and make a recursive call
                X = fColon(F V)
                if {IsElementary V} then
-                 {UnnestFRecordInt FRecordAST X|NewArgsList Xs}
+                 {UnnestFRecordInt FRecordAST X#unit#unit|NewArgsList Xs}
                else
                   case V
                   of fOpenRecord(_ _) then
-                     {UnnestFRecordInt FRecordAST fColon(F {UnnestFRecordInt V nil V.2 })|NewArgsList Xs}
+                     {UnnestFRecordInt FRecordAST fColon(F {UnnestFRecordInt V nil V.2 })#unit#unit|NewArgsList Xs}
 
                   else
-                     NewSymbol={New SyntheticSymbol init(pos)}
+                     NewSymbol=fSym({New SyntheticSymbol init(pos)} pos)
                   in
-                     {UnnesterInt fLocal(fSym(NewSymbol pos)
-                                         fAnd( fEq(fSym(NewSymbol pos) V pos)
-                                               {UnnestFRecordInt FRecordAST fColon(F fSym(NewSymbol pos))|NewArgsList Xs}) pos)
-                                  Params}
+                     {UnnestFRecordInt FRecordAST fColon(F NewSymbol)#NewSymbol#fEq(NewSymbol V pos)|NewArgsList Xs}
                   end
                end
             else
+               Unifications
+               Decls
+               FinalArgs
+               ResultRecord
+               UniRes
+               DeclsRes
+            in
                % All unnested arguments are now found in NewArgsList
                % We can now work on the fRecord itself
                % otherwise no recursive call
                % all fLocal introduced by complex arguments have been directly place out of fRecord when traversing ArgsRest
                % and all what's left in the argument list are Symbols.
-               case FRecordAST
-               of fRecord(Op _) then
-                  fRecord(Op {List.reverse NewArgsList})
-               [] fOpenRecord(Op _) then
-                  fOpenRecord(Op {List.reverse NewArgsList})
+               %case FRecordAST
+               %of fRecord(Op _) then
+               %   fRecord(Op {List.reverse NewArgsList})
+               %[] fOpenRecord(Op _) then
+               %   fOpenRecord(Op {List.reverse NewArgsList})
+               %end
+
+               Unifications={List.map {List.filter NewArgsList fun{$ _#_#Uni} Uni\=unit end}
+                                      fun {$ _#_#Uni} Uni end}
+               Decls = {List.map  {List.filter NewArgsList fun{$ _#Sym#_} Sym\=unit end}
+                                  fun {$ _#Sym#_} Sym end}
+               FinalArgs = {List.reverse {List.mapInd  NewArgsList fun {$ Ind Arg#_#_} Arg end} }
+
+               {Show debugLists}
+               {DumpAST.dumpAST Unifications _}
+               {DumpAST.dumpAST Decls _}
+               {DumpAST.dumpAST FinalArgs _}
+               ResultRecord = case FRecordAST
+                        of fRecord(Op _) then
+                           fRecord(Op FinalArgs)
+                        [] fOpenRecord(Op _) then
+                           fOpenRecord(Op FinalArgs)
+                        end
+               if {List.length Unifications}>0 then
+                  UniRes=fAnd({UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} ResultRecord)
+               else
+                  UniRes=ResultRecord
                end
 
+
+               if {List.length Decls }>0 then
+                  DeclsRes = fLocal({WrapInFAnd Decls} UniRes pos)
+               else
+                  DeclsRes=UniRes
+               end
+               DeclsRes
             end
          end
       in
@@ -2182,6 +2236,11 @@ define
             {UnnestFRecord AST Params}
          [] fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) then
             fNamedSideCondition({UnnesterInt Pattern Params} Decls {UnnesterInt Guards Params} GuardSymbol Pos)
+         [] fAnd(First Second) then
+            fAnd({UnnesterInt First {NoTail Params}} {UnnesterInt Second Params})
+         [] fProc(FSym Args Body Flags Pos) then
+            fProc(FSym Args {UnnesterInt Body {InTail Params}} Flags Pos)
+
          else
             {DefaultPass AST UnnesterInt Params}
          end
@@ -2190,7 +2249,7 @@ define
       {Show '-------'}
       {Show 'Unnester'}
       {Show '-------'}
-      {UnnesterInt AST params}
+      {UnnesterInt AST params(tail:true)}
    end
 
 
