@@ -226,7 +226,6 @@ define
    %   NewInstr|CurrentInstrs
    fun {WrapIn Label Instrs WithPos}
       if {Not {List.is Instrs}}then
-         {Show Instrs}
          raise wrapInNeedsAList end
       else
          L = {List.length Instrs}
@@ -265,6 +264,8 @@ define
    fun {ListToAST L}
       case L
       of X|Xs then
+         Pos={GetPos X}
+      in
          fRecord(fConst('|' pos)
                    [fColon(fConst(1 pos) X)
                    fColon(fConst(2 pos) {ListToAST Xs})] )
@@ -327,13 +328,21 @@ define
       @IntLabel
    end
 
-
    fun {GetPos AST}
       fun {GetPosInList L}
          case L
          of X|Xs then
             if {Record.is X} andthen {Record.label X}==pos then
                X
+       elseif {Record.is X} then
+          Tmp
+       in
+          Tmp={GetPosInList {Record.toList X}}
+          if Tmp==pos then
+        {GetPosInList Xs}
+          else
+        Tmp
+          end
             else
                {GetPosInList Xs}
             end
@@ -363,7 +372,7 @@ define
          {List.map AST fun {$ I} {F I Params} end}
       elseif {Record.is AST} then
          case AST
-         of pos(_ _ _ _) then
+         of pos(_ _ _ _ _ _) then
             % Do not go down into position records
             AST
          else
@@ -951,8 +960,8 @@ define
                   NewArgs#NewBody
                end
             in
-               {Show 'Mthod to be named:'}
-               {DumpAST.dumpAST Method _}
+               %{Show 'Mthod to be named:'}
+               %{DumpAST.dumpAST Method _}
                % the env backup and restore is at this level to be able to name the variable capturin the method head
                case Method
                of fMeth(fRecord(Name Args) Body Pos) then
@@ -1038,8 +1047,6 @@ define
             NamedLabelsMethods={List.map Methods fun {$ I} {NameMethodLabel I NewParams} end }
             NewMethods={List.map NamedLabelsMethods fun {$ I} {NameMethod I NewParams} end }
             NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
-            {Show 'NamerNewAttributes:'}
-            {DumpAST.dumpAST NewSpecs _}
             if @(NewParams.init)\=nil then
                ClassWithInit={WrapInFAnd {List.append [fClass(NamedClass NewSpecs NewMethods Pos)] @(NewParams.init)}}
             else
@@ -1506,8 +1513,6 @@ define
 
       fun {DesugarExpr AST Params}
       %---------------------------
-      {Show 'DesugarExpr'}
-      {DumpAST.dumpAST AST _}
          % Desugar expressions
          case AST
          of fProc(Dollar Args Body Flags Pos) then
@@ -1697,8 +1702,6 @@ define
          end
       in
          % Desugar Statements.
-         {Show 'DesugarStat'}
-         {DumpAST.dumpAST AST _}
          case AST
          of fAnd(First Second) then
             % if the fAnd is a statement, both parts are treated as statements
@@ -1713,11 +1716,7 @@ define
 
          [] fApply(Op Args Pos) then
             % both Op and Args must be expression and expressions list respectively
-            {Show 'Will desugar fApply'}
-            {Show 'Op is '#Op}
-            {Show 'is Args a list?'#{List.is Args}}
-            {Show Args}
-            fApply({DesugarOp Op Args Pos Params} {List.map Args fun {$ I} {Show 'Will desugar arg'#I}{DesugarExpr I Params} end } Pos)
+            fApply({DesugarOp Op Args Pos Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
 
          [] fEq(LHS RHS Pos) then
             fEq({DesugarExpr LHS Params} {DesugarExpr RHS Params} Pos)
@@ -1904,29 +1903,21 @@ define
             fun {CheckDollarInRecord AST DollarSym Found}
                % Looks in AST for fDollar.
                % If found, creates a new symbol which replaces the fDollar and is place in DollarSym
-               {Show debug}
-               {Show checkdollar}
-               {DumpAST.dumpAST AST _}
                case AST
                of fRecord(L Features) then
                   fRecord(L {List.map Features fun {$ I} {CheckDollarInRecord I DollarSym Found} end })
                [] fColon(F V) then
                   fColon(F {CheckDollarInRecord V DollarSym ?Found})
                [] fDollar(_) then
-               {Show debugsetfoundtotrue}
                   Found:=true
                   DollarSym
                else
-               {Show debugsetfoundtofalse}
                   AST
                end
             end
             fun {InjectSym FSym Args HadDollar}
                %This function injects the symbol to assign to in the arguments
                %list, either in the dollar location or as last argument.
-               {Show debug}
-               {Show inject}
-               {Show Args}
                case Args
                of fDollar(_)|Rs then
                   if HadDollar then
@@ -1938,11 +1929,9 @@ define
                   Found={NewCell false}
                in
                   Res={CheckDollarInRecord R FSym Found}
-                  {Show debugfound}
                   if @Found andthen HadDollar then
                      raise multipleNestingMarkersInArgs end
                   end
-                  {Show @Found}
                   Res|{InjectSym FSym Rs (@Found orelse HadDollar)}
                [] nil then
                   if HadDollar then
@@ -1956,10 +1945,6 @@ define
          in
             %{UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params }
             R={UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params}
-            {Show debug}
-            {Show newargswithdollarreplaced}
-            {DumpAST.dumpAST R _}
-            {Show '---'}
             {UnnestFApply unit R Params }
             %{UnnestFApply FSym AST Params}
          [] fAnd(First Second) then
@@ -2012,9 +1997,6 @@ define
          fun {CheckDollarInRecord AST DollarSym}
             % Looks in AST for fDollar.
             % If found, creates a new symbol which replaces the fDollar and is place in DollarSym
-            {Show debug}
-            {Show checkDollar}
-            {DumpAST.dumpAST AST _}
             case AST
             of fRecord(L Features) then
                fRecord(L {List.map Features fun {$ I} {CheckDollarInRecord I DollarSym} end })
@@ -2023,8 +2005,6 @@ define
             [] fDollar(_) then
                NewSym=fSym({New SyntheticSymbol init(Pos)} Pos)
             in
-            {Show debug}
-            {Show foundDollar}
                if @DollarSym\=unit then
                   raise multipleNestingMarker  end
                end
@@ -2035,8 +2015,6 @@ define
                else
                   DollarSym:=FSym
                end
-               {Show dollarSym}
-               {Show @DollarSym}
                @DollarSym
             else
                AST
@@ -2058,21 +2036,14 @@ define
                % The recursive calls haven't reached the end of the argument list.
                % Handle the head of the remaining list, and make a recursive call
                if {IsElementary X} then
-              {Show debug}
-              {Show iselementary}
-              {DumpAST.dumpAST X _}
                  {UnnestFApplyInt FApplyAST X|NewArgsList Xs DollarSym}
                else
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
-              {Show debug}
-              {Show isComplex}
-              {DumpAST.dumpAST X _ }
                   % If the argument is not $, include a unification before
-                  {UnnesterInt fLocal(NewSymbol
-                                      fAnd( fEq(NewSymbol {CheckDollarInRecord X DollarSym}  Pos)
-                                            {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
-                               Params}
+                   fLocal(NewSymbol
+                          fAnd( {UnnesterInt fEq(NewSymbol {CheckDollarInRecord X DollarSym}  Pos) {NoTail Params}}
+                                {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
                end
             else
                FinalArgs
@@ -2090,7 +2061,7 @@ define
                in
                   % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
                   {UnnesterInt fLocal( NewSymbol
-                                       fAnd(fEq(NewSymbol Op Pos)
+                                       fAnd({UnnesterInt fEq(NewSymbol Op Pos) Params}
                                             fApply(NewSymbol {List.reverse FinalArgs} Pos))
                                        Pos)
                                Params}
@@ -2132,11 +2103,10 @@ define
             % Then recursively unnest
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            {UnnesterInt fLocal( NewSymbol
-                                 fAnd( fEq(NewSymbol LHS Pos)
-                                       fEq(NewSymbol RHS Pos))
-                                 Pos)
-                         Params}
+            fLocal( NewSymbol
+                    {UnnesterInt fAnd( fEq(NewSymbol LHS Pos)
+                                       fEq(NewSymbol RHS Pos)) Params}
+                    Pos)
          end
       end
       fun {UnnestFBoolCase fBoolCase(Cond TrueCode FalseCode Pos) Params}
@@ -2149,11 +2119,10 @@ define
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             % FIXME: can as well call unnester on body alone, as this is what this call will do
-            {UnnesterInt fLocal( NewSymbol
-                                 fAnd( fEq( NewSymbol Cond Pos)
-                                       fBoolCase(NewSymbol TrueCode FalseCode Pos))
-                                 Pos)
-                         Params}
+            fLocal( NewSymbol
+                    {UnnesterInt fAnd( fEq( NewSymbol Cond Pos)
+                                       fBoolCase(NewSymbol TrueCode FalseCode Pos)) Params}
+                                       Pos)
          end
       end
 
@@ -2169,11 +2138,10 @@ define
          else
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            {UnnesterInt fLocal( NewSymbol
-                                 fAnd( fEq( NewSymbol TestedValue Pos)
-                                       fCase(NewSymbol Clauses Else Pos))
-                                 Pos)
-                         Params}
+            fLocal( NewSymbol
+                    {UnnesterInt fAnd(fEq( NewSymbol TestedValue Pos)
+                                      fCase(NewSymbol Clauses Else Pos)) Params}
+                                      Pos)
          end
       end
 
@@ -2199,10 +2167,11 @@ define
             % - Uni is the unification needed to unnest this pair, unit if none.
 
             % FIXME: set Pos!
-            % fRecords do not have a position feature, so currently no position is set!
+            % fRecords do not have a position feature, so get position from AST
             % -------------------------------------------------------------------------
-            {Show debug}
-            {Show unnestrecord}
+            Pos={GetPos AST}
+         in
+
             case ArgsRest
             of X|Xs then
                F V
@@ -2211,9 +2180,6 @@ define
                % Handle the head of the remaining list, and make a recursive call
                X = fColon(F V)
                if {IsElementary V} then
-                 {Show debug}
-                 {Show iselementary}
-                 {DumpAST.dumpAST V _}
                  {UnnestFRecordInt FRecordAST X#unit#unit|NewArgsList Xs}
                else
                   case V
@@ -2221,12 +2187,9 @@ define
                      {UnnestFRecordInt FRecordAST fColon(F {UnnestFRecordInt V nil V.2 })#unit#unit|NewArgsList Xs}
 
                   else
-                     NewSymbol=fSym({New SyntheticSymbol init(pos)} pos)
+                     NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                   in
-                 {Show debug}
-                 {Show isComplex}
-                 {DumpAST.dumpAST V _}
-                     {UnnestFRecordInt FRecordAST fColon(F NewSymbol)#NewSymbol#{UnnesterInt fEq(NewSymbol V pos) {NoTail Params}}|NewArgsList Xs}
+                     {UnnestFRecordInt FRecordAST fColon(F NewSymbol)#NewSymbol#{UnnesterInt fEq(NewSymbol V Pos) {NoTail Params}}|NewArgsList Xs}
                   end
                end
             else
@@ -2255,10 +2218,6 @@ define
                                   fun {$ _#Sym#_} Sym end}
                FinalArgs = {List.reverse {List.mapInd  NewArgsList fun {$ Ind Arg#_#_} Arg end} }
 
-               {Show debugLists}
-               {DumpAST.dumpAST Unifications _}
-               {DumpAST.dumpAST Decls _}
-               {DumpAST.dumpAST FinalArgs _}
                ResultRecord = case FRecordAST
                         of fRecord(Op _) then
                            fRecord(Op FinalArgs)
@@ -2267,17 +2226,23 @@ define
                         end
                if {List.length Unifications}>0 then
                   if Params.tail then
-                     UniRes=fAnd(fEq(FSym ResultRecord pos) {UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} )
+                     {Show 'debug is tail record'#Pos}
+                     {DumpAST.dumpAST AST _}
+                     {Show '---'}
+                     UniRes=fAnd(fEq(FSym ResultRecord Pos) {UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} )
                   else
-                     UniRes=fAnd({UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} {UnnesterInt fEq(FSym ResultRecord pos) Params})
+                     {Show 'debug is not tail record'#Pos}
+                     {DumpAST.dumpAST AST _}
+                     {Show '---'}
+                     UniRes=fAnd({UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} fEq(FSym ResultRecord Pos))
                   end
                else
-                  UniRes=fEq(FSym ResultRecord pos)
+                  UniRes=fEq(FSym ResultRecord Pos)
                end
 
 
                if {List.length Decls }>0 then
-                  DeclsRes = fLocal({WrapInFAnd Decls} UniRes pos)
+                  DeclsRes = fLocal({WrapInFAnd Decls} UniRes Pos)
                else
                   DeclsRes=UniRes
                end
@@ -2300,6 +2265,9 @@ define
       %---------------------------
          %{Show 'UnnesterInt works on:'}
          %{DumpAST.dumpAST AST _}
+         {Show 'debug unnester for:'#Params.tail}
+         {DumpAST.dumpAST AST _}
+         {Show '----'}
          case AST
          of fEq(LHS RHS Pos) then
             % Call Unnester on both parts, so that if it is a record, it is unnested.
@@ -2320,10 +2288,16 @@ define
          %   {UnnestFRecord unit AST Params}
          [] fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) then
             fNamedSideCondition({UnnesterInt Pattern Params} Decls {UnnesterInt Guards Params} GuardSymbol Pos)
-         %[] fAnd(First Second) then
-         %   fAnd({UnnesterInt First {NoTail Params}} {UnnesterInt Second Params})
+         [] fAnd(First Second) then
+            fAnd({UnnesterInt First {NoTail Params}} {UnnesterInt Second Params})
          [] fProc(FSym Args Body Flags Pos) then
             fProc(FSym Args {UnnesterInt Body {InTail Params}} Flags Pos)
+         [] fConst(_ _) then
+            AST
+         [] fSym(_ _) then
+            AST
+         [] pos(_ _ _ _ _ _) then
+            AST
 
          else
             {DefaultPass AST UnnesterInt Params}
