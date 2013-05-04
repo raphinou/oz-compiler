@@ -1,0 +1,202 @@
+start
+startcontroller
+'at'(2)
+stoptimer
+'Lift '#1#' needed at floor '#5
+'Lift '#1#' at floor '#2
+'Lift '#1#' at floor '#3
+'Lift '#1#' at floor '#4
+'Lift '#1#' at floor '#5
+'Lift at floor '#5#': open doors'
+'Lift at floor '#5#': close doors'
+'Lift '#1#' needed at floor '#1
+'Lift '#1#' at floor '#4
+'Lift '#1#' at floor '#3
+'Lift '#1#' at floor '#2
+'Lift '#1#' at floor '#1
+'Lift at floor '#1#': open doors'
+'Lift at floor '#1#': close doors'
+'Floor '#9#' calls lift '#3
+'Lift '#3#' needed at floor '#9
+'Lift '#3#' at floor '#2
+'Lift '#3#' at floor '#3
+'Lift '#3#' at floor '#4
+'Lift '#3#' at floor '#5
+'Lift '#3#' at floor '#6
+'Lift '#3#' at floor '#7
+'Lift '#3#' at floor '#8
+'Lift '#3#' at floor '#9
+'Lift at floor '#9#': open doors'
+'Lift '#2#' needed at floor '#6
+'Lift '#2#' at floor '#2
+'Lift '#2#' at floor '#3
+'Lift at floor '#9#': close doors'
+'Lift '#2#' at floor '#4
+'Lift '#2#' at floor '#5
+'Lift '#2#' at floor '#6
+'Lift at floor '#6#': open doors'
+'Lift at floor '#6#': close doors'
+'Floor '#10#' calls lift '#4
+'Lift '#4#' needed at floor '#10
+'Lift '#4#' at floor '#2
+'Lift '#4#' at floor '#3
+'Lift '#4#' at floor '#4
+'Lift '#4#' at floor '#5
+'Lift '#4#' at floor '#6
+'Lift '#4#' at floor '#7
+'Lift '#4#' at floor '#8
+'Lift '#4#' at floor '#9
+'Lift '#4#' at floor '#10
+'Lift at floor '#10#': open doors'
+'Lift '#1#' needed at floor '#4
+'Lift '#1#' at floor '#2
+'Lift '#1#' at floor '#3
+'Lift '#1#' at floor '#4
+'Lift at floor '#4#': open doors'
+'Lift at floor '#10#': close doors'
+'Lift at floor '#4#': close doors'
+'Lift '#2#' needed at floor '#5
+'Lift '#2#' at floor '#5
+'Lift at floor '#5#': open doors'
+'Lift at floor '#5#': close doors'
+'Floor '#1#' calls lift '#3
+'Lift '#3#' needed at floor '#1
+'Lift '#3#' at floor '#8
+'Lift '#3#' at floor '#7
+'Lift '#3#' at floor '#6
+'Lift '#3#' at floor '#5
+'Lift '#3#' at floor '#4
+'Lift '#3#' at floor '#3
+'Lift '#3#' at floor '#2
+'Lift '#3#' at floor '#1
+'Lift at floor '#1#': open doors'
+'Floor '#2#' calls lift '#2
+'Lift '#2#' needed at floor '#2
+'Lift '#2#' at floor '#4
+'Lift '#2#' at floor '#3
+'Lift at floor '#1#': close doors'
+'Lift '#2#' at floor '#2
+'Lift at floor '#2#': open doors'
+'Lift at floor '#2#': close doors'
+'Lift '#1#' needed at floor '#30
+'Lift '#1#' at floor '#5
+'Lift '#1#' at floor '#6
+'Lift '#1#' at floor '#7
+'Lift '#1#' at floor '#8
+'Lift '#1#' at floor '#9
+'Lift '#1#' at floor '#10
+'Lift '#1#' at floor '#11
+'Lift '#1#' at floor '#12
+'Lift '#1#' at floor '#13
+'Lift '#1#' needed at floor '#1
+'Lift '#1#' at floor '#14
+'Lift '#1#' at floor '#15
+'Lift '#1#' at floor '#16
+'Lift '#1#' at floor '#17
+'Lift '#1#' at floor '#18
+'Lift '#1#' at floor '#19
+'Lift '#1#' at floor '#20
+'Lift '#1#' at floor '#21
+'Lift '#1#' at floor '#22
+'Lift '#1#' at floor '#23
+'Lift '#1#' needed at floor '#29
+'Lift '#1#' at floor '#24
+'Lift '#1#' at floor '#25
+'Lift '#1#' at floor '#26
+'Lift '#1#' at floor '#27
+'Lift '#1#' at floor '#28
+'Lift '#1#' at floor '#29
+'Lift '#1#' at floor '#30
+'Lift at floor '#30#': open doors'
+'Lift at floor '#30#': close doors'
+'Lift '#1#' needed at floor '#2
+'Lift '#1#' at floor '#29
+'Lift '#1#' at floor '#28
+'Lift '#1#' at floor '#27
+'Lift '#1#' at floor '#26
+'Lift '#1#' at floor '#25
+'Lift '#1#' at floor '#24
+'Lift '#1#' at floor '#23
+'Lift '#1#' at floor '#22
+'Lift '#1#' at floor '#21
+'Lift '#1#' at floor '#20
+'Lift '#1#' at floor '#19
+'Lift '#1#' at floor '#18
+'Lift '#1#' at floor '#17
+'Lift '#1#' at floor '#16
+'Lift '#1#' at floor '#15
+'Lift '#1#' at floor '#14
+'Lift '#1#' at floor '#13
+'Lift '#1#' at floor '#12
+'Lift '#1#' at floor '#11
+'Lift '#1#' at floor '#10
+'Lift '#1#' at floor '#9
+'Lift '#1#' at floor '#8
+'Lift '#1#' at floor '#7
+'Lift '#1#' at floor '#6
+'Lift '#1#' at floor '#5
+'Lift '#1#' at floor '#4
+'Lift '#1#' at floor '#3
+'Lift '#1#' at floor '#2
+'Lift '#1#' at floor '#1
+'Lift at floor '#1#': open doors'
+'Lift at floor '#1#': close doors'
+'Lift '#1#' at floor '#2
+'Lift '#1#' at floor '#3
+'Lift '#1#' at floor '#4
+'Lift '#1#' at floor '#5
+'Lift '#1#' at floor '#6
+'Lift '#1#' at floor '#7
+'Lift '#1#' at floor '#8
+'Lift '#1#' at floor '#9
+'Lift '#1#' at floor '#10
+'Lift '#1#' at floor '#11
+'Lift '#1#' at floor '#12
+'Lift '#1#' at floor '#13
+'Lift '#1#' at floor '#14
+'Lift '#1#' at floor '#15
+'Lift '#1#' at floor '#16
+'Lift '#1#' at floor '#17
+'Lift '#1#' at floor '#18
+'Lift '#1#' at floor '#19
+'Lift '#1#' at floor '#20
+'Lift '#1#' at floor '#21
+'Lift '#1#' at floor '#22
+'Lift '#1#' at floor '#23
+'Lift '#1#' at floor '#24
+'Lift '#1#' at floor '#25
+'Lift '#1#' at floor '#26
+'Lift '#1#' at floor '#27
+'Lift '#1#' at floor '#28
+'Lift '#1#' at floor '#29
+'Lift at floor '#29#': open doors'
+'Lift at floor '#29#': close doors'
+'Lift '#1#' at floor '#28
+'Lift '#1#' at floor '#27
+'Lift '#1#' at floor '#26
+'Lift '#1#' at floor '#25
+'Lift '#1#' at floor '#24
+'Lift '#1#' at floor '#23
+'Lift '#1#' at floor '#22
+'Lift '#1#' at floor '#21
+'Lift '#1#' at floor '#20
+'Lift '#1#' at floor '#19
+'Lift '#1#' at floor '#18
+'Lift '#1#' at floor '#17
+'Lift '#1#' at floor '#16
+'Lift '#1#' at floor '#15
+'Lift '#1#' at floor '#14
+'Lift '#1#' at floor '#13
+'Lift '#1#' at floor '#12
+'Lift '#1#' at floor '#11
+'Lift '#1#' at floor '#10
+'Lift '#1#' at floor '#9
+'Lift '#1#' at floor '#8
+'Lift '#1#' at floor '#7
+'Lift '#1#' at floor '#6
+'Lift '#1#' at floor '#5
+'Lift '#1#' at floor '#4
+'Lift '#1#' at floor '#3
+'Lift '#1#' at floor '#2
+'Lift at floor '#2#': open doors'
+'Lift at floor '#2#': close doors'

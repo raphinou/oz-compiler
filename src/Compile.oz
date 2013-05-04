@@ -3030,7 +3030,7 @@ define
                      % ThisLabel, so that the patternmatch jumps to the guards code.
 
                      % Place TestedValue in x(0) as guards code could have wiped it
-                     move({RegForSym TestedValue Params} x(0))|
+                     move({PermRegForSym TestedValue Params} x(0))|
                      patternMatch(x(0) k(PatternMatchRecord))|
                      branch(NextTestLabel)|
                      lbl(ThisLabel)|
@@ -3046,7 +3046,7 @@ define
                      % include it here.
 
                      % Place TestedValue in x(0) as guards code could have wiped it
-                     move({RegForSym TestedValue Params} x(0))|
+                     move({PermRegForSym TestedValue Params} x(0))|
                      patternMatch(x(0) k(PatternMatchRecord))|
                      branch(NextTestLabel)|
                      nil
