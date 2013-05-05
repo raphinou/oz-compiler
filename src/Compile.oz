@@ -1634,6 +1634,36 @@ define
 
                      fTry({DesugarExpr Body Params} fCatch([fCaseClause(NewSymbol {DesugarExpr fCase(NewSymbol Clauses fRaise(NewSymbol Pos) CatchPos) Params} )] CatchPos) fNoFinally Pos)
                      Pos)
+         [] fTry(Body fNoCatch Finally Pos) then
+            % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
+            % put the try-finally expression, without its Finally code, in a new try expression
+            % with no finally code catching all exceptions.
+            % After executing this new try expression, execute the Finally
+            % then check if the finally was successful by looking at the value of the try expression.
+            % The new try expression will have a record with label ok and value of the try-finally as
+            % first value if the execution of the original try was successful.
+            % If success, return value of the try-finally expression. Else, re-raise the exception.
+            Temp1=fSym({New SyntheticSymbol init(Pos)} Pos)
+            Temp2=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            {DesugarExpr
+                        fLocal(Temp1
+                           fAnd(
+                              fLocal(Temp2
+                                     fEq(Temp1
+                                         fTry(fRecord(fConst(ok Pos) [fColon(fConst(1 Pos) Body)])
+                                              fCatch([fCaseClause(Temp2 fRecord(fConst(ex Pos) [fColon(fConst(1 Pos) Temp2)]))] Pos)
+                                              fNoFinally
+                                              Pos)
+                                         Pos)
+                                     Pos)
+                              fAnd(Finally
+                                   fBoolCase( fOpApply('==' [fApply(fConst(Record.label Pos) [Temp1] Pos)  fConst(ok Pos)] Pos )
+                                              fOpApply('.' [Temp1 fConst(1 Pos)] Pos)
+                                              fRaise(fOpApply('.' [Temp1 fConst(1 Pos)] Pos) Pos)
+                                              Pos)))
+                           Pos)
+                        Params}
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
             % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
             % put the try-finally expression, without its Finally code, in a new try expression
@@ -1778,20 +1808,46 @@ define
          [] fObjApply(_ _ _) andthen @(Params.'self')==unit then
                raise staticCallNeedsSelf end
          [] fObjApply(LHS RHS Pos) then
-                             {DesugarStat
-                                fApply(
-                                   fApply(fConst(Value.'.' Pos)
-                                      [ fApply(fConst(Value.'.' Pos) [LHS fConst({Boot_Name.newUnique 'ooFallback'} Pos)] Pos)
-                                        fConst(apply Pos) ] Pos)
-                                   [RHS @(Params.'self') LHS] Pos)
-                                Params}
+            {DesugarStat
+               fApply(
+                  fApply(fConst(Value.'.' Pos)
+                     [ fApply(fConst(Value.'.' Pos) [LHS fConst({Boot_Name.newUnique 'ooFallback'} Pos)] Pos)
+                       fConst(apply Pos) ] Pos)
+                  [RHS @(Params.'self') LHS] Pos)
+               Params}
          [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
             %FIXME: handle multiple caseclauses
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            fLocal(  NewSymbol
-                     fTry({DesugarStat Body Params} fCatch( [fCaseClause(NewSymbol {DesugarStat fCase(NewSymbol Clauses fNoElse(CatchPos) CatchPos) Params} )] CatchPos ) fNoFinally Pos)
-                     Pos)
+            fLocal(NewSymbol
+                   fTry({DesugarStat Body Params}
+                        fCatch( [fCaseClause(NewSymbol {DesugarStat fCase(NewSymbol Clauses fNoElse(CatchPos) CatchPos) Params} )]
+                                CatchPos )
+                        fNoFinally
+                        Pos)
+                   Pos)
+         [] fTry(Body fNoCatch Finally Pos) then
+            Temp1=fSym({New SyntheticSymbol init(Pos)} Pos)
+            Temp2=fSym({New SyntheticSymbol init(Pos)} Pos)
+         in
+            {DesugarStat
+                        fLocal(Temp1
+                           fAnd(
+                              fLocal(Temp2
+                                     fEq(Temp1
+                                         fTry(fAnd(Body fConst(unit Pos))
+                                              fCatch([fCaseClause(Temp2 fRecord(fConst(ex Pos) [fColon(fConst(1 Pos) Temp2)]))] Pos)
+                                              fNoFinally
+                                              Pos)
+                                         Pos)
+                                     Pos)
+                              fAnd(Finally
+                                   fBoolCase( fOpApply('==' [Temp1 fConst(unit Pos)] Pos )
+                                              fSkip(unit)
+                                              fRaise(fOpApply('.' [Temp1 fConst(1 Pos)] Pos) Pos)
+                                              Pos)))
+                           Pos)
+                        Params}
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
             % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
             % put the try-finally statement, without its Finally code, in a try expression

@@ -191,9 +191,10 @@ in
    % Mixes up the elements
    {Show {Sum}}  % Still displays 500500
 
-   {Trans proc {$ T _}
-           for I in 1..10 do
-             {Show {T.access D.I}}
-           end
-         end _ _}
+   % Comment non deterministic code for test
+   %{Trans proc {$ T _}
+   %        for I in 1..10 do
+   %          {Show {T.access D.I}}
+   %        end
+   %      end _ _}
 end
