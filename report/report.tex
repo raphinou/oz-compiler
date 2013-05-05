@@ -2398,11 +2398,15 @@ end
 
 \subsubsection{Records}\label{sec:arch:unnester:records}
 The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
+There is a catch however: records in tail positions of a procedure need to be unnested
+differently. To understand why, let's first look at how records are unnested
+when they are not in tail position.
+
 Here is an example where the value of a feature is an if expression.
 \begin{lstlisting}
    R=rec(a:if B then 2 else V end b:2)
 \end{lstlisting}
-will be transformed in
+Supposing the record is not in tail position, it will be transformed in
 \begin{lstlisting}
   local
     NewVar
@@ -2422,6 +2426,56 @@ And this requires a new unnesting step (see the unnesting of unifications Sectio
 \end{lstlisting}
 
 Note that the unnester applies the exact same transformation to open records.
+
+Now let's examine what happens when we have an unbounded tail.
+
+   fun {Fill V}
+      {Delay 5000} % Represents long computation
+      if V>1000 then
+	      nil
+      else
+         V+1|{Fill V+1}
+      end
+   end
+
+The expected behaviour is that the consumer of the items can start to work as
+soon as there is one item inserted. Such a consumer can be this procedure.
+
+   proc {Print L}
+      case L
+      of X|Xs then
+         {Show X}
+      [] nil then
+         skip
+      end
+   end
+
+however, if the record \lstinline!V+1|{Fill V+1}! is desugared in 
+\begin{lstlisting}
+   V1=V+1
+   V2={Fill V+1}
+   Ret=V1|V2
+\end{lstlisting}
+%FIXME: explain where Ret comes from
+The record will be accessible only after the statement 
+\lstinline!V2={Fill V+1}!. This means that the consumer will only be able to start working when the
+producer returns!
+The solution is to unnest it like this:
+\begin{lstlisting}
+   Ret=V1|V2
+   V1=V+1
+   V2={Fill V+1}
+\end{lstlisting}
+In that case, the consumer will be able to start working as soon as
+\lstinline!V1! is bounded, ie as soon as \lstinline!V1=V+1! is executed.
+
+Determining if a record is in tail position is done top-down.
+The body of a procedure is in tail position. For \lstinline!fAnd(First Second)!,
+\lstinline!First! is not in tail position, and \lstinline!Second! is in tail
+position only if its parent \lstinline!fAnd! was in tail position.
+Same reasoning applies for clauses of a \lstinline!fCase! and branches of a
+\lstinline!fBoolCase!.
+
 
 
 \subsubsection{Nesting Marker}\label{sec:arch:unnester:nestingmarker}
@@ -2443,6 +2497,13 @@ The unnester is implemented by a function called \lstinline!Unnester!. The unnes
   \item  \lstinline!UnnestFBoolCase! is called to unnest \lstinline!if..then..else! instructions.
 \end{itemize}
 If the unnester encounters a record in the AST for which no specific operation is prescribed, it recursively unnests each feature of the record.
+
+The unnester also tracks if an instruction is in tail position or not, simply by
+maintaining a \lstinline!tail! field in the \lstinline!params! record. As this
+is a top-down communication, a parent node passing information to its children,
+there is no need to use a cell. The parent simply passes the correctly updated
+record to its children.
+
 \subsubsection{Exceptions}\label{sec:arch:unnester:exceptions}
 \lstinline!raise! expressions at this stage are present in the form
 \lstinline!Sym=raise E end!, and this unification statement is simply replaced by
