@@ -2001,7 +2001,8 @@ define
          in
             %{UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params }
             R={UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params}
-            {UnnestFApply unit R Params }
+            R
+            %{UnnestFApply unit R Params }
             %{UnnestFApply FSym AST Params}
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
