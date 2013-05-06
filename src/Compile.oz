@@ -821,6 +821,7 @@ define
             else
                % this variable is not declared
                % TODO issue an error
+               {DumpAST.dumpAST AST _}
                raise unnamedVariable end
                AST
             end
@@ -1701,7 +1702,9 @@ define
          [] fRaise(E Pos) then
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
          [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
-            {DesugarExpr fApply(fConst(Boot_Value.'dotAssign' Pos1) [LHS CHS RHS] Pos2) Params}
+            NewSymbol=fSym({New SyntheticSymbol init(Pos1)} Pos1)
+         in
+            {DesugarExpr fApply(fConst(Boot_Value.'dotExchange' Pos1) [LHS CHS RHS] Pos2) Params}
          [] fSym(_ _) then
             AST
          [] fConst(_ _) then
@@ -1881,8 +1884,6 @@ define
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
          [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
             {DesugarStat fApply(fConst(Boot_Value.'dotAssign' Pos1) [LHS CHS RHS] Pos2) Params}
-         [] fDotAssign(LHS RHS Pos) then
-            {DesugarStat fApply(fConst(Boot_Value.'dotAssign' Pos) [LHS RHS] Pos) Params}
          [] fSkip(_) then
             AST
          [] fNoFinally then
