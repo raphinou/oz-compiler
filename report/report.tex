@@ -2293,7 +2293,26 @@ Considering the elementary character of both sides of the unification, we have t
     \end{description}
   \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with the left side then with the right side, and unnesting the resulting code.
 \end{description}
-We need recursive calls, as is illustrated by the following example, also showing why this code works
+
+Only \lstinline!fApply! nodes require a bit more work, because the unified
+symbol may have to be injected in place of a nesting marker deeply nested in
+a record argument, like in this example:
+
+\begin{lstlisting}
+   {GetAttribute Val attr(value:$ ...)}
+\end{lstlisting}
+
+where we suppose that \lstinline!GetAttribute! has the signature 
+\lstinline!fun {GetAttribute Object ?Result}!.
+To handle this case, arguments have to be tested to see if a nesting marker is
+present, and the code needs to descent in the record arguments.
+Once the unified symbol is injected in the arguments list, a recursive call is
+done to unnest the \lstinline!fApply! itself.
+
+All cases covered by the unnesting of unifications make recursive calls on their
+result.
+Here is an illustration of the need of recursive calls. It also explains why
+this particular form executes successfully:
 \begin{lstlisting}
   3+4 = {Show}
 \end{lstlisting}

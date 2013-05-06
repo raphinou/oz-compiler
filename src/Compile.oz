@@ -1954,16 +1954,17 @@ define
             fApply( fConst(OoExtensions.'class' Pos) {List.append {List.take L 6} [FSym]}  Pos)
          [] fApply(Proc Args Pos) then
              % All argument are all symbols when we get here
-             %enters the assignation target in the proc call
-             %Res = {P Arg} -> {P Arg Res}
-            fun {CheckDollarInRecord AST DollarSym Found}
+             % Simply injects the unified symbol FSym in the fApply arguments, either in
+             % the location of the fDollar, or as the last argument.
+             % After that it call the unnester again to unnest complext arguments of fapply
+            fun {InjectSymInRecord AST DollarSym Found}
                % Looks in AST for fDollar.
                % If found, creates a new symbol which replaces the fDollar and is place in DollarSym
                case AST
                of fRecord(L Features) then
-                  fRecord(L {List.map Features fun {$ I} {CheckDollarInRecord I DollarSym Found} end })
+                  fRecord(L {List.map Features fun {$ I} {InjectSymInRecord I DollarSym Found} end })
                [] fColon(F V) then
-                  fColon(F {CheckDollarInRecord V DollarSym ?Found})
+                  fColon(F {InjectSymInRecord V DollarSym ?Found})
                [] fDollar(_) then
                   Found:=true
                   DollarSym
@@ -1984,7 +1985,7 @@ define
                   Res
                   Found={NewCell false}
                in
-                  Res={CheckDollarInRecord R FSym Found}
+                  Res={InjectSymInRecord R FSym Found}
                   if @Found andthen HadDollar then
                      raise multipleNestingMarkersInArgs end
                   end
@@ -1999,11 +2000,7 @@ define
             end
             R
          in
-            %{UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params }
-            R={UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params}
-            R
-            %{UnnestFApply unit R Params }
-            %{UnnestFApply FSym AST Params}
+            {UnnesterInt fApply(Proc {InjectSym FSym Args false} Pos) Params }
          [] fAnd(First Second) then
             % the result of a sequence of instructions is the value of the last one
             % Recursive call to get to the end of the sequence
@@ -2039,7 +2036,7 @@ define
          end
       end
 
-      fun {UnnestFApply FSym AST=fApply(Op Args Pos) Params}
+      fun {UnnestFApply AST=fApply(Op Args Pos) Params}
       %------------------------------------------------
          % Transforms the AST such that fApply args are all elementary (fSym or
          % fConst). Creates new symbols unified with complex arguments. Wraps
@@ -2051,14 +2048,14 @@ define
          % - if no fDollar is found, no DollarSym should be declared
          % - if a fDollar is found, the DollarSym should be declared outside of the record.
          % does not use Params
-         fun {CheckDollarInRecord AST DollarSym}
+         fun {CheckDollarInArg AST DollarSym}
             % Looks in AST for fDollar.
             % If found, creates a new symbol which replaces the fDollar and is place in DollarSym
             case AST
             of fRecord(L Features) then
-               fRecord(L {List.map Features fun {$ I} {CheckDollarInRecord I DollarSym} end })
+               fRecord(L {List.map Features fun {$ I} {CheckDollarInArg I DollarSym} end })
             [] fColon(F V) then
-               fColon(F {CheckDollarInRecord V DollarSym})
+               fColon(F {CheckDollarInArg V DollarSym})
             [] fDollar(_) then
                NewSym=fSym({New SyntheticSymbol init(Pos)} Pos)
             in
@@ -2066,18 +2063,19 @@ define
                   raise multipleNestingMarker  end
                end
                % FSym is a global, argument of UnnestFApply
-               if FSym==unit then
-                  % We need to declare the new symbol
-                  DollarSym:=NewSym
-               else
-                  DollarSym:=FSym
-               end
+               DollarSym:=NewSym
                @DollarSym
             else
                AST
             end
          end
          fun {UnnestFApplyInt FApplyAST NewArgsList ArgsRest DollarSym}
+            % When we get here, the FApplyAST cannot be part of a unification anymore.
+            % If it was, the unified symbol has already been injected in the args (in the dollar location
+            % or as last argument) by BindVarToExpr.
+            % It still has to check the presence of fDollar though with CheckDollarInArg
+            % for example to cover this case: {Show {GetVal rec($) }} See test 068.
+            %
             % Unnest all arguments one by one. This is Step 1
             % Elementary arguments are left untouched
             % Complex arguments are extracted from the arguments list by:
@@ -2099,19 +2097,12 @@ define
                in
                   % If the argument is not $, include a unification before
                    fLocal(NewSymbol
-                          fAnd( {UnnesterInt fEq(NewSymbol {CheckDollarInRecord X DollarSym}  Pos) {NoTail Params}}
+                          fAnd( {UnnesterInt fEq(NewSymbol {CheckDollarInArg X DollarSym}  Pos) {NoTail Params}}
                                 {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
                end
             else
                FinalArgs
             in
-               % All unnested arguments are now found in NewArgsList
-               % We can now work on the fApply itself
-               %if @DollarSym==unit andthen FSym\=unit then
-               %   FinalArgs=FSym|NewArgsList
-               %else
-                  FinalArgs=NewArgsList
-               %end
                case Op
                of fApply(_ _ _) then
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
@@ -2136,8 +2127,11 @@ define
       in
          Tmp={UnnestFApplyInt AST nil Args DollarSym}
          if @DollarSym==unit then
+            % No fDollar was found, so no new symbol was created, and this is a statement
             Tmp
          else
+            % A new symbol was created to replace a fDollar.
+            % This means it is an expression, transform it as such
             {UnnesterInt fLocal(@DollarSym fAnd(Tmp @DollarSym) pos) Params}
          end
       end
@@ -2334,7 +2328,7 @@ define
          [] fLocal(Decls Body Pos) then
             fLocal(Decls {UnnesterInt Body Params} Pos)
          [] fApply(_ _ _) then
-            {UnnestFApply unit AST Params}
+            {UnnestFApply AST Params}
          [] fBoolCase(_ _ _ _) then
             {UnnestFBoolCase AST Params}
          [] fCase(_ _ _ _) then
