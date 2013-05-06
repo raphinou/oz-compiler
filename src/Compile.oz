@@ -2101,8 +2101,6 @@ define
                                 {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
                end
             else
-               FinalArgs
-            in
                case Op
                of fApply(_ _ _) then
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
@@ -2110,14 +2108,14 @@ define
                   % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
                   {UnnesterInt fLocal( NewSymbol
                                        fAnd({UnnesterInt fEq(NewSymbol Op Pos) Params}
-                                            fApply(NewSymbol {List.reverse FinalArgs} Pos))
+                                            fApply(NewSymbol {List.reverse NewArgsList} Pos))
                                        Pos)
                                Params}
                else
                   % otherwise no recursive call
                   % all fLocal introduced by complex arguments have been directly place out of fApply when traversing ArgsRest
                   % and all what's left in the argument list are Symbols.
-                  fApply(Op {List.reverse FinalArgs} Pos)
+                  fApply(Op {List.reverse NewArgsList} Pos)
                end
 
             end
