@@ -2781,7 +2781,7 @@ define
                {List.append @R [call(k(Const) {List.length Args})] }
             % FIXME: find better naming for Sym2 ?
             [] fSym(_ _) then
-               {List.append @R [call({RegForSym Sym Params} {List.length Args})] }
+               {List.append @R [call({PermRegForSym Sym Params} {List.length Args})] }
             end
 
          %--------------------
@@ -2818,27 +2818,27 @@ define
             if Arity\=false then
                % If makeArity returned a usable result, it means we need to create a record (ie the arity is not numeric only)
                % VM bug workaround
-               if {Record.label {RegForSym LHS Params}}==k then
-                  OpCodes = move({RegForSym LHS Params} x(0))|createRecordUnify(k(Arity) {List.length OrderedFeaturesList} x(0))|nil
+               if {Record.label {PermRegForSym LHS Params}}==k then
+                  OpCodes = move({PermRegForSym LHS Params} x(0))|createRecordUnify(k(Arity) {List.length OrderedFeaturesList} x(0))|nil
                else
-                  OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
+                  OpCodes = createRecordUnify(k(Arity) {List.length OrderedFeaturesList}  {PermRegForSym LHS Params})
                end
             else
                if Label=='|' andthen {List.map OrderedFeaturesList fun {$ L#_} L end}==[1 2] then
                   % in this case we need to create a cons
                   % VM bug workaround
-                  if {Record.label {RegForSym LHS Params}}==k then
-                     OpCodes = move({RegForSym LHS Params} x(0))|createConsUnify(k(Label) {List.length OrderedFeaturesList} x(0))|nil
+                  if {Record.label {PermRegForSym LHS Params}}==k then
+                     OpCodes = move({PermRegForSym LHS Params} x(0))|createConsUnify(k(Label) {List.length OrderedFeaturesList} x(0))|nil
                   else
-                     OpCodes = createConsUnify({RegForSym LHS Params})
+                     OpCodes = createConsUnify({PermRegForSym LHS Params})
                   end
                else
                   % if makeArity returned false, it means we need to create a tuple, because the feature was all numeric
                   % VM bug workaround
-                  if {Record.label {RegForSym LHS Params}}==k then
-                     OpCodes = move({RegForSym LHS Params} x(0))|createTupleUnify(k(Label) {List.length OrderedFeaturesList} x(0))|nil
+                  if {Record.label {PermRegForSym LHS Params}}==k then
+                     OpCodes = move({PermRegForSym LHS Params} x(0))|createTupleUnify(k(Label) {List.length OrderedFeaturesList} x(0))|nil
                   else
-                     OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {RegForSym LHS Params})
+                     OpCodes = createTupleUnify(k(Label) {List.length OrderedFeaturesList}  {PermRegForSym LHS Params})
                   end
                end
             end
@@ -2858,7 +2858,7 @@ define
             ElseLabel={GenLabel}
             EndLabel={GenLabel}
          in
-            move({RegForSym FSym Params} x(0))|
+            move({PermRegForSym FSym Params} x(0))|
             condBranch(x(0) ElseLabel ErrorLabel)|
             %---- true ----
             {CodeGenInt TrueCode Params}|
@@ -3087,7 +3087,7 @@ define
                      % Make captures available to guards code
                      {UsedSymbolsToYReg UsedSymbols}|
                      {CodeGenInt Guards Params}|
-                     move({RegForSym GuardSymbol Params} x(1))|
+                     move({PermRegForSym GuardSymbol Params} x(1))|
                      condBranch(x(1) NextTestLabel ErrorLabel)|
                      nil
                   else
