@@ -1512,6 +1512,15 @@ define
          {DesugarStat fApply( fConst(OoExtensions.'class' Pos) [ NewParents NewMeths NewAttrs NewFeats NewProps PrintName FSym] Pos) Params}
       end
 
+      fun {DesugarCaseClause Clause DesugarInstr Params}
+         case Clause
+         of fCaseClause(fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) Body) then
+            fCaseClause(fNamedSideCondition({DesugarExpr Pattern Params} Decls {DesugarStat Guards Params} GuardSymbol  Pos) {DesugarInstr Body Params} )
+         [] fCaseClause(Pattern Body) then
+            fCaseClause({DesugarExpr Pattern Params} {DesugarInstr Body Params})
+         end
+      end
+
       fun {DesugarExpr AST Params}
       %---------------------------
          % Desugar expressions
@@ -1576,10 +1585,10 @@ define
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(Boot_Value.catExchangeOO Pos) [ @(Params.'self') {DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
-         [] fBoolCase( Cond TrueCode fNoElse(_) Pos) then
+         [] fBoolCase( Cond TrueCode Else=fNoElse(_) Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
-            fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} fNoElse(pos) Pos)
+            fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} Else Pos)
 
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
@@ -1612,16 +1621,19 @@ define
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal( NewSymbol NewSymbol Pos)
-         [] fCase(Val Clauses Else=fNoElse(_) Pos) then
+         [] fCase(Val Clauses Else=fNoElse(_) Pos=pos(File Line _ _ _ _)) then
             % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} Else Pos) Params} NewSymbol) Pos)
+            %fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} Else Pos) Params} NewSymbol) Pos)
+            fCase({DesugarExpr Val Params} {List.map Clauses fun{$ I} {DesugarCaseClause I DesugarExpr Params} end} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
          [] fCase(Val Clauses Else Pos) then
             % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} fEq(NewSymbol Else Pos) Pos) Params} NewSymbol) Pos)
+            %fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} fEq(NewSymbol Else Pos) Pos) Params} NewSymbol) Pos)
+            %fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern {DesugarExpr Body Params} ) end} {DesugarExpr Else Params} Pos)
+            fCase({DesugarExpr Val Params} {List.map Clauses fun{$ I} {DesugarCaseClause I DesugarExpr Params} end} {DesugarExpr Else Params} Pos)
          [] fClass(_ _ _ _) then
             % fClass(FSym AttributesAndProperties Methods Pos)
             {DesugarClass AST Params}
@@ -1631,8 +1643,6 @@ define
          in
             fLocal(  NewSymbol
                      % add a else banch to the case, which will re-raise the exception when it was not catched by a pattern
-                                                                                                                       % FIXME: this raise is followed by unit to avoid problems with Exception.raise getting 2 arguments because it is in an expression location...
-
                      fTry({DesugarExpr Body Params} fCatch([fCaseClause(NewSymbol {DesugarExpr fCase(NewSymbol Clauses fRaise(NewSymbol Pos) CatchPos) Params} )] CatchPos) fNoFinally Pos)
                      Pos)
          [] fTry(Body fNoCatch Finally Pos) then
@@ -1725,15 +1735,6 @@ define
 
       fun {DesugarStat AST Params}
       %---------------------------
-         fun {DesugarCaseClause Clause}
-            case Clause
-            of fCaseClause(fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) Body) then
-               fCaseClause(fNamedSideCondition({DesugarExpr Pattern Params} Decls {DesugarStat Guards Params} GuardSymbol  Pos) {DesugarStat Body Params} )
-            [] fCaseClause(Pattern Body) then
-               fCaseClause({DesugarExpr Pattern Params} {DesugarStat Body Params})
-            end
-         end
-      in
          % Desugar Statements.
          case AST
          of fAnd(First Second) then
@@ -1768,15 +1769,15 @@ define
          in
             % Need to Desugar the top-level fProc, eg in the case of a statement function (fun {$ ..}),
             % so that the $ also gets desugared
-            fProc(FSym {List.append Args [ReturnSymbol]} {DesugarStat {HandleLazyFlag ReturnSymbol Body Flags Pos} Params} Flags Pos)
+            {DesugarStat fProc(FSym {List.append Args [ReturnSymbol]} {HandleLazyFlag ReturnSymbol Body Flags Pos} Flags Pos) Params}
          [] fColonEquals(Cell Val Pos) andthen @(Params.'self')==unit then
             fApply( fConst(Boot_Value.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
          [] fColonEquals(Cell Val Pos) then
             fApply( fConst(Boot_Value.catAssignOO Pos) [@(Params.'self') {DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
-         [] fBoolCase( Cond TrueCode fNoElse(_) Pos) then
+         [] fBoolCase( Cond TrueCode Else=fNoElse(_) Pos) then
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
-            fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} fNoElse(pos) Pos)
+            fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} Else Pos)
 
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
             % Cond is a value, hence an expression.
@@ -1798,9 +1799,9 @@ define
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(LockIn Pos) [Lock NewProcSym] Pos)) Pos)
          [] fCase(Val Clauses fNoElse(_) Pos=pos(File Line _ _ _ _)) then
-            fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
+            fCase({DesugarExpr Val Params} {List.map Clauses fun{$ I} {DesugarCaseClause I DesugarStat Params} end} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
          [] fCase(Val Clauses Else Pos) then
-            fCase({DesugarExpr Val Params} {List.map Clauses DesugarCaseClause} {DesugarStat Else Params} Pos)
+            fCase({DesugarExpr Val Params} {List.map Clauses fun {$ I} {DesugarCaseClause I DesugarStat Params} end} {DesugarStat Else Params} Pos)
          [] fClass(_ _ _ _) then
             % fClass(FSym AttributesAndProperties Methods Pos)
             {DesugarClass AST Params}
@@ -2016,6 +2017,10 @@ define
             % become
             % if Cond then A=TrueCode else A=FalseCode end
             {UnnesterInt fBoolCase(Cond fEq(FSym TrueCode Pos) fEq(FSym FalseCode Pos) Pos) Params}
+         [] fCase(Val Clauses Else=fNoElse(_) Pos) then
+            {UnnesterInt fCase(Val {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(FSym Body Pos) ) end} Else Pos) Params}
+         [] fCase(Val Clauses Else Pos) then
+            {UnnesterInt fCase(Val {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(FSym Body Pos) ) end} fEq(FSym Else Pos) Pos) Params}
          [] fRecord(_ _) then
             % record has already been unnested before the call to BindVarToExpr (see call to BindVarToExpr for fRecord), just return the fEq
             %FIXME: set pos!
@@ -2037,6 +2042,103 @@ define
          end
       end
 
+%      fun {UnnestFApply AST=fApply(Op Args Pos) Params}
+%      %------------------------------------------------
+%         % Transforms the AST such that fApply args are all elementary (fSym or
+%         % fConst). Creates new symbols unified with complex arguments. Wraps
+%         % the fApply in fLocals for each new symbol created.
+%         % To handle fDollars in record arguments, the transformation is done in 2 steps.
+%         % 1) unnest arguments and replace fDollar by a new sym DollarSym if it is encountered
+%         % 2) if a fDollar was found, wrap all the Code obtained in step 1 in a 'local DollarSym in Code DollarSym end'
+%         % The two steps are necessary because:
+%         % - if no fDollar is found, no DollarSym should be declared
+%         % - if a fDollar is found, the DollarSym should be declared outside of the record.
+%         % does not use Params
+%         fun {CheckDollarInArg AST DollarSym}
+%            % Looks in AST for fDollar.
+%            % If found, creates a new symbol which replaces the fDollar and is place in DollarSym
+%            case AST
+%            of fRecord(L Features) then
+%               fRecord(L {List.map Features fun {$ I} {CheckDollarInArg I DollarSym} end })
+%            [] fColon(F V) then
+%               fColon(F {CheckDollarInArg V DollarSym})
+%            [] fDollar(_) then
+%               NewSym=fSym({New SyntheticSymbol init(Pos)} Pos)
+%            in
+%               if @DollarSym\=unit then
+%                  raise multipleNestingMarker  end
+%               end
+%               % FSym is a global, argument of UnnestFApply
+%               DollarSym:=NewSym
+%               @DollarSym
+%            else
+%               AST
+%            end
+%         end
+%         fun {UnnestFApplyInt FApplyAST NewArgsList ArgsRest DollarSym}
+%            % When we get here, the FApplyAST cannot be part of a unification anymore.
+%            % If it was, the unified symbol has already been injected in the args (in the dollar location
+%            % or as last argument) by BindVarToExpr.
+%            % It still has to check the presence of fDollar though with CheckDollarInArg
+%            % for example to cover this case: {Show {GetVal rec($) }} See test 068.
+%            %
+%            % Unnest all arguments one by one. This is Step 1
+%            % Elementary arguments are left untouched
+%            % Complex arguments are extracted from the arguments list by:
+%            % - declaring a new symbol
+%            % - unifying this new symbol with the argument
+%            % - replacing the argument by the new symbol in the argument list.
+%            % If a fDollar is found in a record, this function simply extracts the
+%            % whole record from the argument list, with the fDollar replaced by a new DollarSym.
+%            % The declaration of the DollarSym is done in step 2
+%
+%            case ArgsRest
+%            of X|Xs then
+%               % The recursive calls haven't reached the end of the argument list.
+%               % Handle the head of the remaining list, and make a recursive call
+%               if {IsElementary X} then
+%                 {UnnestFApplyInt FApplyAST X|NewArgsList Xs DollarSym}
+%               else
+%                  NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+%               in
+%                  % If the argument is not $, include a unification before
+%                   fLocal(NewSymbol
+%                          fAnd( {UnnesterInt fEq(NewSymbol {CheckDollarInArg X DollarSym}  Pos) {NoTail Params}}
+%                                {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
+%               end
+%            else
+%               case Op
+%               of fApply(_ _ _) then
+%                  NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+%               in
+%                  % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
+%                  {UnnesterInt fLocal( NewSymbol
+%                                       fAnd({UnnesterInt fEq(NewSymbol Op Pos) Params}
+%                                            fApply(NewSymbol {List.reverse NewArgsList} Pos))
+%                                       Pos)
+%                               Params}
+%               else
+%                  % otherwise no recursive call
+%                  % all fLocal introduced by complex arguments have been directly place out of fApply when traversing ArgsRest
+%                  % and all what's left in the argument list are Symbols.
+%                  fApply(Op {List.reverse NewArgsList} Pos)
+%               end
+%
+%            end
+%         end
+%         DollarSym={NewCell unit}
+%         Tmp
+%      in
+%         Tmp={UnnestFApplyInt AST nil Args DollarSym}
+%         if @DollarSym==unit then
+%            % No fDollar was found, so no new symbol was created, and this is a statement
+%            Tmp
+%         else
+%            % A new symbol was created to replace a fDollar.
+%            % This means it is an expression, transform it as such
+%            {UnnesterInt fLocal(@DollarSym fAnd(Tmp @DollarSym) pos) Params}
+%         end
+%      end
       fun {UnnestFApply AST=fApply(Op Args Pos) Params}
       %------------------------------------------------
          % Transforms the AST such that fApply args are all elementary (fSym or
@@ -2092,32 +2194,86 @@ define
                % The recursive calls haven't reached the end of the argument list.
                % Handle the head of the remaining list, and make a recursive call
                if {IsElementary X} then
-                 {UnnestFApplyInt FApplyAST X|NewArgsList Xs DollarSym}
+                 {UnnestFApplyInt FApplyAST X#unit#unit|NewArgsList Xs DollarSym}
                else
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+                  DollarResult={CheckDollarInArg X DollarSym}
                in
                   % If the argument is not $, include a unification before
-                   fLocal(NewSymbol
-                          fAnd( {UnnesterInt fEq(NewSymbol {CheckDollarInArg X DollarSym}  Pos) {NoTail Params}}
-                                {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
+                  % fLocal(NewSymbol
+                  %        fAnd( {UnnesterInt fEq(NewSymbol {CheckDollarInArg X DollarSym}  Pos) {NoTail Params}}
+                  %              {UnnestFApplyInt FApplyAST NewSymbol|NewArgsList Xs DollarSym}) Pos)
+                  % FIXME: with this test we can have NewSym=ArgSym as unification which is not useful, it should
+                  % keep ArgSym and not use NewSym in that case
+                  %if DollarResult==X then
+                  %   {UnnestFApplyInt FApplyAST NewSymbol#NewSymbol#unit|NewArgsList Xs DollarSym}
+                  %else
+                     {UnnestFApplyInt FApplyAST NewSymbol#NewSymbol#fEq(NewSymbol DollarResult Pos)|NewArgsList Xs DollarSym}
+                  %end
                end
             else
-               case Op
+               Unifications
+               Decls
+               FinalArgs
+               ResultApply
+               UniRes
+               DeclsRes
+            in
+               Unifications={List.map {List.filter NewArgsList fun{$ _#_#Uni} Uni\=unit end}
+                                      fun {$ _#_#Uni} Uni end}
+               Decls = {List.map  {List.filter NewArgsList fun{$ _#Sym#_} Sym\=unit end}
+                                  fun {$ _#Sym#_} Sym end}
+               FinalArgs = {List.reverse {List.mapInd  NewArgsList fun {$ Ind Arg#_#_} Arg end} }
+
+               ResultApply=case Op
                of fApply(_ _ _) then
                   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
                in
                   % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
                   {UnnesterInt fLocal( NewSymbol
-                                       fAnd({UnnesterInt fEq(NewSymbol Op Pos) Params}
-                                            fApply(NewSymbol {List.reverse NewArgsList} Pos))
+                                       fAnd(fEq(NewSymbol Op Pos)
+                                            fApply(NewSymbol FinalArgs Pos))
                                        Pos)
                                Params}
                else
-                  % otherwise no recursive call
-                  % all fLocal introduced by complex arguments have been directly place out of fApply when traversing ArgsRest
-                  % and all what's left in the argument list are Symbols.
-                  fApply(Op {List.reverse NewArgsList} Pos)
+                  fApply(Op FinalArgs Pos)
                end
+
+               if {List.length Unifications}>0 then
+                  UniRes=fAnd({UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} ResultApply)
+               else
+                  {Show 'debug no unifications needed'}
+                  UniRes=ResultApply
+               end
+
+
+               if {List.length Decls }>0 then
+                  DeclsRes = fLocal({WrapInFAnd Decls} UniRes Pos)
+               else
+                  DeclsRes=UniRes
+               end
+               if {List.length Unifications}>0 then
+                  {UnnesterInt DeclsRes Params}
+               else
+                  DeclsRes
+               end
+
+               %case Op
+               %of fApply(_ _ _) then
+               %   NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
+               %in
+               %   % When the proc/fun called is itself the result of a proc/fun call, we need to recursively handle it.
+               %   {UnnesterInt fLocal( NewSymbol
+               %                        fAnd({UnnesterInt fEq(NewSymbol Op Pos) Params}
+               %                             fApply(NewSymbol {List.reverse NewArgsList} Pos))
+               %                        Pos)
+               %                Params}
+               %else
+               %   % otherwise no recursive call
+               %   % all fLocal introduced by complex arguments have been directly place out of fApply when traversing ArgsRest
+               %   % and all what's left in the argument list are Symbols.
+               %   fApply(Op {List.reverse NewArgsList} Pos)
+               %end
 
             end
          end
@@ -2279,7 +2435,7 @@ define
                      {Show 'debug is tail record'#Pos}
                      {DumpAST.dumpAST AST _}
                      {Show '---'}
-                     UniRes=fAnd(fEq(FSym ResultRecord Pos) {UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} )
+                     UniRes=fAnd(fEq(FSym ResultRecord Pos) {UnnesterInt {WrapInFAnd Unifications} Params} )
                   else
                      {Show 'debug is not tail record'#Pos}
                      {DumpAST.dumpAST AST _}
