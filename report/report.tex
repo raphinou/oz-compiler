@@ -196,7 +196,8 @@ As mentioned earlier, Y registers are persisting for the lifespan of the current
 X registers are work registers, and if a value in a X register needs to be accessed several time across calls, it has to be saved in a Y register. This is done with a move instruction: \lstinline!move(source_reg destination_reg)!.
 
 %FIXME: what kind of registers can be unified. Does it make sense to unify X regs?
-Unification is supported with the instruction unify(LHS RHS) where both LHS and RHS are registers.
+Unification is supported with the instruction \lstinline!unify(LHS RHS)! where
+both \lstinline!LHS! and \lstinline!RHS! are registers.
 
 \subsection{Jumps}\label{sec:opcode:jumps}
 Code positions can be identified by labels, which need to be atoms or names. A label \lstinline!L! will appear in the code in a record \lstinline!lbl(L)!. 
