@@ -1855,6 +1855,47 @@ or an expression as in
 in which case both code branches are desugared as expression.
 A fNoElse record is left as is and will only be useful for the opcode generation function.
 
+\subsubsection{Case}
+The case instruction is very similar to \lstinline!if..then..else..end!.
+The condition tested is always an expression.
+The \lstinline!case! instruction can be a statement as in 
+\begin{lstlisting}
+   case Rec
+   of action(A) then
+      {DoAction A}
+   [] skip() then
+      skip
+   [] else
+      {LogError}
+      skip
+   end
+\end{lstlisting}
+, in which case clauses are desugared as statement
+or an expression as in
+\begin{lstlisting}
+  
+   PersonId= case Rec
+             of create(Name) then
+                Person = {Create Name}
+             in
+                Person.id
+             [] find(Name) then
+                Person = {Find Name}
+             in
+                if Person==unit then
+                   unit
+                else
+                   Person.id
+                end
+             [] else
+                unit
+             end
+\end{lstlisting}
+in which case each clause is desugared as expression.
+As for the \lstinline!if..then..else! instruction, the absence of an else clause
+it indicated by a record fNoElse in the AST, which is left as is and will only
+be useful for the opcode generation function.
+
 \subsubsection{Booleans Combinations}
 Combinations of boolean expressions with \lstinline!andthen! are desugared in
 \lstinline!if..then..else! expressions. Here is the translation
