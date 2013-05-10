@@ -6,6 +6,7 @@
 \usepackage[margin=false,inline=true]{fixme}
 \usepackage{listings} % DO NOT USE DRAFT DOCUMENT AS IT WILL NOT DISPLAY THE CODE
 \usepackage{tikz}
+\usepackage{float}
 \usetikzlibrary{arrows,automata,shapes}
 \tikzstyle{block} = [rectangle, draw, fill=blue!20, 
     text width=5em, text centered, rounded corners, minimum height=4em]
@@ -20,10 +21,20 @@
 \begin{document}
 \newcommand{\nav}[1]{#1}
 %\newcommand{\nav}[1]{}
+\renewcommand{\topfraction}{.85}
+\renewcommand{\bottomfraction}{.7}
+\renewcommand{\textfraction}{.15}
+\renewcommand{\floatpagefraction}{.66}
+\renewcommand{\dbltopfraction}{.66}
+\renewcommand{\dblfloatpagefraction}{.66}
+\setcounter{topnumber}{9}
+\setcounter{bottomnumber}{9}
+\setcounter{totalnumber}{20}
+\setcounter{dbltopnumber}{9}
 
 % configure listings package to handle code as Oz code
 %\lstset{language=Oz}
-\lstset{language=Oz,basicstyle=\ttfamily\small,columns=fullflexible}
+\lstset{language=Oz,basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true}
 
 % requires memoir
 % include git rev
@@ -80,7 +91,9 @@ The Mozart2 virtual machine works with four types of registers. The description 
 
 \subsection{Abstractions}\label{sec:vm:abstractions}
 An Oz procedure is represented in the virtual machine by what is called an abstraction. An Oz program itself is implicitly placed in what is called a top level abstraction.
-An abstraction holds references to G registers and to its code area. This code area has references to its K registers and the code itself. 
+An abstraction holds references to G registers and to its code area. This code
+area has references to its K registers and the code itself, as illustrated in
+Figure~\ref{fig:internal_virtual_machine}.
 
 \begin{figure}[h]
 \begin{tikzpicture}[auto,every matrix/.style={ampersand replacement=\&,column sep=2cm,row sep=2cm},
@@ -101,15 +114,18 @@ An abstraction holds references to G registers and to its code area. This code a
   \draw[to]  (codearea.east)+(0,7pt)  --   (bytecode);
 \end{tikzpicture}
 \caption{Internals of the virtual machine}
+\label{fig:internal_virtual_machine}
 \end{figure}
 Capturing the global variables at the abstraction level is what provides
 closures: a procedure captures the environment it was defined in.
 The CodeArea is not stored in the abstraction itself, but is referenced from
 it, simply because the same CodeArea can be referenced from multiple
-abstractions. Let's illustrate this by an example. 
+abstractions. Let's illustrate this by the example in
+Figure~\ref{fig:code_area_sharing}.
 
 % reference: http://www.info.ucl.ac.be/~pvr/bookfigures/fig3_8.oz
 
+\begin{figure}[h]
 \begin{lstlisting}
    fun {Sqrt X}
       fun {Improve Guess}
@@ -129,6 +145,10 @@ abstractions. Let's illustrate this by an example.
       {SqrtIter Guess}
    end
 \end{lstlisting}
+\caption{Functions sharing the same CodeArea}
+\label{fig:code_area_sharing}
+\end{figure}
+
 The method Sqrt computes the square root by Newton's method. Each time Sqrt is
 called, it defines three local functions. The two first reference the variable
 X, which is a global variable for them, and which has probably a different
@@ -138,17 +158,9 @@ abstraction with one global variable referencing the already existing code
 area. 
 
 If we have 2 simultaneous calls to Sqrt, for example {Sqrt 2} and {Sqrt 5}, we
-would end up with this structure in the virtual machine:
+would end up with the structure of Figure~\ref{fig:blurps} 
+in the virtual machine.
 
-\begin{verbatim}
-Abstr1
-CodeArea -------> CodeArea
-G0=2          /   Code     -------------> Code
-             /    K(2)                     with X registers
-Abstr2      /
-CodeArea --+
-G0=5
-\end{verbatim}
 
 \begin{figure}[h]
   \centering
@@ -174,6 +186,7 @@ G0=5
   \draw[to]  (codearea.east)+(0,7pt)  --   (bytecode);
 \end{tikzpicture}
 \caption{Multiple Abstractions referring to the same CodeArea}
+\label{fig:blurps}
 \end{figure}
 
 
@@ -209,16 +222,31 @@ Conditional jumps will look at the value in a X register, and if this value is n
 
 \subsection{Calls}\label{sec:opcode:calls}
 %FIXME: can only call procedures and builtins?
-Calls can be made with \lstinline!call(R Args)!, where R is a register identifying what to call (procedure or builtin) and Args is the number of arguments passed to the callee. The arguments of the call are not directly passed to the call instruction, but have to be placed in the X registers from 0 to Args-1 with move instructions before the call, as this is where the virtual machine will look for the arguments. The complete code for a call to a callee located in register Y 3 with three arguments which values come from Y registers 0 to 2 will thus be of the form:
+Calls can be made with \lstinline!call(R Args)!, where R is a register
+identifying what to call (procedure or builtin) and Args is the number of
+arguments passed to the callee. The arguments of the call are not directly
+passed to the call instruction, but have to be placed in the X registers from 0
+to Args-1 with move instructions before the call, as this is where the virtual
+machine will look for the arguments. The complete code for a call to a callee
+located in register Y 3 with three arguments which values come from Y registers
+0 to 2 will thus be of the form illustrated in
+Figure~\ref{fig:opcodes:callexample}.
+\begin{figure}[h]
 \begin{lstlisting}
-move(y(0) x(0))
-move(y(1) x(1))
-move(y(2) x(2))
-call(y(3) 3)
+   move(y(0) x(0))
+   move(y(1) x(1))
+   move(y(2) x(2))
+   call(y(3) 3)
 \end{lstlisting}
+\caption{Opcodes for a call}
+\label{fig:opcodes:callexample}
+\end{figure}
+
 
 A call done as last instruction of an abstraction should be made with the
-\lstinline!tailCall! instruction, as this lets the virtual machine optimise the execution. It has the exact same specification as the call instruction, only the name of the instruction differs: \lstinline!tailCall(Callee Args)!.
+\lstinline!tailCall! instruction, as this lets the virtual machine optimise the
+execution. It has the exact same specification as the call instruction, only the
+name of the instruction differs: \lstinline!tailCall(Callee Args)!.
 
 \subsection{Records}\label{sec:opcode:records}
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
@@ -230,14 +258,30 @@ The arity is supported by the virtual machine and includes the label and feature
 There are two special cases of records that are handled specifically by the virtual machine.
 A con is a record with label '|' and with only 2 features numbers 1 and 2 and is initialised by
 \lstinline!createConsUnify(DestinationReg)!. Again, this instruction has to be followed by arrayFill instructions, two in this particular case.
-A tuple is a record with all numeric features. It is initialised by \lstinline!createTupleUnify(k(Label) NumberOfFeatures DestinationReg)! and followed by arrayFill instructions.
+A tuple is a record with all numeric features. It is initialised with 
+\begin{lstlisting}
+   createTupleUnify(k(Label) NumberOfFeatures DestinationReg)
+\end{lstlisting}
+and followed by \lstinline!arrayFill! instructions.
 \subsection{Procedures}\label{sec:opcode:procedures}
-A procedure is represented by what is called an abstractions (see Section \ref{sec:vm:abstractions}), which is created and stored in register DestinationReg with
-\lstinline!createAbstractionUnify(k(CodeArea) GlobalsCount  DestinationReg)!
-CodeArea is the assembled body of the procedure (see Section \ref{sec:codegen:procedures} for details). GlobalsCount identifies how many references to global variables this abstraction holds. It is the number of arrayFill instructions that will follow to initialise those global variables that the abstraction can access in G variables numbered from 0. The first arrayFill instruction will set the value of g(0), the second the value of g(1), \ldots
+A procedure is represented by what is called an abstraction (see Section
+\ref{sec:vm:abstractions}), which is created and stored in register
+\lstinline!DestinationReg! with
+\begin{lstlisting}
+   createAbstractionUnify(k(CodeArea) GlobalsCount  DestinationReg)
+\end{lstlisting}
+\lstinline!CodeArea! is the assembled body of the procedure (see Section
+\ref{sec:codegen:procedures} for details). \lstinline!GlobalsCount! identifies
+how many references to global variables this abstraction holds. It is the number
+of \lstinline!arrayFill! instructions that will follow to initialise those global variables
+that the abstraction can access in G registers numbered from 0. The first
+\lstinline!arrayFill! instruction will set the value of \lstinline!g(0)!, the
+second the value of \lstinline!g(1)!,
+\ldots
 
-Here is code we will analyse:
+Figure~\ref{fig:opcodes:procedures:example} lists the code we will analyse.
 
+\begin{figure}[ht]
 \begin{lstlisting}
 local
   A B P
@@ -249,23 +293,75 @@ in
   end           % access in g(0) and g(1) resp.
 end
 \end{lstlisting}
+\caption{Oz code example for opcodes generation}
+\label{fig:opcodes:procedures:example}
+\end{figure}
 
-As noted in the code comments, we suppose, the compiler having done its work of registers assignation, variables A and B are stored in registers X 0 and 1 respectively, that the abstraction for procedure P is to be stored in register Y 0, and that P accesses to the value A and B via the register g(0) and g(1) respectively.
-The body having been assembled and stored in the constant value CodeArea, this will lead to this code passed to the assembler:
+
+As noted in the code comments, we suppose, the compiler having done its work of
+registers assignation, variables \lstinline!A! and \lstinline!B! are stored in registers X 0 and 1
+respectively, that the abstraction for procedure \lstinline!P! is to be stored in register Y
+0, and that \lstinline!P! accesses to the value \lstinline!A! and \lstinline!B!
+via the register \lstinline!g(0)! and \lstinline!g(1)!
+respectively.
+The body having been assembled and stored in the constant value
+\lstinline!CodeArea!, this
+will lead to the code in Figure~\ref{fig:opcodes:procedures:result} to be passed
+to the assembler.
+\begin{figure}[ht]
 \begin{lstlisting}
-createAbstractionUnify(k(CodeArea) 2  y(0))
-arrayFill(x(0))
-arrayFill(x(1))
+   createAbstractionUnify(k(CodeArea) 2  y(0))
+   arrayFill(x(0))
+   arrayFill(x(1))
 \end{lstlisting}
+\caption{Opcodes generated for example Oz code}
+\label{fig:opcodes:procedures:result}
+\end{figure}
+
 
 \subsection{Exceptions}
 There is an opcode to setup an exception handler and jump to a label:
 \begin{lstlisting}
   setupExceptionHandler(DestLabel)
 \end{lstlisting}
-If the code executed from \lstinline!DestLabel! raises an exception befire  the exception handler
+If the code executed from \lstinline!DestLabel! raises an exception before  the exception handler
 is removed with \lstinline!popExceptionHandler!, the execution will jump to the
 opcode following the instruction \lstinline!setupExceptionHandler!.
+
+Figure~\ref{fig:opcodes:exception:oz} gives a simple example of Oz code
+handling exceptions, and Figure~\ref{fig:opcodes:exception:result} gives and
+idea of corresponding opcodes. The opcodes corresponding to
+\lstinline!ExceptionHandlingOpCodes! and more detailed examples are given in
+Section \ref{sec:arch:codegen:exceptions}.
+\begin{figure}[ht]
+\begin{lstlisting}
+   try
+      {Show 1}
+   catch E then
+      {Show 'catched exception'}
+   end
+\end{lstlisting}
+\caption{Oz code handling exceptions}
+\label{fig:opcodes:exception:oz}
+\end{figure}
+
+
+
+\begin{figure}[ht]
+\begin{lstlisting}
+    
+                   setupExceptionHandler(1)
+                   ExceptionHandlingOpCodes
+                   branch(2)
+   lbl(1)          move(k(1) x(0))
+                   call(k(<P/1 Show>) 1)
+                   popExceptionHandler
+   lbl(2)          return
+\end{lstlisting}
+\caption{Opcodes handling exceptions}
+\label{fig:opcodes:exception:result}
+\end{figure}
+
 
 \section{Compiler input}\label{section:compilerinput}
 %FIXME: add index for all record labels in the AST
@@ -274,28 +370,40 @@ This section will present and describe the records received from the parser and
 their corresponding Oz form.
 Not all will be described here as an exhaustive list is available at %http://www.mozart-oz.org/home/doc/compiler/node7.html#appendix.syntax. 
 \subsection{Position in source code}
-Most records have the corresponding position in the source code available in their last feature, encoded in a record of the form \lstinline!pos(File Linebegin Columnbegin Fileend Lineend Columnend)!. This information has to trickle through all transformations so meaningful error messages can be given to the programmer in case of error.
+Most records have the corresponding position in the source code available in
+their last feature, encoded in a record of the form:
+\begin{lstlisting}
+pos(File Linebegin Columnbegin Fileend Lineend Columnend)
+\end{lstlisting}
+The position of each instruction has to trickle through all transformations so meaningful error messages can be given to the programmer in case of error.
+Most of the nodes in the AST include the position of their instruction in the
+source code.
 
-For clarity and brevity, in the examples of AST included in this document, the positions will always be represented by the featureless record \lstinline!pos!. 
+For clarity and brevity, in the examples of AST included in this document, the
+positions will always be represented by the featureless record \lstinline!pos!
+or a variable name \lstinline!Pos!. 
 \subsection{Basic data types}
 The basic data type described in this section are the simplest node found in the AST as they have no children and are the leafs of the tree.
-These are the types that are currently handled, with their corresponding records in the AST:
+These are the basic data types with their corresponding records in the AST:
 \begin{description}
-  \item[integers] fInt(Val Pos)
-  \item[floats] fFloat(Val Pos)
-  \item[atoms] fAtom(value position)
+  \item[integers] \lstinline!fInt(Val Pos)!
+  \item[floats] \lstinline!fFloat(Val Pos)!
+  \item[atoms] \lstinline!fAtom(value position)!
 \end{description}
 
 \subsection{Variables}\label{sec:input:variables}
-A variable is found in a record fVar(VarName Pos)
+A variable is found in a record \lstinline!fVar(VarName Pos)!.
+\lstinline!VarName! is simply the textual name that the programmer gave to this
+variable.
 
 \subsection{Unification}
-A unification is found in a record fEq(LHS RHS Pos).
-A=3 gives fEq(fVar(A \_) fInt(3 \_))
+A unification is found in a record \lstinline!fEq(LHS RHS Pos)!.
+\lstinline!A=3! is present in the AST in the form of a record
+\lstinline!fEq(fVar(A pos) fInt(3 pos))!.
 
 \subsection{Instructions sequence}
 A sequence of instructions is wrapped in fAnd records, the first feature being usually one instruction, the second feature being a fAnd if more than one instruction follows,  or a single instruction. The code also handles the case when the two features are fAnd records. %FIXME: is this needed? 
-Example:\\
+Here is an example:\\
 \begin{tabular}{ p{0.3\textwidth} p{0.8\textwidth} }
   \begin{lstlisting}
     A=1
@@ -304,18 +412,23 @@ Example:\\
   \end{lstlisting}
 &
   \footnotesize{
-  \begin{verbatim}
-  fAnd( fEq (fVar (A _) fInt (1 _))
-        fAnd(fEq (fVar(B _)) fInt(2 _) 
-             fEq(fVar(C _) fInt(3 _))))
-  \end{verbatim}
+  \begin{lstlisting}
+  fAnd( fEq (fVar (A pos) fInt (1 pos))
+        fAnd(fEq (fVar(B pos)) fInt(2 pos) 
+             fEq(fVar(C pos) fInt(3 pos))))
+  \end{lstlisting}
   }
 \end{tabular}
 
 \subsection{Declarations}\label{sec:input:flocal}
 Declarations are found in records of the form fLocal(Declarations Body Pos), where declarations and Body are both AST subtrees. 
-For example:
+Figure~\ref{fig:input:decls_oz} shows Oz code declaring the three variables
+\lstinline!A!, \lstinline!B!
+and \lstinline!C!, and bounding variable \lstinline!A! with integer
+\lstinline!1!. The AST corresponding to this Oz code is shown in
+Figure~\ref{fig:input:decls}.
 
+\begin{figure}
 \begin{lstlisting}
 local
   A B C
@@ -323,20 +436,25 @@ in
   A=1
 end
 \end{lstlisting}
-will give
-\begin{verbatim}
+\caption{Declaration of variables}
+\label{fig:input:decls_oz}
+\begin{lstlisting}
 fLocal(
        fAnd(
-            fVar(A _) 
+            fVar(A pos) 
             fAnd(
-                 fVar(B _) 
-                 fVar(C _) 
-                 _) 
-            _) 
+                 fVar(B pos) 
+                 fVar(C pos) 
+                 pos) 
+            pos) 
        fEq( 
-            fVar(A _) 
-            fInt(1 _) ))
-\end{verbatim}
+            fVar(A pos) 
+            fInt(1 pos) ))
+\end{lstlisting}
+\caption{AST for declarations of variables}
+\label{fig:input:decls}
+\end{figure}
+
 
 \subsection{Procedures}\label{sec:input:procedures}
 \subsubsection{Definitions}
@@ -3442,8 +3560,8 @@ The only downside to this approach is that helper functions have to be exported 
       {Compile.unWrapFAnd fAnd(first fAnd(second third) )}
       first|second|third|nil }
 \end{lstlisting}
-\label{fig:helperstestsexample}
 \caption{Helper test example}
+\label{fig:helperstestsexample}
 \end{figure}
 \subsection{Compiler tests}
 Tests are defined by three files each:
