@@ -16,6 +16,7 @@ import
    Boot_Name at 'x-oz://boot/Name'
    Boot_Value at 'x-oz://boot/Value'
    DumpAST at '../lib/DumpAST.ozf'
+   Module
    % for nested environments debugging
    OS
 
@@ -260,18 +261,21 @@ define
    in
       {List.flatten {UnWrapFAndInt AST }}
    end
-
    fun {ListToAST L}
-      case L
-      of X|Xs then
-         Pos={GetPos X}
-      in
-         fRecord(fConst('|' pos)
-                   [fColon(fConst(1 pos) X)
-                   fColon(fConst(2 pos) {ListToAST Xs})] )
-      [] nil then
-         % end of list
-         fConst(nil pos)
+      if {List.is L} then
+         case L
+         of X|Xs then
+            Pos={GetPos X}
+         in
+            fRecord(fConst('|' Pos)
+                      [fColon(fConst(1 Pos) X)
+                      fColon(fConst(2 Pos) {ListToAST Xs})] )
+         [] nil then
+            % end of list
+            fConst(nil pos)
+         end
+      else
+         L
       end
    end
 
@@ -418,6 +422,8 @@ define
             {PVE E}
          [] fEq(LHS _ _) then
             {PVE LHS}
+         [] fFunctor(Id _ _ _) then
+            {PVE Id}
          else
             pv()
          end
@@ -490,18 +496,11 @@ define
             {CodeInDeclsInt AST Instrs}
             @Instrs
          end
-      in
-         case AST
-         %------------------------
-         of fLocal(Decls Body Pos) then
-         %------------------------
-            % Extract code from the declarations.
+         proc {NewDeclsAndBody Decls Body ?NewDecls ?NewBody}
             % Extract variables to be defined from declarations with the pattern variable functions PVS
             % Move the code from the declarations to the body, wrapping all in fAnds
             % Leave only the variables to be declared in the declaration part.
 
-            NewDecls
-            NewBody
             CodeInDeclarations
             CodeInDeclatationsAST
 
@@ -519,12 +518,49 @@ define
                NewBody=fAnd({DeclsFlattenerInt CodeInDeclatationsAST Params} {DeclsFlattenerInt Body Params})
             end
 
+         end
+      in
+         case AST
+         %------------------------
+         of fLocal(Decls Body Pos) then
+         %------------------------
+            NewDecls
+            NewBody
+         in
+            {NewDeclsAndBody Decls Body NewDecls NewBody}
             % Put all transformed parts in the new fLocal
             fLocal(
                NewDecls
                NewBody
                Pos
             )
+         % FIXME: check the second feature, usually fSkip
+         [] fDefine(Decls Body Pos) then
+            NewDecls
+            NewBody
+         in
+            {NewDeclsAndBody Decls Body NewDecls NewBody}
+            % Put all transformed parts in the new fLocal
+            fDefine(
+               NewDecls
+               NewBody
+               Pos
+            )
+
+         [] fPrepare(Decls Body Pos) then
+            NewDecls
+            NewBody
+         in
+            {NewDeclsAndBody Decls Body NewDecls NewBody}
+            % Put all transformed parts in the new fLocal
+            fPrepare(
+               NewDecls
+               NewBody
+               Pos
+            )
+
+
+
 
          %---
          else
@@ -540,11 +576,12 @@ define
    end
 
    % FIXME : we add Show manually to the base environment.
-   AugmentedBase={AdjoinAt {AdjoinAt Base 'Show' Show} 'OS' OS}
-   % Key is a name known only by the compiler, and used to protect date, notably in the pattern matching code.
+   AugmentedBase={AdjoinAt {AdjoinAt {AdjoinAt Base 'Show' Show} 'OS' OS} 'Module' Module}
+   % Key is a name known only by the compiler, and used to protect data, notably in the pattern matching code.
    Key = {NewName}
 
    % Helper functions to store and access data stored privately by the compiler.
+   % FIXME: improve
    fun {StoreInSafe X}
       {NewChunk store(Key:X compiler_internal__:true)}
    end
@@ -615,6 +652,7 @@ define
       end
 
       fun {NamerForCaptures Pattern Params}
+      %------------------------------------
          % This function creates synthetic symbols for captures in the case patterns
          % These new symbols are collected in Params.captures so they can be declared
          % outside the case.
@@ -663,9 +701,6 @@ define
 
       fun {NamerForBody AST Params}
       %----------------------------
-
-
-
          fun {WrapInFCases Body SymbolsAndPatterns Pos}
             % Used by HandlePatternArgs
             % Wrap Body in one fCase for each item of the list SymbolsAndPatterns,
@@ -826,7 +861,9 @@ define
                AST
             end
 
+         %-----------------------------
          [] fCase(Val Clauses Else Pos) then
+         %-----------------------------
             NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil} additionalGuards:{NewCell nil})}
             NewClauses
             Decls
@@ -907,7 +944,9 @@ define
          %------------
             fConst(V P)
 
+         %-------------------------------
          [] fClass(Var Specs Methods Pos) then
+         %-------------------------------
             fun {NameMethodLabel fMeth(M Body Pos) Params}
                % Function naming method labels
                % Declarations to wrap the class in are accumulated in Params.decls
@@ -1061,7 +1100,9 @@ define
             {NewParams.env restore()}
             ClassWithDecls
 
+         %-------------------------
          [] fFOR(Patterns Body Pos) then
+         %-------------------------
             fun {TransformForPatterns Args Body}
                % FIXME: can this desugar be moved to desugar?
                case Args
@@ -1089,7 +1130,10 @@ define
             end
          in
             {NamerForBody {TransformForPatterns Patterns Body} Params}
+
+         %-------------------------------------------------
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
+         %-------------------------------------------------
             % User NamerForCaptures for the pattern in Clause,
             % as this will be desugared in a case instruction using the same clauses
             NewParams={Record.adjoin Params params(captures:{NewCell nil})}
@@ -1116,7 +1160,40 @@ define
             else
                NamedTry
             end
+
+         %-------------------------------------------------
+         [] fFunctor(Id ExportImportPrepareDefine Pos) then
+         %-------------------------------------------------
+            % imports => namerfordecls on modules imported
+            % aliases => TODO
+            %
+            Imports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fImport end}
+            [fImport(ImportItems _)]=Imports
+            Prepare = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fPrepare end}
+            Define = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fDefine end}
+            Exports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fExport end}
+            NewExports NewImports NewPrepare NewDefine
+         in
+            {Params.env backup}
+            NewPrepare = {List.map Prepare   fun {$ fPrepare(Decls Body Pos)}
+                                                fPrepare({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
+                                             end}
+            NewImports = fImport({List.map ImportItems   fun {$ fImportItem(Id Aliases At)}
+                                                            NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
+                                                         in
+                                                            fImportItem({NamerForDecls Id Params} NewAliases {NamerForBody At Params})
+                                                         end} pos)
+            NewDefine  = {List.map Define    fun {$ fDefine(Decls Body Pos)}
+                                                fDefine({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
+                                             end}
+            NewExports = {NamerForBody Exports Params}
+            {Params.env restore}
+
+            % We reuse the order of the list's items later
+            fFunctor(Id  [NewPrepare.1 NewImports NewDefine.1 NewExports.1] Pos)
+         %-----------------------
          [] fOpApply(Op Args Pos) then
+         %-----------------------
             fOpApply(Op {List.map Args fun {$ I} {NamerForBody I Params} end} Pos)
          %---
          else
@@ -1524,6 +1601,8 @@ define
       fun {DesugarExpr AST Params}
       %---------------------------
          % Desugar expressions
+         %{Show 'debug DesugarExpr'}
+         %{DumpAST.dumpAST AST _}
          case AST
          of fProc(Dollar Args Body Flags Pos) then
          %   DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
@@ -1725,6 +1804,88 @@ define
             raise namerLeftFAtomIntactAtDesugar end
          [] fEq(LHS _ _) then
             fAnd(AST LHS)
+         [] fFunctor(Id SpecsList Pos) then
+            [Prepare fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
+            TypeRec
+            FromRec
+            Info
+            ImportRecordFields
+            ImportRecord
+            ExportRecordFields
+            ExportRecord
+            Decls={NewCell nil}
+            ImportParamSym = fSym({New SyntheticSymbol init({GetPos AST})} {GetPos AST})
+            ImportBinds
+            StatsList
+            Fun
+            FunBody
+         in
+            % Build import record
+            ImportRecordFields={List.map Imports   fun {$ fImportItem(fSym(Sym _) Aliases At)}
+                                                      TypeField=fColon(fConst('type' Pos) {ListToAST {List.map Aliases fun {$ '#'(A F)} F end}})
+                                                      Location
+                                                      LocationField
+                                                      ModName={Sym get(name $)}
+                                                   in
+                                                      {Show 'debug aliases:'}
+                                                      {DumpAST.dumpAST
+                                                         Aliases
+                                                         _
+                                                      }
+                                                      Location=case At
+                                                               of fNoImportAt then
+                                                                  {VirtualString.toString "x-oz://system/"#ModName#".ozf"}
+                                                               [] fImportAt(fConst(Loc _)) then
+                                                                  Loc
+                                                               end
+                                                      LocationField=fColon(fConst('from' Pos) fConst(Location Pos))
+                                                      {Show 'debug importrecordfields'}
+                                                      {DumpAST.dumpAST
+                                                      fColon(fConst(ModName Pos) fRecord(fConst('info' Pos) [TypeField LocationField]))
+                                                      }
+                                                   end }
+            ImportRecord=fRecord(fConst('import' Pos) ImportRecordFields)
+            {Show 'debug importrecord'}
+            {DumpAST.dumpAST ImportRecord _}
+
+            {Show 'debug desugared importrecord'}
+            {DumpAST.dumpAST {DesugarExpr ImportRecord Params} _}
+
+            ExportRecordFields={List.map Exports   fun {$ fExportItem(fColon(F V))}
+                                                fColon(F fConst('value' Pos))
+                                             end}
+            ExportRecord=fRecord(fConst('export' Pos) ExportRecordFields)
+
+
+            {List.forAll Imports proc {$ fImportItem(Id Aliases At)}
+                                    Decls:=Id|@Decls
+                                    {List.forAll Aliases proc{$ '#'(A F)} Decls:=A|@Decls end}
+                                 end}
+            Decls:=DefineDecls|@Decls
+
+
+            % bind import variables and aliases
+            ImportBinds = {NewCell nil}
+            {List.forAll Imports proc {$ fImportItem(I=fSym(Sym _) Aliases _)}
+                                    ImportBinds:=fEq(I fApply(fConst(Value.'.' Pos) [ImportParamSym fConst({Sym get(name $)} Pos)] Pos) Pos)|@ImportBinds
+                                    {List.forAll Aliases proc {$ '#'(A F)}
+                                                         ImportBinds:=fEq(A fApply(fConst(Value.byNeedDot Pos) [I F] Pos) Pos)|@ImportBinds
+                                                      end}
+                                 end}
+            StatsList = @ImportBinds|
+                        DefineStat|
+                        fRecord(fConst('export' Pos) {List.map Exports fun{$ fExportItem(I)} I end})|
+                        nil
+
+            FunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten StatsList}} } Pos)
+
+            Fun = fFun(fDollar(Pos) [ImportParamSym] FunBody nil Pos)
+
+            %{DesugarExpr fRecord(fConst('functor' Pos)   fColon(fConst('import' Pos) ImportRecord)|
+            %                                               fColon(fConst('export' Pos) ExportRecord)|
+            %                                               fColon(fConst('apply'  Pos) Fun)|nil )
+            %               Params}
+            fApply(fConst(Functor.new Pos) [{DesugarExpr ImportRecord Params} {DesugarExpr ExportRecord Params} {DesugarExpr Fun Params}]  Pos)
          else
             {Show '---'}
             {DumpAST.dumpAST AST _}
@@ -1736,6 +1897,8 @@ define
       fun {DesugarStat AST Params}
       %---------------------------
          % Desugar Statements.
+         %{Show 'debug DesugarStat'}
+         %{DumpAST.dumpAST AST _}
          case AST
          of fAnd(First Second) then
             % if the fAnd is a statement, both parts are treated as statements
@@ -2242,7 +2405,7 @@ define
                if {List.length Unifications}>0 then
                   UniRes=fAnd({UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} ResultApply)
                else
-                  {Show 'debug no unifications needed'}
+                  %{Show 'debug no unifications needed'}
                   UniRes=ResultApply
                end
 
@@ -2432,14 +2595,14 @@ define
                         end
                if {List.length Unifications}>0 then
                   if Params.tail then
-                     {Show 'debug is tail record'#Pos}
-                     {DumpAST.dumpAST AST _}
-                     {Show '---'}
+                     %{Show 'debug is tail record'#Pos}
+                     %{DumpAST.dumpAST AST _}
+                     %{Show '---'}
                      UniRes=fAnd(fEq(FSym ResultRecord Pos) {UnnesterInt {WrapInFAnd Unifications} Params} )
                   else
-                     {Show 'debug is not tail record'#Pos}
-                     {DumpAST.dumpAST AST _}
-                     {Show '---'}
+                     %{Show 'debug is not tail record'#Pos}
+                     %{DumpAST.dumpAST AST _}
+                     %{Show '---'}
                      UniRes=fAnd({UnnesterInt {WrapInFAnd Unifications} {NoTail Params}} fEq(FSym ResultRecord Pos))
                   end
                else
@@ -2471,9 +2634,9 @@ define
       %---------------------------
          %{Show 'UnnesterInt works on:'}
          %{DumpAST.dumpAST AST _}
-         {Show 'debug unnester for:'#Params.tail}
-         {DumpAST.dumpAST AST _}
-         {Show '----'}
+         %{Show 'debug unnester for:'#Params.tail}
+         %{DumpAST.dumpAST AST _}
+         %{Show '----'}
          case AST
          of fEq(LHS RHS Pos) then
             % Call Unnester on both parts, so that if it is a record, it is unnested.
