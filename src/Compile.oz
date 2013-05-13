@@ -592,6 +592,14 @@ define
       {IsChunk X} andthen {HasFeature X Key}
    end
 
+   proc {ExtractFunctorSpecs ExportImportPrepareDefine ?Requires ?Imports ?Prepare ?Define ?Exports}
+      Requires = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fRequire end}
+      Imports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fImport end}
+      Prepare = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fPrepare end}
+      Define = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fDefine end}
+      Exports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fExport end}
+   end
+
    %##############
    fun {Namer AST}
    %##############
@@ -1167,12 +1175,15 @@ define
             % imports => namerfordecls on modules imported
             % aliases => TODO
             %
-            Imports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fImport end}
-            [fImport(ImportItems _)]=Imports
-            Prepare = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fPrepare end}
-            Define = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fDefine end}
-            Exports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fExport end}
-            [fExport(ExportItems ExportPos)]=Exports
+            Requires
+            Imports
+            Prepare
+            Define
+            Exports
+            {ExtractFunctorSpecs ExportImportPrepareDefine ?Requires ?Imports ?Prepare ?Define ?Exports}
+            ImportItems ExportItems RequireItems
+            ExportPos
+
             NewId NewExports NewImports NewPrepare NewDefine
             fun {NameToAtom N}
                Head Tail
@@ -1181,6 +1192,22 @@ define
                {String.toAtom {Char.toLower Head.1}|Tail}
             end
          in
+            if Requires==nil then
+               RequireItems=nil
+            else
+               [fRequire(RequireItems _)]=Requires
+            end
+            if Imports==nil then
+               ImportItems=nil
+            else
+               [fImport(ImportItems _)]=Imports
+            end
+            if Exports==nil then
+               ExportItems=nil
+            else
+               [fExport(ExportItems ExportPos)]=Exports
+            end
+
             {Params.env backup}
             NewPrepare = {List.map Prepare   fun {$ fPrepare(Decls Body Pos)}
                                                 fPrepare({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
