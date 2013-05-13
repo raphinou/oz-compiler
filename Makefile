@@ -25,6 +25,9 @@ tests: tests/TestRunner.ozf tests/HelpersTests.ozf lib/Compile.ozf
 test: tests/TestRunner.ozf lib/Compile.ozf
 #Pass test prefix in variable test
 	cd tests && ./run_one_test_definition.sh definitions/${test}*oz
+testfrom: tests/TestRunner.ozf lib/Compile.ozf
+#Pass test prefix in variable test
+	cd tests && ./run_test_definitions_from.sh ${from}
 lib/Run.ozf: src/Run.oz lib/Compile.ozf
 	ozc -c src/Run.oz -o lib/Run.ozf
 run: lib/Run.ozf
