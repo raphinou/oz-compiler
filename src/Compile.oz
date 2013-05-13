@@ -422,7 +422,7 @@ define
             {PVE E}
          [] fEq(LHS _ _) then
             {PVE LHS}
-         [] fFunctor(Id _ _ _) then
+         [] fFunctor(Id _ _) then
             {PVE Id}
          else
             pv()
@@ -1173,7 +1173,7 @@ define
             Define = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fDefine end}
             Exports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fExport end}
             [fExport(ExportItems ExportPos)]=Exports
-            NewExports NewImports NewPrepare NewDefine
+            NewId NewExports NewImports NewPrepare NewDefine
             fun {NameToAtom N}
                Head Tail
             in
@@ -1203,10 +1203,11 @@ define
                                                                fExportItem(fColon(fConst({NameToAtom Name} Pos) {NamerForBody I Params}))
                                                             end
                                                          end} ExportPos)
+            NewId={NamerForBody Id Params}
             {Params.env restore}
 
             % We reuse the order of the list's items later
-            fFunctor(Id  [NewPrepare.1 NewImports NewDefine.1 NewExports] Pos)
+            fFunctor(NewId  [NewPrepare.1 NewImports NewDefine.1 NewExports] Pos)
          %-----------------------
          [] fOpApply(Op Args Pos) then
          %-----------------------
@@ -1614,6 +1615,94 @@ define
          end
       end
 
+      fun {DesugarFunctor fFunctor(Id SpecsList Pos) Params}
+         [fPrepare(PrepareDecls PrepareStat _) fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
+         TypeRec
+         FromRec
+         Info
+         ImportRecordFields
+         ImportRecord
+         ExportRecordFields
+         ExportRecord
+         Decls={NewCell nil}
+         ImportParamSym = fSym({New SyntheticSymbol init({GetPos AST})} {GetPos AST})
+         ImportBinds
+         StatsList
+         Fun
+         FunBody
+      in
+         % If there is no require, we simply desugar the functor as a call to NewFunctor
+         % Build import record
+         ImportRecordFields={List.map Imports   fun {$ fImportItem(fSym(Sym _) Aliases At)}
+                                                   TypeField=fColon(fConst('type' Pos) {ListToAST {List.map Aliases fun {$ '#'(A F)} F end}})
+                                                   Location
+                                                   LocationField
+                                                   ModName={Sym get(name $)}
+                                                in
+                                                   {Show 'debug aliases:'}
+                                                   {DumpAST.dumpAST
+                                                      Aliases
+                                                      _
+                                                   }
+                                                   Location=case At
+                                                            of fNoImportAt then
+                                                               {VirtualString.toString "x-oz://system/"#ModName#".ozf"}
+                                                            [] fImportAt(fConst(Loc _)) then
+                                                               Loc
+                                                            end
+                                                   LocationField=fColon(fConst('from' Pos) fConst(Location Pos))
+                                                   {Show 'debug importrecordfields'}
+                                                   {DumpAST.dumpAST LocationField _}
+                                                   fColon(fConst(ModName Pos) fRecord(fConst('info' Pos) [TypeField LocationField]))
+
+                                                end }
+         ImportRecord=fRecord(fConst('import' Pos) ImportRecordFields)
+
+         ExportRecordFields={List.map Exports   fun {$ fExportItem(fColon(F V))}
+                                             fColon(F fConst('value' Pos))
+                                          end}
+         ExportRecord=fRecord(fConst('export' Pos) ExportRecordFields)
+
+
+         {List.forAll Imports proc {$ fImportItem(Id Aliases At)}
+                                 Decls:=Id|@Decls
+                                 {List.forAll Aliases proc{$ '#'(A F)} Decls:=A|@Decls end}
+                              end}
+         Decls:=DefineDecls|PrepareDecls|@Decls
+
+
+         % bind import variables and aliases
+         ImportBinds = {NewCell nil}
+         {List.forAll Imports proc {$ fImportItem(I=fSym(Sym _) Aliases _)}
+                                 ImportBinds:=fEq(I fApply(fConst(Value.'.' Pos) [ImportParamSym fConst({Sym get(name $)} Pos)] Pos) Pos)|@ImportBinds
+                                 {List.forAll Aliases proc {$ '#'(A F)}
+                                                      ImportBinds:=fEq(A fApply(fConst(Value.byNeedDot Pos) [I F] Pos) Pos)|@ImportBinds
+                                                   end}
+                              end}
+         % TODO: add Prepare
+         StatsList = @ImportBinds|
+                     PrepareStat|
+                     DefineStat|
+                     fRecord(fConst('export' Pos) {List.map Exports fun{$ fExportItem(I)} I end})|
+                     nil
+
+         FunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten StatsList}} } Pos)
+
+         Fun = fFun(fDollar(Pos) [ImportParamSym] FunBody nil Pos)
+
+         %{DesugarExpr fRecord(fConst('functor' Pos)   fColon(fConst('import' Pos) ImportRecord)|
+         %                                               fColon(fConst('export' Pos) ExportRecord)|
+         %                                               fColon(fConst('apply'  Pos) Fun)|nil )
+         %               Params}
+         %fApply(fConst(Functor.new Pos) [{DesugarExpr ImportRecord Params} {DesugarExpr ExportRecord Params} {DesugarExpr Fun Params}]  Pos)
+         case Id
+         of fDollar(_) then
+            fApply(fConst(Functor.new Pos) [ImportRecord ExportRecord Fun]  Pos)
+         else
+            fApply(fConst(Functor.new Pos) [ImportRecord ExportRecord Fun Id]  Pos)
+         end
+      end
+
       fun {DesugarExpr AST Params}
       %---------------------------
          % Desugar expressions
@@ -1821,92 +1910,7 @@ define
          [] fEq(LHS _ _) then
             fAnd(AST LHS)
          [] fFunctor(Id SpecsList Pos) then
-            [fPrepare(PrepareDecls PrepareStat _) fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
-            %PrepareStat
-            %PrepareDecls
-            %[Prepare fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
-            TypeRec
-            FromRec
-            Info
-            ImportRecordFields
-            ImportRecord
-            ExportRecordFields
-            ExportRecord
-            Decls={NewCell nil}
-            ImportParamSym = fSym({New SyntheticSymbol init({GetPos AST})} {GetPos AST})
-            ImportBinds
-            StatsList
-            Fun
-            FunBody
-         in
-            % Build import record
-            ImportRecordFields={List.map Imports   fun {$ fImportItem(fSym(Sym _) Aliases At)}
-                                                      TypeField=fColon(fConst('type' Pos) {ListToAST {List.map Aliases fun {$ '#'(A F)} F end}})
-                                                      Location
-                                                      LocationField
-                                                      ModName={Sym get(name $)}
-                                                   in
-                                                      {Show 'debug aliases:'}
-                                                      {DumpAST.dumpAST
-                                                         Aliases
-                                                         _
-                                                      }
-                                                      Location=case At
-                                                               of fNoImportAt then
-                                                                  {VirtualString.toString "x-oz://system/"#ModName#".ozf"}
-                                                               [] fImportAt(fConst(Loc _)) then
-                                                                  Loc
-                                                               end
-                                                      LocationField=fColon(fConst('from' Pos) fConst(Location Pos))
-                                                      {Show 'debug importrecordfields'}
-                                                      {DumpAST.dumpAST LocationField _}
-                                                      fColon(fConst(ModName Pos) fRecord(fConst('info' Pos) [TypeField LocationField]))
-
-                                                   end }
-            ImportRecord=fRecord(fConst('import' Pos) ImportRecordFields)
-            {Show 'debug importrecord'}
-            {DumpAST.dumpAST ImportRecord _}
-
-            {Show 'debug desugared importrecord'}
-            {DumpAST.dumpAST {DesugarExpr ImportRecord Params} _}
-
-            ExportRecordFields={List.map Exports   fun {$ fExportItem(fColon(F V))}
-                                                fColon(F fConst('value' Pos))
-                                             end}
-            ExportRecord=fRecord(fConst('export' Pos) ExportRecordFields)
-
-
-            {List.forAll Imports proc {$ fImportItem(Id Aliases At)}
-                                    Decls:=Id|@Decls
-                                    {List.forAll Aliases proc{$ '#'(A F)} Decls:=A|@Decls end}
-                                 end}
-            Decls:=DefineDecls|PrepareDecls|@Decls
-
-
-            % bind import variables and aliases
-            ImportBinds = {NewCell nil}
-            {List.forAll Imports proc {$ fImportItem(I=fSym(Sym _) Aliases _)}
-                                    ImportBinds:=fEq(I fApply(fConst(Value.'.' Pos) [ImportParamSym fConst({Sym get(name $)} Pos)] Pos) Pos)|@ImportBinds
-                                    {List.forAll Aliases proc {$ '#'(A F)}
-                                                         ImportBinds:=fEq(A fApply(fConst(Value.byNeedDot Pos) [I F] Pos) Pos)|@ImportBinds
-                                                      end}
-                                 end}
-            % TODO: add Prepare
-            StatsList = @ImportBinds|
-                        PrepareStat|
-                        DefineStat|
-                        fRecord(fConst('export' Pos) {List.map Exports fun{$ fExportItem(I)} I end})|
-                        nil
-
-            FunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten StatsList}} } Pos)
-
-            Fun = fFun(fDollar(Pos) [ImportParamSym] FunBody nil Pos)
-
-            %{DesugarExpr fRecord(fConst('functor' Pos)   fColon(fConst('import' Pos) ImportRecord)|
-            %                                               fColon(fConst('export' Pos) ExportRecord)|
-            %                                               fColon(fConst('apply'  Pos) Fun)|nil )
-            %               Params}
-            fApply(fConst(Functor.new Pos) [{DesugarExpr ImportRecord Params} {DesugarExpr ExportRecord Params} {DesugarExpr Fun Params}]  Pos)
+            {DesugarExpr {DesugarFunctor AST Params} Params}
          else
             {Show '---'}
             {DumpAST.dumpAST AST _}
@@ -2065,6 +2069,8 @@ define
                                               Pos)))
                            Pos)
                         Params}
+         [] fFunctor(Id SpecsList Pos) then
+            {DesugarExpr {DesugarFunctor AST Params} Params}
          [] fRaise(E Pos) then
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
          [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
