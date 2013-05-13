@@ -1172,7 +1172,14 @@ define
             Prepare = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fPrepare end}
             Define = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fDefine end}
             Exports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fExport end}
+            [fExport(ExportItems ExportPos)]=Exports
             NewExports NewImports NewPrepare NewDefine
+            fun {NameToAtom N}
+               Head Tail
+            in
+               {List.takeDrop {VirtualString.toString N} 1 Head Tail}
+               {String.toAtom {Char.toLower Head.1}|Tail}
+            end
          in
             {Params.env backup}
             NewPrepare = {List.map Prepare   fun {$ fPrepare(Decls Body Pos)}
@@ -1186,11 +1193,20 @@ define
             NewDefine  = {List.map Define    fun {$ fDefine(Decls Body Pos)}
                                                 fDefine({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
                                              end}
-            NewExports = {NamerForBody Exports Params}
+            NewExports = fExport({List.map ExportItems   fun {$ fExportItem(I)}
+                                                            case I
+                                                            of fColon(_ _) then
+                                                               fExportItem({NamerForBody I Params})
+                                                            else
+                                                               fVar(Name Pos)=I
+                                                            in
+                                                               fExportItem(fColon(fConst({NameToAtom Name} Pos) {NamerForBody I Params}))
+                                                            end
+                                                         end} ExportPos)
             {Params.env restore}
 
             % We reuse the order of the list's items later
-            fFunctor(Id  [NewPrepare.1 NewImports NewDefine.1 NewExports.1] Pos)
+            fFunctor(Id  [NewPrepare.1 NewImports NewDefine.1 NewExports] Pos)
          %-----------------------
          [] fOpApply(Op Args Pos) then
          %-----------------------
@@ -1805,7 +1821,10 @@ define
          [] fEq(LHS _ _) then
             fAnd(AST LHS)
          [] fFunctor(Id SpecsList Pos) then
-            [Prepare fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
+            [fPrepare(PrepareDecls PrepareStat _) fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
+            %PrepareStat
+            %PrepareDecls
+            %[Prepare fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
             TypeRec
             FromRec
             Info
@@ -1840,9 +1859,9 @@ define
                                                                end
                                                       LocationField=fColon(fConst('from' Pos) fConst(Location Pos))
                                                       {Show 'debug importrecordfields'}
-                                                      {DumpAST.dumpAST
+                                                      {DumpAST.dumpAST LocationField _}
                                                       fColon(fConst(ModName Pos) fRecord(fConst('info' Pos) [TypeField LocationField]))
-                                                      }
+
                                                    end }
             ImportRecord=fRecord(fConst('import' Pos) ImportRecordFields)
             {Show 'debug importrecord'}
@@ -1861,7 +1880,7 @@ define
                                     Decls:=Id|@Decls
                                     {List.forAll Aliases proc{$ '#'(A F)} Decls:=A|@Decls end}
                                  end}
-            Decls:=DefineDecls|@Decls
+            Decls:=DefineDecls|PrepareDecls|@Decls
 
 
             % bind import variables and aliases
@@ -1872,7 +1891,9 @@ define
                                                          ImportBinds:=fEq(A fApply(fConst(Value.byNeedDot Pos) [I F] Pos) Pos)|@ImportBinds
                                                       end}
                                  end}
+            % TODO: add Prepare
             StatsList = @ImportBinds|
+                        PrepareStat|
                         DefineStat|
                         fRecord(fConst('export' Pos) {List.map Exports fun{$ fExportItem(I)} I end})|
                         nil
