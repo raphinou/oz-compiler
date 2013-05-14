@@ -1332,7 +1332,8 @@ Our example contained only declarations, and the statement part is a \lstinline!
 \label{fig:functor_example_export}
 \end{figure}
 
-
+\nav{The next transformation on \lstinline!fFunctor! nodes takes place in the
+namer, see Section~\ref{sec:arch:namer:functors}.}
 
 
 
@@ -1685,6 +1686,62 @@ A new environment is created for each clause, to which the pattern might add
 bindings, which are then available when naming the code of the clause.
 New symbols are possibly introduced by the patterns, which then have to be
 declared in a wrapping \lstinline!local..in..end! instruction.
+
+\subsubsection{Functors}\label{sec:arch:namer:functors}
+The work done by the namer on \lstinline!fFunctor(Id SpecsList Pos)! nodes is trivial, but the
+order of naming the items of the \lstinline!SpecsList! is important. For
+example, \lstinline!import!ed variables have to be named before traversing the
+\lstinline!define! block, or else these wouldn't be available to that code!
+
+It is possible to sketch the scope of variables with the code in
+Figure~\ref{fig:functors_scope}. We see that the variables declared by require
+are available to all other parts of the functor, which is not the case of the
+variables defined by \lstinline!prepare!, which are not available in the
+\lstinline!require! statements. 
+
+\begin{figure}[ht]
+\begin{lstlisting}
+   local
+      require_decls
+   in
+      require_stats
+      local
+         prepare_decls
+      in
+         prepare_stats
+         local
+            import_decls
+         in
+            import_stats
+            local
+               define_decls
+            in
+               define_stats
+               exports
+            end
+         end
+      end
+   end
+\end{lstlisting}
+\caption{Functor variables scopes}
+\label{fig:functors_scope}
+\end{figure}
+
+One other small change introduced by the namer is the creation of default export
+key, changing
+\begin{lstlisting}
+   export
+      DumpAST
+\end{lstlisting}
+in
+\begin{lstlisting}
+   export
+      dumpAst:DumpAST
+\end{lstlisting}
+
+\nav{The next transformation applied on \lstinline!fFunctor! nodes is found in
+the desugar pass, Section\ref{sec:arch:desugar:functors}.}
+
 
 \subsubsection{Compiler Code Notes}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
@@ -2621,6 +2678,8 @@ and is desugared in
 which is itself recursively desugared. See section \ref{sec:arch:desugar:calls}
 to see how an \lstinline!fapply! node is desugared.
 
+
+\subsubsection{Functors}\label{sec:arch:desugar:functors}
 
 \subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
