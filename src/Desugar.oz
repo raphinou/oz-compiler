@@ -414,7 +414,8 @@ define
       end
 
       fun {DesugarFunctor fFunctor(Id SpecsList Pos) Params}
-         [fPrepare(PrepareDecls PrepareStat _) fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
+         %[fPrepare(PrepareDecls PrepareStat _) fImport(Imports _) fDefine(DefineDecls DefineStat _) fExport(Exports _)]=SpecsList
+         FunctorSpecs={ExtractFunctorSpecs SpecsList}
          TypeRec
          FromRec
          Info
@@ -431,7 +432,7 @@ define
       in
          % If there is no require, we simply desugar the functor as a call to NewFunctor
          % Build import record
-         ImportRecordFields={List.map Imports   fun {$ fImportItem(fSym(Sym _) Aliases At)}
+         ImportRecordFields={List.map FunctorSpecs.'importItems'   fun {$ fImportItem(fSym(Sym _) Aliases At)}
                                                    TypeField=fColon(fConst('type' Pos) {ListToAST {List.map Aliases fun {$ '#'(A F)} F end}})
                                                    Location
                                                    LocationField
@@ -456,22 +457,22 @@ define
                                                 end }
          ImportRecord=fRecord(fConst('import' Pos) ImportRecordFields)
 
-         ExportRecordFields={List.map Exports   fun {$ fExportItem(fColon(F V))}
+         ExportRecordFields={List.map FunctorSpecs.'exportItems'   fun {$ fExportItem(fColon(F V))}
                                              fColon(F fConst('value' Pos))
                                           end}
          ExportRecord=fRecord(fConst('export' Pos) ExportRecordFields)
 
 
-         {List.forAll Imports proc {$ fImportItem(Id Aliases At)}
+         {List.forAll FunctorSpecs.'importItems' proc {$ fImportItem(Id Aliases At)}
                                  Decls:=Id|@Decls
                                  {List.forAll Aliases proc{$ '#'(A F)} Decls:=A|@Decls end}
                               end}
-         Decls:=DefineDecls|PrepareDecls|@Decls
+         Decls:=FunctorSpecs.defineDecls|FunctorSpecs.prepareDecls|@Decls
 
 
          % bind import variables and aliases
          ImportBinds = {NewCell nil}
-         {List.forAll Imports proc {$ fImportItem(I=fSym(Sym _) Aliases _)}
+         {List.forAll FunctorSpecs.'importItems' proc {$ fImportItem(I=fSym(Sym _) Aliases _)}
                                  ImportBinds:=fEq(I fApply(fConst(Value.'.' Pos) [ImportParamSym fConst({Sym get(name $)} Pos)] Pos) Pos)|@ImportBinds
                                  {List.forAll Aliases proc {$ '#'(A F)}
                                                       ImportBinds:=fEq(A fApply(fConst(Value.byNeedDot Pos) [I F] Pos) Pos)|@ImportBinds
@@ -479,9 +480,9 @@ define
                               end}
          % TODO: add Prepare
          StatsList = @ImportBinds|
-                     PrepareStat|
-                     DefineStat|
-                     fRecord(fConst('export' Pos) {List.map Exports fun{$ fExportItem(I)} I end})|
+                     FunctorSpecs.prepareStats|
+                     FunctorSpecs.defineStats|
+                     fRecord(fConst('export' Pos) {List.map FunctorSpecs.'exportItems' fun{$ fExportItem(I)} I end})|
                      nil
 
          FunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten StatsList}} } Pos)

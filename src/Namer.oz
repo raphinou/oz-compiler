@@ -670,7 +670,7 @@ functor
             Prepare
             Define
             Exports
-            {ExtractFunctorSpecs ExportImportPrepareDefine ?Requires ?RequireItems ?Imports ?ImportItems ?Prepare ?Define ?Exports ?ExportItems}
+            FunctorSpecs={ExtractFunctorSpecs ExportImportPrepareDefine}
             ImportItems ExportItems RequireItems
 
             NewId NewExports NewImports NewPrepare NewDefine
@@ -683,18 +683,18 @@ functor
          in
 
             {Params.env backup}
-            NewPrepare = {List.map Prepare   fun {$ fPrepare(Decls Body Pos)}
+            NewPrepare = {List.map FunctorSpecs.'prepare'   fun {$ fPrepare(Decls Body Pos)}
                                                 fPrepare({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
                                              end}
-            NewImports = fImport({List.map ImportItems   fun {$ fImportItem(Id Aliases At)}
+            NewImports = fImport({List.map FunctorSpecs.importItems   fun {$ fImportItem(Id Aliases At)}
                                                             NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
                                                          in
                                                             fImportItem({NamerForDecls Id Params} NewAliases {NamerForBody At Params})
                                                          end} pos)
-            NewDefine  = {List.map Define    fun {$ fDefine(Decls Body Pos)}
+            NewDefine  = {List.map FunctorSpecs.'define'    fun {$ fDefine(Decls Body Pos)}
                                                 fDefine({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
                                              end}
-            NewExports = fExport({List.map ExportItems   fun {$ fExportItem(I)}
+            NewExports = fExport({List.map FunctorSpecs.exportItems   fun {$ fExportItem(I)}
                                                             case I
                                                             of fColon(_ _) then
                                                                fExportItem({NamerForBody I Params})

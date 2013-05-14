@@ -333,27 +333,55 @@ define
       {IsChunk X} andthen {HasFeature X Key}
    end
 
-   proc {ExtractFunctorSpecs ExportImportPrepareDefine ?Requires ?RequireItems ?Imports ?ImportItems ?Prepare ?Define ?Exports ?ExportItems}
-      Requires = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fRequire end}
-      Imports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fImport end}
+   fun {ExtractFunctorSpecs ExportImportPrepareDefine }
+      % Some names are plurals because they hold a list. Singular names don't hold a list.
+      Require RequireItems Import ImportItems Prepare Define Export ExportItems
+      PrepareDecls PrepareStats DefineDecls DefineStats
+   in
+      Require = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fRequire end}
+      Import = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fImport end}
       Prepare = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fPrepare end}
       Define = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fDefine end}
-      Exports = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fExport end}
-      if Requires==nil then
+      Export = {List.filter ExportImportPrepareDefine fun {$ I} {Record.label I}==fExport end}
+      if Require==nil then
          RequireItems=nil
       else
-         [fRequire(RequireItems _)]=Requires
+         [fRequire(RequireItems _)]=Require
       end
-      if Imports==nil then
+      if Import==nil then
          ImportItems=nil
       else
-         [fImport(ImportItems _)]=Imports
+         [fImport(ImportItems _)]=Import
       end
-      if Exports==nil then
+      if Export==nil then
          ExportItems=nil
       else
-         [fExport(ExportItems _)]=Exports
+         [fExport(ExportItems _)]=Export
       end
+      if Prepare==nil then
+         PrepareDecls=nil
+         PrepareStats=nil
+      else
+         [fPrepare(PrepareDecls PrepareStats _)]=Prepare
+      end
+      if Define==nil then
+         DefineDecls=nil
+         DefineStats=nil
+      else
+         [fDefine(DefineDecls DefineStats _)]=Define
+      end
+      f( 'require':Require
+         'import':Import
+         'prepare':Prepare
+         'define':Define
+         'export':Export
+         requireItems:RequireItems
+         importItems:ImportItems
+         exportItems:ExportItems
+         prepareDecls:PrepareDecls
+         prepareStats:PrepareStats
+         defineDecls:DefineDecls
+         defineStats:DefineStats)
    end
 
 end
