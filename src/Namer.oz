@@ -26,7 +26,11 @@ functor
    define
 
    AugmentedBase={AdjoinAt {AdjoinAt {AdjoinAt Base 'Show' Show} 'OS' OS} 'Module' Module}
+
+
+   %################
    class Environment
+   %################
       % The class Environment is used by the namer to keep track of variables
       % defined at each step.
       % The environment maps the variable name to its symbol. That way, all
@@ -38,12 +42,16 @@ functor
       attr
          dict
          backups
+      %---------
       meth init()
+      %---------
          dict:={NewDictionary}
          backups:=nil
       end
 
+      %---------------------------------
       meth addOrGetSymbol(Name Pos ?Res)
+      %---------------------------------
          % If the variable Name is already mapped to a symbol, assign it to Res.
          % If not, first create a new symbol, map it to the variable name, and assign it to Res.
          if {Dictionary.member @dict Name} then
@@ -56,33 +64,50 @@ functor
          end
       end
 
+      %---------------------------------
       meth getSymbol(Name ?R)
+      %---------------------------------
          % Assigns to R the symbol mapped to variable Name
          R={Dictionary.get @dict Name}
       end
+
+      %---------------------------------
       meth hasSymbol(Name ?R)
+      %---------------------------------
         {Dictionary.member @dict Name R}
       end
+
+      %---------------------------------
       meth setSymbol(Name Pos ?NewSymbol)
+      %---------------------------------
          % create a new symbol and map it to variable Name.
          % This method is used when we need to override an already defined mapping,
          % eg when a variable local to a proc override a variable captured from the parent environment.
          NewSymbol = { New Symbol init(Name Pos)}
          {Dictionary.put @dict Name NewSymbol}
       end
+
+      %---------------------------------
       meth setSyntheticSymbol(Pos ?NewSymbol)
+      %---------------------------------
          % create a new symbol and map it to variable Name.
          % This method is used when we need to override an already defined mapping,
          % eg when a variable local to a proc override a variable captured from the parent environment.
          NewSymbol = { New SyntheticSymbol init(Pos)}
          {Dictionary.put @dict {NewName} NewSymbol}
       end
+
+      %---------------------------------
       meth backup()
+      %---------------------------------
          % Backup environment so it can be restored later.
          % Simply push a clone of the dictionary on a list
          backups:={Dictionary.clone @dict}|@backups
       end
+
+      %---------------------------------
       meth restore()
+      %---------------------------------
          % Restore a backed up environment. Simply pop from the backups list.
          dict:=@backups.1
          backups:=@backups.2
@@ -118,11 +143,12 @@ functor
       end
 
 
+      %-----------------------------
       fun {NamerForDecls AST Params}
       %-----------------------------
          % In declarations, we create a new symbol.
          case AST
-         %----------------
+
          of fVar(Name Pos) then
          %----------------
             Sym
@@ -130,17 +156,22 @@ functor
             % assign symbol in declarations
             Sym={Params.env setSymbol(Name Pos $)}
             fSym( Sym Pos)
+
          [] fDollar(_) then
+         %--------------------
             % Leave netsing marker in declarations of functional procedures
             AST
-         %--------------------
+
          [] fAnd(First Second) then
          %--------------------
             fAnd( {NamerForDecls First Params} {NamerForDecls Second Params})
+
          [] fSym(_ _) then
+         %--------------------
             % Introduced when added support for patterns in function arguments.
             % See explanation in NamerForBody
             AST
+
          else
          %---
             %{Show 'AST received by NamerForDecls:'}
@@ -149,13 +180,16 @@ functor
          end
       end
 
+      %------------------------------------
       fun {NamerForCaptures Pattern Params}
       %------------------------------------
          % This function creates synthetic symbols for captures in the case patterns
          % These new symbols are collected in Params.captures so they can be declared
          % outside the case.
          case Pattern
+
          of fVar(Name Pos) then
+         %------------------------
             NewSymbol
          in
             NewSymbol={Params.env setSymbol(Name Pos $)}
@@ -164,21 +198,31 @@ functor
             (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
             % In the fConst, directly plave the 'safe'
             fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
+
          [] fEscape( Var=fVar(_ _) Pos) then
+         %------------------------
             NewSymbol={New SyntheticSymbol init(Pos)}
          in
             {NewSymbol set(type patternmatch)}
             (Params.additionalGuards):= fOpApply('==' [fSym(NewSymbol Pos) {NamerForBody Var Params}] Pos)|@(Params.additionalGuards)
             (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
             fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
+
          [] fRecord(Label Features) then
+         %-------------------------------
             fRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
+
          [] fOpenRecord(Label Features) then
+         %-------------------------------
             fOpenRecord({NamerForBody Label Params} {List.map Features fun {$ I} {NamerForCaptures I Params} end})
+
          [] fColon(Key Val) then
+         %-------------------------------
             % Pattern matching on values in records, not on the features
             fColon({NamerForBody Key Params} {NamerForCaptures Val Params} )
+
          [] fWildcard(Pos) then
+         %-------------------------------
             NewSymbol
          in
             NewSymbol={Params.env setSyntheticSymbol(Pos $)}
@@ -188,18 +232,26 @@ functor
             (Params.captures):=fSym(NewSymbol Pos)|@(Params.captures)
             % In the fConst, directly place the 'safe'
             fConst( {StoreInSafe fSym(NewSymbol Pos)} Pos)
+
          [] fEq(LHS RHS Pos) then
+         %-------------------------------
             fPatMatConjunction({NamerForCaptures LHS Params} {NamerForCaptures RHS Params} Pos)
+
          else
+         %----
             % FIXME CHECKME : is this ok?
             {NamerForBody Pattern Params}
          end
       end
 
 
+      %----------------------------
       fun {NamerForBody AST Params}
       %----------------------------
+
+         %.............................................
          fun {WrapInFCases Body SymbolsAndPatterns Pos}
+         %.............................................
             % Used by HandlePatternArgs
             % Wrap Body in one fCase for each item of the list SymbolsAndPatterns,
             % its items being of the form Symbol#Pattern, where Symbol is the value
@@ -220,7 +272,9 @@ functor
          end
 
 
+         %.................................
          fun {HandlePatternArgs AST Params}
+         %.................................
             % Function called by NamerForBody when it encounters a function or
             % procedure with pattern arguments.
             % It first builds 2 lists, which will be used if patterns are present in the arguments
@@ -313,7 +367,7 @@ functor
          % erase variables with the same name in the parent environment when
          % used after the fun/proc definition (see test 029)
          case AST
-         %-----------------------
+
          of fLocal(Decl Body Pos) then
          %-----------------------
             Res
@@ -327,15 +381,14 @@ functor
             {Params.env restore()}
             Res
 
-         %---------------------------------
          [] fFun(_ _ _ _ _) then
          %---------------------------------
             {HandlePatternArgs AST Params}
-         %---------------------------------
+
          [] fProc(_ _ _ _ _) then
          %---------------------------------
             {HandlePatternArgs AST Params}
-         %----------------
+
          [] fVar(Name Pos) then
          %----------------
             Sym
@@ -359,7 +412,6 @@ functor
                AST
             end
 
-         %-----------------------------
          [] fCase(Val Clauses Else Pos) then
          %-----------------------------
             NewParams={Record.adjoin Params params( captures:{NewCell nil} guardsSymbols:{NewCell nil} additionalGuards:{NewCell nil})}
@@ -427,32 +479,34 @@ functor
                R=NewCaseAST
             end
             R
-         %-----------
+
          [] fInt(V P) then
          %-----------
             fConst(V P)
 
-         %-------------
          [] fFloat(V P) then
          %-------------
             fConst(V P)
 
-         %------------
          [] fAtom(V P) then
          %------------
             fConst(V P)
 
-         %-------------------------------
          [] fClass(Var Specs Methods Pos) then
          %-------------------------------
+
+            %.............................................
             fun {NameMethodLabel fMeth(M Body Pos) Params}
+            %.............................................
                % Function naming method labels
                % Declarations to wrap the class in are accumulated in Params.decls
                % Initialisation code to be put before the class code, but inside the declarations, is accumulated in Params.init
                %
                % fVar labels are replaced by a new symbol, which will be declared and initialised to a new name value
                % fEscape labels use the environment to find the symbol to use
+               %. . . . . . . . . . . . . . . . . . .
                fun {NameMethodLabelInt Name Params}
+               %. . . . . . . . . . . . . . . . . . .
                   case Name
                   of fAtom(L Pos) then
                      fConst(L Pos)
@@ -477,9 +531,13 @@ functor
                fMeth({NameMethodLabelInt M Params} Body Pos)
             end
 
+            %.............................
             fun {NameMethod Method Params}
+            %.............................
                NewArgs NewBody
+               % . . . . . . . . . . . . . . . . . . . .
                fun {NameMethodWithArgs Args Body Params}
+               % . . . . . . . . . . . . . . . . . . . .
                   % Method with arguments
                   % Args are available only to the method, so we backup the environment
                   % to be able to restore it after we traversed this method
@@ -502,7 +560,9 @@ functor
                %{DumpAST.dumpAST Method _}
                % the env backup and restore is at this level to be able to name the variable capturin the method head
                case Method
+
                of fMeth(fRecord(Name Args) Body Pos) then
+               % . . . . . . . . . . . . . . . . . . . .
                   NewArgs
                   NewBody
                   R
@@ -512,7 +572,9 @@ functor
                   R=fMeth(fRecord(Name NewArgs) NewBody Pos)
                   {Params.env restore()}
                   R
+
                [] fMeth(fOpenRecord(Name Args) Body Pos) then
+               % . . . . . . . . . . . . . . . . . . . .
                   NewArgs
                   NewBody
                   R
@@ -522,7 +584,9 @@ functor
                   R=fMeth(fOpenRecord(Name NewArgs) NewBody Pos)
                   {Params.env restore()}
                   R
+
                [] fMeth(fEq(fRecord(Name Args) H Pos) Body MPos) then
+               % . . . . . . . . . . . . . . . . . . . .
                   NewArgs
                   NewBody
                   NamedH
@@ -534,7 +598,9 @@ functor
                   R=fMeth(fEq(fRecord(Name NewArgs) NamedH Pos) NewBody MPos)
                   {Params.env restore()}
                   R
+
                [] fMeth(fEq(fOpenRecord(Name Args) H Pos) Body MPos) then
+               % . . . . . . . . . . . . . . . . . . . .
                   NewArgs
                   NewBody
                   NamedH
@@ -546,7 +612,9 @@ functor
                   R=fMeth(fEq(fOpenRecord(Name NewArgs) NamedH Pos) NewBody MPos)
                   {Params.env restore()}
                   R
+
                [] fMeth(fEq(L H Pos) Body MPos) then
+               % . . . . . . . . . . . . . . . . . . . .
                   NewBody
                   NamedH
                   R
@@ -557,7 +625,9 @@ functor
                   R=fMeth(fEq(L NamedH Pos) NewBody MPos)
                   {Params.env restore()}
                   R
+
                else
+               % . .
                   Name Body MPos
                in
                   % Method without arguments
@@ -581,26 +651,33 @@ functor
             % class. See test 321
             NamedClass={NamerForBody Var Params}
             {NewParams.env backup()}
+
             % Name method first, so the private methods are available in the methods bodies
             NamedLabelsMethods={List.map Methods fun {$ I} {NameMethodLabel I NewParams} end }
             NewMethods={List.map NamedLabelsMethods fun {$ I} {NameMethod I NewParams} end }
             NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
+
+            % Include init code if any
             if @(NewParams.init)\=nil then
                ClassWithInit={WrapInFAnd {List.append [fClass(NamedClass NewSpecs NewMethods Pos)] @(NewParams.init)}}
             else
                ClassWithInit=fClass( NamedClass NewSpecs NewMethods Pos)
             end
+
+            % Include declarations, if any
             if @(NewParams.decls)\=nil then
                ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} ClassWithInit Pos)
             else
                ClassWithDecls=ClassWithInit
             end
+
+            % Restore environment available outside the class
             {NewParams.env restore()}
+
             ClassWithDecls
 
-         %-------------------------
          [] fFOR(Patterns Body Pos) then
-         %-------------------------
+         %-------------------------------
             fun {TransformForPatterns Args Body}
                % FIXME: can this desugar be moved to desugar?
                case Args
@@ -629,7 +706,6 @@ functor
          in
             {NamerForBody {TransformForPatterns Patterns Body} Params}
 
-         %-------------------------------------------------
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
          %-------------------------------------------------
             % User NamerForCaptures for the pattern in Clause,
@@ -659,31 +735,68 @@ functor
                NamedTry
             end
 
+         [] fFunctor(Id SpecsList Pos) then
          %-------------------------------------------------
-         [] fFunctor(Id ExportImportPrepareDefine Pos) then
-         %-------------------------------------------------
-            % imports => namerfordecls on modules imported
-            % aliases => TODO
+            % The scope of variables can be schematised like this:
             %
-            Requires
-            Imports
-            Prepare
-            Define
-            Exports
-            FunctorSpecs={ExtractFunctorSpecs ExportImportPrepareDefine}
-            ImportItems ExportItems RequireItems
+            %  local
+            %     require_decls
+            %  in
+            %     require_stats
+            %     local
+            %        prepare_decls
+            %     in
+            %        prepare_stats
+            %        local
+            %           import_decls
+            %        in
+            %           import_stats
+            %           local
+            %              define_decls
+            %           in
+            %              define_stats
+            %              exports
+            %           end
+            %        end
+            %     end
+            %  end
+            %
+            % This is exactly how the namer works here
+            %
+            % The namer also introduces the default export key, transforming
+            %    export DumpAST
+            % in
+            %    export dumpAST:DumpAST
+            % For this, the function NameToAtom is defined.
+            %
 
-            NewId NewExport NewImport NewPrepare NewDefine NewRequire
-            NewSpecs={NewCell nil}
+            %.................
             fun {NameToAtom N}
+            %.................
+               % Changes the first letter of N to lowercase, and returns the corresponding atom
                Head Tail
             in
                {List.takeDrop {VirtualString.toString N} 1 Head Tail}
                {String.toAtom {Char.toLower Head.1}|Tail}
             end
+
+            % Get functor's specs record thanks to helper function
+            FunctorSpecs={ExtractFunctorSpecs SpecsList}
+
+            % Declare variables to hold named parts
+            NewId NewExport NewImport NewPrepare NewDefine NewRequire
+
+            % Accumulate items of the new specslist in a list.
+            % Needed to work like that as some elements might not be defined (eg prepare is optional)
+            NewSpecs={NewCell nil}
+
          in
 
+            % Name the functor itself in the parent environment
+            NewId={NamerForBody Id Params}
+
             {Params.env backup}
+            % Name require if present
             if FunctorSpecs.'require'\=nil then
                NewRequire = fRequire({List.map FunctorSpecs.requireItems   fun {$ fImportItem(Id Aliases At)}
                                                                NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
@@ -692,10 +805,14 @@ functor
                                                             end} {GetPos FunctorSpecs.'require'})
                NewSpecs:=NewRequire|@NewSpecs
             end
+
+            % Name prepare if present
             if FunctorSpecs.'prepare'\=nil then
                NewPrepare = fPrepare({NamerForDecls FunctorSpecs.prepareDecls Params} {NamerForBody FunctorSpecs.prepareStats Params} {GetPos FunctorSpecs.'prepare'})
                NewSpecs:=NewPrepare|@NewSpecs
             end
+
+            % Name import if present
             if FunctorSpecs.'import'\=nil then
                NewImport = fImport({List.map FunctorSpecs.importItems   fun {$ fImportItem(Id Aliases At)}
                                                                NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
@@ -704,10 +821,14 @@ functor
                                                             end} {GetPos FunctorSpecs.'import'})
                NewSpecs:=NewImport|@NewSpecs
             end
+
+            % Name define if present
             if FunctorSpecs.'define'\=nil then
                NewDefine  = fDefine({NamerForDecls FunctorSpecs.defineDecls Params} {NamerForBody FunctorSpecs.defineStats Params} {GetPos FunctorSpecs.'define'})
                NewSpecs:=NewDefine|@NewSpecs
             end
+
+            % Name export if present
             if FunctorSpecs.'export'\=nil then
                NewExport = fExport({List.map FunctorSpecs.exportItems   fun {$ fExportItem(I)}
                                                                case I
@@ -721,16 +842,16 @@ functor
                                                             end} {GetPos FunctorSpecs.'export'})
                NewSpecs:=NewExport|@NewSpecs
             end
-            NewId={NamerForBody Id Params}
+
             {Params.env restore}
 
             % We reuse the order of the list's items later
             fFunctor(NewId  @NewSpecs Pos)
-         %-----------------------
+
          [] fOpApply(Op Args Pos) then
-         %-----------------------
+         %-----------------------------
             fOpApply(Op {List.map Args fun {$ I} {NamerForBody I Params} end} Pos)
-         %---
+
          else
          %---
             %{Show 'Default pass for next ast'}
