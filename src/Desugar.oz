@@ -446,7 +446,7 @@ define
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
          %-----------------------------------------------------------------------------
-         fun {DesugarFunctorWithRequire fFunctor(Id SpecsList Pos) FunctorSpecs Params}
+         fun {DesugarComputedFunctor fFunctor(Id SpecsList Pos) FunctorSpecs Params}
          %-----------------------------------------------------------------------------
             % If there is a require, we desugar the functor in 2 nested functors
             % Previous compiler code: https://github.com/mozart/mozart2-compiler/blob/master/Unnester.oz#L840
@@ -514,7 +514,7 @@ define
          end
 
          %................................................................................
-         fun {DesugarFunctorWithoutRequire fFunctor(Id SpecsList Pos) FunctorSpecs Params}
+         fun {DesugarCompiledFunctor fFunctor(Id SpecsList Pos) FunctorSpecs Params}
          %................................................................................
             % Desugar it as a call to Feature.new with 3 arguments:
             % - ImportRecord
@@ -645,10 +645,10 @@ define
          FunctorSpecs={ExtractFunctorSpecs SpecsList}
 
       in
-         if FunctorSpecs.'require'==nil then
-            {DesugarFunctorWithoutRequire AST FunctorSpecs Params}
+         if FunctorSpecs.'require'==nil andthen FunctorSpecs.'prepare'==nil then
+            {DesugarCompiledFunctor AST FunctorSpecs Params}
          else
-            {DesugarFunctorWithRequire AST FunctorSpecs Params}
+            {DesugarComputedFunctor AST FunctorSpecs Params}
          end
       end
 
@@ -1111,7 +1111,7 @@ define
 
          [] fFunctor(Id SpecsList Pos) then
          %--------------------------------------
-            {DesugarExpr {DesugarFunctor AST Params} Params}
+            {DesugarStat {DesugarFunctor AST Params} Params}
 
          [] fRaise(E Pos) then
          %--------------------------------------

@@ -6,6 +6,7 @@ local
       import
          System(show:ImportedShow)
       prepare
+         {Show 'prepare'}
          Test=1000
       define
          {ImportedShow 'define::start'}

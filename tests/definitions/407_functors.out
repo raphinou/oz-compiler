@@ -1,0 +1,37 @@
+'will dump in prepare with required function'
+fRecord(
+   fConst('prepare' pos )
+   |(
+      fColon(
+         fConst(1 pos )
+         fConst(one pos )
+      )
+      |(
+         fColon(
+            fConst(2 pos )
+            fConst(two pos )
+         )
+         nil
+      )
+   )
+)
+'define::start'
+'define::end'
+1000
+fRecord(
+   fConst(hello pos )
+   |(
+      fColon(
+         fConst(1 pos )
+         fConst(one pos )
+      )
+      |(
+         fColon(
+            fConst(2 pos )
+            fConst(two pos )
+         )
+         nil
+      )
+   )
+)
+hello
