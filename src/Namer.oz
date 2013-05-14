@@ -673,7 +673,8 @@ functor
             FunctorSpecs={ExtractFunctorSpecs ExportImportPrepareDefine}
             ImportItems ExportItems RequireItems
 
-            NewId NewExports NewImports NewPrepare NewDefine
+            NewId NewExport NewImport NewPrepare NewDefine
+            NewSpecs={NewCell nil}
             fun {NameToAtom N}
                Head Tail
             in
@@ -683,32 +684,40 @@ functor
          in
 
             {Params.env backup}
-            NewPrepare = {List.map FunctorSpecs.'prepare'   fun {$ fPrepare(Decls Body Pos)}
-                                                fPrepare({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
-                                             end}
-            NewImports = fImport({List.map FunctorSpecs.importItems   fun {$ fImportItem(Id Aliases At)}
-                                                            NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
-                                                         in
-                                                            fImportItem({NamerForDecls Id Params} NewAliases {NamerForBody At Params})
-                                                         end} pos)
-            NewDefine  = {List.map FunctorSpecs.'define'    fun {$ fDefine(Decls Body Pos)}
-                                                fDefine({NamerForDecls Decls Params} {NamerForBody Body Params} Pos)
-                                             end}
-            NewExports = fExport({List.map FunctorSpecs.exportItems   fun {$ fExportItem(I)}
-                                                            case I
-                                                            of fColon(_ _) then
-                                                               fExportItem({NamerForBody I Params})
-                                                            else
-                                                               fVar(Name Pos)=I
+            if FunctorSpecs.'prepare'\=nil then
+               NewPrepare = fPrepare({NamerForDecls FunctorSpecs.prepareDecls Params} {NamerForBody FunctorSpecs.prepareStats Params} Pos)
+               NewSpecs:=NewPrepare|@NewSpecs
+            end
+            if FunctorSpecs.'import'\=nil then
+               NewImport = fImport({List.map FunctorSpecs.importItems   fun {$ fImportItem(Id Aliases At)}
+                                                               NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
                                                             in
-                                                               fExportItem(fColon(fConst({NameToAtom Name} Pos) {NamerForBody I Params}))
-                                                            end
-                                                         end} pos)
+                                                               fImportItem({NamerForDecls Id Params} NewAliases {NamerForBody At Params})
+                                                            end} pos)
+               NewSpecs:=NewImport|@NewSpecs
+            end
+            if FunctorSpecs.'define'\=nil then
+               NewDefine  = fDefine({NamerForDecls FunctorSpecs.defineDecls Params} {NamerForBody FunctorSpecs.defineStats Params} Pos)
+               NewSpecs:=NewDefine|@NewSpecs
+            end
+            if FunctorSpecs.'export'\=nil then
+               NewExport = fExport({List.map FunctorSpecs.exportItems   fun {$ fExportItem(I)}
+                                                               case I
+                                                               of fColon(_ _) then
+                                                                  fExportItem({NamerForBody I Params})
+                                                               else
+                                                                  fVar(Name Pos)=I
+                                                               in
+                                                                  fExportItem(fColon(fConst({NameToAtom Name} Pos) {NamerForBody I Params}))
+                                                               end
+                                                            end} pos)
+               NewSpecs:=NewExport|@NewSpecs
+            end
             NewId={NamerForBody Id Params}
             {Params.env restore}
 
             % We reuse the order of the list's items later
-            fFunctor(NewId  [NewPrepare.1 NewImports NewDefine.1 NewExports] Pos)
+            fFunctor(NewId  @NewSpecs Pos)
          %-----------------------
          [] fOpApply(Op Args Pos) then
          %-----------------------

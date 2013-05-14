@@ -423,10 +423,11 @@ define
          ImportRecord
          ExportRecordFields
          ExportRecord
+         % Collect all declarations and statements in list held in a cell.
          Decls={NewCell nil}
+         StatsList={NewCell nil}
          ImportParamSym = fSym({New SyntheticSymbol init({GetPos AST})} {GetPos AST})
          ImportBinds
-         StatsList
          Fun
          FunBody
       in
@@ -467,7 +468,13 @@ define
                                  Decls:=Id|@Decls
                                  {List.forAll Aliases proc{$ '#'(A F)} Decls:=A|@Decls end}
                               end}
-         Decls:=FunctorSpecs.defineDecls|FunctorSpecs.prepareDecls|@Decls
+         if FunctorSpecs.defineDecls\=nil then
+            Decls:=FunctorSpecs.defineDecls|@Decls
+         end
+
+         if FunctorSpecs.prepareDecls\=nil then
+            Decls:=FunctorSpecs.prepareDecls|@Decls
+         end
 
 
          % bind import variables and aliases
@@ -479,13 +486,22 @@ define
                                                    end}
                               end}
          % TODO: add Prepare
-         StatsList = @ImportBinds|
-                     FunctorSpecs.prepareStats|
-                     FunctorSpecs.defineStats|
-                     fRecord(fConst('export' Pos) {List.map FunctorSpecs.'exportItems' fun{$ fExportItem(I)} I end})|
+         StatsList:= fRecord(fConst('export' Pos) {List.map FunctorSpecs.'exportItems' fun{$ fExportItem(I)} I end})|
                      nil
+         if FunctorSpecs.prepareStats\=nil then
+            StatsList := FunctorSpecs.prepareStats| @StatsList
+         end
+         if FunctorSpecs.defineStats\=nil then
+            StatsList := FunctorSpecs.defineStats|@StatsList
+         end
 
-         FunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten StatsList}} } Pos)
+         if @ImportBinds\=nil then
+            StatsList :=  @ImportBinds|@StatsList
+         end
+
+         % FIXME: could be improved
+         % We put the StatsList in the order we want them to be executed. WrapInFAnd reverse the order, so we reverse it ourself first
+         FunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten @StatsList}} } Pos)
 
          Fun = fFun(fDollar(Pos) [ImportParamSym] FunBody nil Pos)
 
