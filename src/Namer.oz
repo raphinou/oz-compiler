@@ -673,7 +673,7 @@ functor
             FunctorSpecs={ExtractFunctorSpecs ExportImportPrepareDefine}
             ImportItems ExportItems RequireItems
 
-            NewId NewExport NewImport NewPrepare NewDefine
+            NewId NewExport NewImport NewPrepare NewDefine NewRequire
             NewSpecs={NewCell nil}
             fun {NameToAtom N}
                Head Tail
@@ -684,8 +684,16 @@ functor
          in
 
             {Params.env backup}
+            if FunctorSpecs.'require'\=nil then
+               NewRequire = fRequire({List.map FunctorSpecs.requireItems   fun {$ fImportItem(Id Aliases At)}
+                                                               NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
+                                                            in
+                                                               fImportItem({NamerForDecls Id Params} NewAliases {NamerForBody At Params})
+                                                            end} {GetPos FunctorSpecs.'require'})
+               NewSpecs:=NewRequire|@NewSpecs
+            end
             if FunctorSpecs.'prepare'\=nil then
-               NewPrepare = fPrepare({NamerForDecls FunctorSpecs.prepareDecls Params} {NamerForBody FunctorSpecs.prepareStats Params} Pos)
+               NewPrepare = fPrepare({NamerForDecls FunctorSpecs.prepareDecls Params} {NamerForBody FunctorSpecs.prepareStats Params} {GetPos FunctorSpecs.'prepare'})
                NewSpecs:=NewPrepare|@NewSpecs
             end
             if FunctorSpecs.'import'\=nil then
@@ -693,11 +701,11 @@ functor
                                                                NewAliases = {List.map Aliases fun {$ '#'(A F)} '#'({NamerForDecls A Params} {NamerForBody F Params}) end}
                                                             in
                                                                fImportItem({NamerForDecls Id Params} NewAliases {NamerForBody At Params})
-                                                            end} pos)
+                                                            end} {GetPos FunctorSpecs.'import'})
                NewSpecs:=NewImport|@NewSpecs
             end
             if FunctorSpecs.'define'\=nil then
-               NewDefine  = fDefine({NamerForDecls FunctorSpecs.defineDecls Params} {NamerForBody FunctorSpecs.defineStats Params} Pos)
+               NewDefine  = fDefine({NamerForDecls FunctorSpecs.defineDecls Params} {NamerForBody FunctorSpecs.defineStats Params} {GetPos FunctorSpecs.'define'})
                NewSpecs:=NewDefine|@NewSpecs
             end
             if FunctorSpecs.'export'\=nil then
@@ -710,7 +718,7 @@ functor
                                                                in
                                                                   fExportItem(fColon(fConst({NameToAtom Name} Pos) {NamerForBody I Params}))
                                                                end
-                                                            end} pos)
+                                                            end} {GetPos FunctorSpecs.'export'})
                NewSpecs:=NewExport|@NewSpecs
             end
             NewId={NamerForBody Id Params}

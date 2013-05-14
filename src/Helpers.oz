@@ -370,11 +370,11 @@ define
       else
          [fDefine(DefineDecls DefineStats _)]=Define
       end
-      f( 'require':Require
-         'import':Import
-         'prepare':Prepare
-         'define':Define
-         'export':Export
+      f( 'require':if Require\=nil then Require.1 else nil end
+         'import':if Import\=nil then Import.1 else nil end
+         'prepare':if Prepare\=nil then Prepare.1 else nil end
+         'define':if Define\=nil then Define.1 else nil end
+         'export':if Export\=nil then Export.1 else nil end
          requireItems:RequireItems
          importItems:ImportItems
          exportItems:ExportItems

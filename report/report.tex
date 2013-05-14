@@ -1147,6 +1147,196 @@ the parser is
 \end{lstlisting}
 The first transformation applied to these nodes takes place in the desugar step,
 described in Section \ref{sec:arch:desugar:dotassign}.
+\subsection{Functors}
+Modular applications can be developed in Oz by using functors. A functor
+computes a module, taking modules as input and producing a new module as output.
+A module groups together related operations, and is made of an interface and an implementation.
+The interface publishes entry points to the module implementation, the rest of
+the implementation being unreachable from the outside.
+A functor can \lstinline!import! definitions, \lstinline!export! entry points to
+its implementation, and \lstinline!define! its implementation, as illustrated by
+the code in Figure~\ref{fig:compiled_functor}.
+\begin{figure}[h]
+\begin{lstlisting}
+functor
+import
+   DumpAST at '../lib/DumpAST.ozf'
+export
+   PrettyPrint
+define
+   proc {PrettyPrint AST}
+      {DumpAST.dumpAST AST _}
+   end
+end
+\end{lstlisting}
+\caption{Compiled functor}
+\label{fig:compiled_functor}
+\end{figure}
+
+A distinction is made between compiled and computed functors
+\footnote{A detailed description is available at
+http://www.mozart-oz.org/home/doc/apptut/node6.html}
+A compiled functor has only access to the base environment, and are of the form
+illustrated in \ref{fig:compiled_functor}.
+
+
+Computed functors have access to all data structure that the compiled functor
+supply when it is evaluated. This mean that the evaluation of a compiled functor
+can build data structures to be used in the computed functor. Computed functors are supported in Oz with
+\lstinline!require! and \lstinline!prepare!.This is better illustrated by an example, in
+Figure~\ref{fig:computed_functor}, coming from the online Oz
+documentation\footnote{Also at http://www.mozart-oz.org/home/doc/apptut/node6.html}.
+
+\begin{figure}[h]
+\begin{lstlisting}
+    functor 
+    import 
+       DB Form            % User defined
+       System Application % System
+    require
+       BuildSampleFlights
+    prepare 
+       Flights = {BuildSampleFlights}
+    define 
+       %% Enter some flights
+       {ForAll Flights DB.add}
+       ... 
+    end
+\end{lstlisting}
+\caption{Computed functor}
+\label{fig:computed_functor}
+\end{figure}
+
+The key point in this functor definition is the presence of the
+\lstinline!require! and \lstinline!prepare! sections. When this functor is
+compiled, the \lstinline!require! and \lstinline!prepare! are not evaluated.
+Hence the compiled vector contains code to build the sample flights list. It is only
+when the functor is computed that the \lstinline!require! and the
+\lstinline!prepare! sections are evaluated. The computed functor thus contains a list of sample flights, which
+can be used in its \lstinline!define! section.
+This means that the code will have access sample flights that were selected when
+the functor was evaluated, and not when it was compiled!
+This approach also makes it possible to build a list of one million elements
+without storing it in the compiled functor.
+
+
+Functors appear in the AST in \lstinline!fFunctor!:
+\begin{lstlisting}
+   fFunctor(Id ImportRequirePrepareDefineExportList Pos)
+\end{lstlisting}
+The first value, \lstinline!Id!, is the identifier of the functor, either
+\lstinline!fDollar! for anonymous functors, or \lstinline!fVar!.
+The second value is a list containing all \lstinline!import!,
+\lstinline!require!, \lstinline!prepare!, \lstinline!define! and
+\lstinline!export! information. 
+
+We'll illustrate these record by using the example code in
+Figure~\ref{fig:functor_example_code}.
+\begin{figure}[ht]
+\begin{lstlisting}
+   functor
+   export
+      echo:Echo
+   import
+      Helpers(print:Print) at '../lib/Helpers.ozf'
+   prepare
+      Test=1000
+   define
+      proc {Echo S}
+         {PrivateEcho S}
+      end
+      proc {PrivateEcho S}
+         {Print Test}
+         {Print S}
+      end
+   end
+\end{lstlisting}
+\caption{Example functor}
+\label{fig:functor_example_code}
+\end{figure}
+
+
+The \lstinline!import! information are present in a record \lstinline!fImport!
+holding a list of \lstinline!fImportItem(Id Aliases Location)!s as illustration in
+Figure~\ref{fig:functor_example_import}.
+The \lstinline!Id! is simply the variable defined for the \lstinline!import!.
+\lstinline!Aliases! is a list of pairs \lstinline!'#'(Var Key)! binding
+\lstinline!Var! to the function exported by the imported functor under the key
+\lstinline!Key!.
+\lstinline!Location! is either \lstinline!fNoImportAt! of no location was given,
+of \lstinline!fImportAt(Path)! specifying the path to the imported file.
+\lstinline!require! is placed in a record \lstinline!fRequire! of exactly the same form, and is not illustrated here.
+
+\begin{figure}[ht]
+\begin{lstlisting}
+   fImport(
+      |(
+         fImportItem(
+            fVar('Helpers' pos )
+            |(
+               #(
+                  fVar('Print' pos )
+                  fAtom(print pos ))
+               nil
+            ) fImportAt(
+               fAtom('../lib/Helpers.ozf' pos )))
+         nil)
+      pos)
+\end{lstlisting}
+\caption{Import AST example}
+\label{fig:functor_example_import}
+\end{figure}
+
+
+The \lstinline!prepare! section is placed in a record 
+\lstinline!fPrepare(Decls Stats Pos)!, holding the \lstinline!prepare!'s
+declarations and statements, as illustrated in
+Figure~\ref{fig:functor_example_prepare}.
+Our example contained only declarations, and the statement part is a \lstinline!skip! instruction.
+\lstinline!define! is placed in a record \lstinline!fDefine! of exactly the same form, and is not illustrated here.
+
+\begin{figure}[ht]
+\begin{lstlisting}
+   |(
+    fPrepare(
+       fEq(
+          fVar('Test' pos )
+          fInt(1000 pos )
+          pos)
+       fSkip(pos )
+       pos
+    )
+
+\end{lstlisting}
+\caption{Prepare AST example}
+\label{fig:functor_example_prepare}
+\end{figure}
+
+\lstinline!export! is a record 
+\lstinline!fRecord( [fExportItem(fColon(Atom Var))...])!, specifying
+\lstinline!Atom! as the key in the module's interface to access variable
+\lstinline!Var!, as illustrated in Figure~\ref{fig:functor_example_export}.
+
+\begin{figure}[h]
+\begin{lstlisting}
+         fExport(
+            |(
+               fExportItem(
+                  fColon(
+                     fAtom(echo pos )
+                     fVar('Echo' pos )))
+               nil)
+            pos)
+\end{lstlisting}
+\caption{Export AST example}
+\label{fig:functor_example_export}
+\end{figure}
+
+
+
+
+
+
 \chapter{Compiler}
 \section{Architecture}
 The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument the AST, and they return the transformed AST.
