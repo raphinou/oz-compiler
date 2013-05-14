@@ -39,8 +39,9 @@ define
       % Expressions and Statements are handled differently.
       % Eg an if as statement has both its branches handled as statement, but
       % when it is an expression, both branches are treated as expressions too.
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {DesugarOp Op Args Pos Params}
-      %--------------------------
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          case Op
          of '+' then %orelse '-' orelse '/' orelse '*' then
             fConst(Number.Op Pos)
@@ -77,7 +78,9 @@ define
          end
       end
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {HandleDollarArg AST DollarSym}
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % Replace nesting marker argument by a new symbol
          % Used for methods and procs
          case AST
@@ -93,7 +96,9 @@ define
             AST
          end
       end
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {InjectDollarIfNeeded Body DollarSym}
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % Unify the symbol put in place of the nesting marker argument with the body.
          % Used for methods and procs
          if DollarSym==unit then
@@ -103,8 +108,9 @@ define
          end
       end
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {DesugarRecordFeatures Feature Params}
-      %-----------------------------------------
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % Assign features if not specified, starting with index 1
          case Feature
          of fColon(F V) then
@@ -127,20 +133,24 @@ define
       % Expression/statements:
       % https://github.com/mozart/mozart2-bootcompiler/blob/master/src/main/scala/org/mozartoz/bootcompiler/transform/Transformer.scala#L64
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {IsConstantRecord fRecord(L Fs)}
-      %-----------------------------------
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % Returns couple of bools indicating if label, features and values of record all are constants or not.
          % This will go through the list once, and set all components to correct boolean value.
          {List.foldL Fs fun {$ FB#VB I} F V in I=fColon(F V) (FB andthen {Label F}==fConst)#(VB andthen {Label V}==fConst) end ({Label L}==fConst)#true}
       end
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {TransformRecord AST=fRecord(_ Features)}
-      %------------------------------------------------
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % Called to transform record just *after* it has been desugared:
          % - replace constant record by a constant (fConst)
          % - replace records with non const label or feature by a call to Boot_Record.makeDynamic
 
+         %-----------------------------
          fun {Features2Record Features}
+         %-----------------------------
             % Builds a record with label #, features are increasing integer
             % values, and the values are alternatively the feature and its
             % corresponding value of the record definition found in the AST.
@@ -148,7 +158,9 @@ define
             % will be transformed in (in AST form):
             % #(1:A 2:1 3:B 4:2 5:C 6:3)
             % This is done because we need records with constant features in CodeGen.
+            %.................................
             fun{Features2RecordInt Features I}
+            %.................................
                case Features
                of fColon(F V)|Fs then
                   % FIXME: set pos!
@@ -165,11 +177,9 @@ define
       in
          case {IsConstantRecord AST}
          of true#true then
+         %----------------
             % All parts of the record are constants. Build the record and put
             % it in the AST as a constant (under a fConst)
-
-            Rec
-
             fun {ConstantiseRecord AST=fRecord(fConst(RecordLabel _) _ )}
                fun {ConstantiseRecordInt AST Lab}
                   {List.foldL Features fun{$ A I}
@@ -186,25 +196,30 @@ define
             in
                {ConstantiseRecordInt AST RecordLabel}
             end
-
+            Rec
          in
             Rec={ConstantiseRecord AST}
             fConst(Rec pos)
          [] true#false then
+         %-----------------
             % will use makeArity in CodeGen, leave as is
             AST
          [] false#_ then
+         %--------------
             %Need to change it in a call to makeDynamic, so that the arity is constant for later phases, including CodeGen
             L Features
+            Pos={GetPos AST}
          in
             fRecord(L Features)=AST
-            % FIXME: set pos!
-            fApply( fConst(Boot_Record.makeDynamic pos) [L {Features2Record Features}] pos)
+            fApply( fConst(Boot_Record.makeDynamic Pos) [L {Features2Record Features}] Pos)
          else
+         %---
             AST
          end
       end
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {HandleLazyFlag ReturnSymbol Body Flags Pos}
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % This function returns the body of a function, modified accordingly
          % if the lazy flag is present.
          % A lazy function has its body unified with the return symbol in a thread,
@@ -219,8 +234,13 @@ define
             fEq(ReturnSymbol Body Pos)
          end
       end
+
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {DesugarClass fClass(FSym AttributesAndProperties Methods Pos) Params}
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+         %---------------------------------------------------------
          fun {TransformMethod Ind fMeth(Signature Body Pos) Params}
+         %---------------------------------------------------------
             % Takes one method signature and an index, and build its element of the '#' record containing
             % the class' methods.
             % The value returned is also a '#'-record, the first value being the method's name, the second being a
@@ -254,7 +274,9 @@ define
 
 
 
+            %..........................
             fun {NameAndArgs Signature}
+            %..........................
                % Extract Identifier and Arguments of the method from its signature
                case Signature
                of fRecord(InFName InArgs) then
@@ -270,7 +292,9 @@ define
                end
             end
 
+            %..............................
             fun {GetHeaderSymbol Signature}
+            %..............................
                % Returns Symbol which will hold a reference to the method head
                case Signature
                of fEq(_ V _) then
@@ -346,7 +370,9 @@ define
 
          end
 
+         %----------------------------------
          fun {TransformAttribute Rec Params}
+         %----------------------------------
             % Builds the feature-value pair for the attr and feat record
             case Rec
             of '#'(F V) then
@@ -404,7 +430,9 @@ define
          {DesugarStat fApply( fConst(OoExtensions.'class' Pos) [ NewParents NewMeths NewAttrs NewFeats NewProps PrintName FSym] Pos) Params}
       end
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {DesugarCaseClause Clause DesugarInstr Params}
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          case Clause
          of fCaseClause(fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) Body) then
             fCaseClause(fNamedSideCondition({DesugarExpr Pattern Params} Decls {DesugarStat Guards Params} GuardSymbol  Pos) {DesugarInstr Body Params} )
@@ -413,16 +441,59 @@ define
          end
       end
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {DesugarFunctor AST=fFunctor(Id SpecsList Pos)  Params}
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+         %-----------------------------------------------------------------------------
          fun {DesugarFunctorWithRequire fFunctor(Id SpecsList Pos) FunctorSpecs Params}
+         %-----------------------------------------------------------------------------
             % If there is a require, we desugar the functor in 2 nested functors
-            OuterFunctor = fSym({New SyntheticSymbol init(Pos)} Pos)
-            InnerFunctor = fSym({New SyntheticSymbol init(Pos)} Pos)
+            % Previous compiler code: https://github.com/mozart/mozart2-compiler/blob/master/Unnester.oz#L840
+            %A functor of this form
+            %   functor
+            %   require <req>
+            %   prepare <prep>
+            %   import <imp>
+            %   export <exp>
+            %   define <def>
+            %   end
+            %is transformed in:
+            %
+            %   local
+            %      functor Outer
+            %      import <req>
+            %      export inner:Inner
+            %      define
+            %         functor Inner
+            %         import <imp>
+            %         export <exp>
+            %         define
+            %            <defDecls><prepareDecls>
+            %         in
+            %            <defStats>
+            %            <prepareStats>
+            %         end
+            %      end
+            %   in
+            %      {ApplyFunctor BaseURL Outer}.inner
+            %   end
+            %ApplyFunctor is a constant function defined in the compiler, and as it is
+            %constant, it can be placed in the AST under a fConst!
+            % BaseUrl is the path to the currently being compiled file
+
+
+
+            %............................
             fun {ApplyFunctor FileName F}
+            %............................
                ModMan = {New Module.manager init()}
             in
                {ModMan apply(url: FileName F $)}
             end
+
+            OuterFunctor = fSym({New SyntheticSymbol init(Pos)} Pos)
+            InnerFunctor = fSym({New SyntheticSymbol init(Pos)} Pos)
             FilePath=fConst({GetPos AST}.1 Pos)
             RequirePos={GetPos FunctorSpecs.'require'}
             ExportPos={GetPos FunctorSpecs.'export'}
@@ -442,7 +513,48 @@ define
                                  [ fApply(fConst(ApplyFunctor Pos) [ FilePath OuterFunctor] Pos) fConst('inner' Pos) Id] Pos)) Pos)
          end
 
+         %................................................................................
          fun {DesugarFunctorWithoutRequire fFunctor(Id SpecsList Pos) FunctorSpecs Params}
+         %................................................................................
+            % Desugar it as a call to Feature.new with 3 arguments:
+            % - ImportRecord
+            % - ExportRecord
+            % - ApplyFunction
+            %
+            % ImportRecord is of the form import( ModName(info(type:AliasesAtomsList from:"x-oz://system/"#ModName#".ozf"))) where ModName
+            % For this import:
+            %    import
+            %       DumpAST(dumpAST PPAST) at '../lib/DumpAST.ozf'
+            % the resulting record is import('DumpAST'(info(type:[dumpAST] from:'../lib/DumpAST.ozf')))
+            %
+            % ExportRecord is simply of the form export with features the atoms exported, and as corresponding value the atom 'value'.
+            % For this export:
+            %    export
+            %       dumpAST:DumpAST
+            % the resulting record is export(dumpAST:value)
+            %
+            % The ApplyFun takes one parameter and looks like:
+            % fun {$ ImportParamSym}
+            %    local
+            %       <importedSymbolsDeclarations>
+            %       <defineDeclarations>
+            %       <prepareDeclarations>
+            %    in
+            %       <importBinds>
+            %       <defineStats>
+            %       <prepareStats>
+            %       'export'( dumpAST:DumpAST ...)
+            %    end
+            %
+            % end
+            % <importBinds> are simply unification statement binding an imported symbol with its value.
+            % The value is obtained with ImportParamSym.ImportedSymbolName
+
+            % Collect all declarations and statements in list held in a cell.
+            Decls={NewCell nil}
+            StatsList={NewCell nil}
+            % build symbold for the ApplyFunction's argument
+            ImportParamSym = fSym({New SyntheticSymbol init(Pos)} Pos)
             TypeRec
             FromRec
             Info
@@ -450,13 +562,9 @@ define
             ImportRecord
             ExportRecordFields
             ExportRecord
-            % Collect all declarations and statements in list held in a cell.
-            Decls={NewCell nil}
-            StatsList={NewCell nil}
-            ImportParamSym = fSym({New SyntheticSymbol init(Pos)} Pos)
             ImportBinds
-            Fun
-            FunBody
+            ApplyFun
+            ApplyFunBody
          in
             % If there is no require, we simply desugar the functor as a call to NewFunctor
             % Build import record
@@ -466,11 +574,6 @@ define
                                                       LocationField
                                                       ModName={Sym get(name $)}
                                                    in
-                                                      {Show 'debug aliases:'}
-                                                      {DumpAST.dumpAST
-                                                         Aliases
-                                                         _
-                                                      }
                                                       Location=case At
                                                                of fNoImportAt then
                                                                   {VirtualString.toString "x-oz://system/"#ModName#".ozf"}
@@ -478,19 +581,19 @@ define
                                                                   Loc
                                                                end
                                                       LocationField=fColon(fConst('from' Pos) fConst(Location Pos))
-                                                      {Show 'debug importrecordfields'}
-                                                      {DumpAST.dumpAST LocationField _}
                                                       fColon(fConst(ModName Pos) fRecord(fConst('info' Pos) [TypeField LocationField]))
 
                                                    end }
             ImportRecord=fRecord(fConst('import' Pos) ImportRecordFields)
 
+            % Build the export record
             ExportRecordFields={List.map FunctorSpecs.'exportItems'   fun {$ fExportItem(fColon(F V))}
                                                 fColon(F fConst('value' Pos))
                                              end}
             ExportRecord=fRecord(fConst('export' Pos) ExportRecordFields)
 
 
+            % Collect declarations
             {List.forAll FunctorSpecs.'importItems' proc {$ fImportItem(Id Aliases At)}
                                     Decls:=Id|@Decls
                                     {List.forAll Aliases proc{$ '#'(A F)} Decls:=A|@Decls end}
@@ -525,17 +628,17 @@ define
                StatsList :=  @ImportBinds|@StatsList
             end
 
-            % FIXME: could be improved
+            % FIXME: could be improved to remove double reverse
             % We put the StatsList in the order we want them to be executed. WrapInFAnd reverse the order, so we reverse it ourself first
-            FunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten @StatsList}} } Pos)
+            ApplyFunBody = fLocal( {WrapInFAnd @Decls} {WrapInFAnd {List.reverse {List.flatten @StatsList}} } Pos)
 
-            Fun = fFun(fDollar(Pos) [ImportParamSym] FunBody nil Pos)
+            ApplyFun = fFun(fDollar(Pos) [ImportParamSym] ApplyFunBody nil Pos)
 
             case Id
             of fDollar(_) then
-               fApply(fConst(Functor.new Pos) [ImportRecord ExportRecord Fun]  Pos)
+               fApply(fConst(Functor.new Pos) [ImportRecord ExportRecord ApplyFun]  Pos)
             else
-               fApply(fConst(Functor.new Pos) [ImportRecord ExportRecord Fun Id]  Pos)
+               fApply(fConst(Functor.new Pos) [ImportRecord ExportRecord ApplyFun Id]  Pos)
             end
          end
 
@@ -549,59 +652,64 @@ define
          end
       end
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {DesugarExpr AST Params}
-      %---------------------------
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % Desugar expressions
          %{Show 'debug DesugarExpr'}
          %{DumpAST.dumpAST AST _}
          case AST
          of fProc(Dollar Args Body Flags Pos) then
-         %   DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
-         %in
-            % FIXME: is the recursive call on the top level really useful?
-            % Wouldn't is be better to only do the recursive calls on args and body?
-            %{DesugarStat fLocal( DollarSymbol fAnd( fProc(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
+         %----------------------------------------
             fProc(Dollar Args {DesugarStat Body Params} Flags Pos)
 
          [] fFun(Dollar Args Body Flags Pos) then
+         %---------------------------------------
             ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-         %   DollarSymbol = fSym({New SyntheticSymbol init(DollarPos)} DollarPos)
-         %in
-            % The fLocal we introduce is an expression, handle it as such!
-            %{DesugarExpr fLocal( DollarSymbol fAnd( fFun(DollarSymbol Args Body Flags Pos) DollarSymbol) Pos) Params}
             fProc(Dollar {List.append Args [ReturnSymbol]} {DesugarStat {HandleLazyFlag ReturnSymbol Body Flags Pos} Params} Flags Pos)
 
          [] fAndThen(First Second Pos) then
+         %---------------------------------
             fBoolCase({DesugarExpr First Params} {DesugarExpr Second Params} fConst(false Pos) Pos)
 
          [] fOrElse(First Second Pos) then
+         %--------------------------------
             fBoolCase({DesugarExpr First Params} fConst(true Pos) {DesugarExpr Second Params} Pos)
 
          [] fLocal(Decls Body Pos) then
+         %-----------------------------
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
             % Do not recursively desugar declarations, as they are all fSym thanks for DeclsFlattener.
             fLocal(Decls {DesugarExpr Body Params} Pos)
          [] fAnd(First Second) then
+         %-------------------------
             % if the fAnd is an expression, only the second part is treated as expression
             fAnd({DesugarStat First Params} {DesugarExpr Second Params})
 
          [] fAt(Cell Pos) andthen @(Params.'self')==unit then
+         %---------------------------------------------------
             % Not in a class because Params.self is unit
             fApply( fConst(Boot_Value.catAccess Pos) [{DesugarExpr Cell Params}] Pos)
+
          [] fAt(Cell Pos) then
+         %--------------------
             % When in a class, Params.self has been set to Self. See TransformMethod
             fApply( fConst(Boot_Value.catAccessOO Pos) [@(Params.'self') {DesugarExpr Cell Params}] Pos)
 
          [] fOpApply(Op Args Pos) then
+         %----------------------------
             % both Op and Args must be expression and expressions list respectively
             fApply({DesugarOp Op Args Pos Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
 
          [] fApply(Op Args Pos) then
+         %--------------------------
             % both Op and Args must be expression and expressions list respectively
             fApply({DesugarOp Op Args Pos Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
+
          [] fObjApply(LHS RHS Pos) then
+         %-----------------------------
             {DesugarExpr
                fApply(
                   fApply(fConst(Value.'.' Pos)
@@ -609,66 +717,88 @@ define
                        fConst(apply Pos) ] Pos)
                   [RHS @(Params.'self') LHS] Pos)
                Params}
+
          [] fColonEquals(Cell Val Pos) andthen @(Params.'self')==unit then
+         %-----------------------------------------------------------------
             fApply( fConst(Boot_Value.catExchange Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
          [] fColonEquals(Cell Val Pos) then
+         %---------------------------------
             fApply( fConst(Boot_Value.catExchangeOO Pos) [ @(Params.'self') {DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
 
          [] fBoolCase( Cond TrueCode Else=fNoElse(_) Pos) then
+         %----------------------------------------------------
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} Else Pos)
 
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
+         %----------------------------------------------
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarExpr TrueCode Params} {DesugarExpr FalseCode Params} Pos)
 
          [] fRecord( Label Features) then
+         %-------------------------------
             NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
             {TransformRecord fRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end }) }
+
          [] fPatMatConjunction(LHS RHS Pos) then
+         %--------------------------------------
             fConst({StoreInSafe fPatMatConjunction({DesugarExpr LHS Pos} {DesugarExpr RHS Pos} Pos)} Pos)
+
          [] fOpenRecord(Label Features) then
+         %----------------------------------
             NewParams={Record.adjoin Params params( featureIndex:{NewCell 0})}
          in
             fOpenRecord({DesugarExpr Label Params} {List.map Features fun {$ I} {DesugarRecordFeatures I NewParams} end })
+
          [] fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos) then
+         %-----------------------------------------------------------------
             fNamedSideCondition({DesugarExpr Pattern Params} Decls {List.map Guards fun {$ I} {DesugarStat I Params} end} GuardSymbol Pos)
+
          [] fColon(Feature Value) then
+         %----------------------------
             fColon({DesugarExpr Feature Params} {DesugarExpr Value Params})
 
          [] fThread(Body Pos) then
+         %------------------------
             % Create synthetic symbol that will take the value of the thread expression,
             % and then desugar the fThread statement left.
             % It is DesugarStat that will replace the fThread by a call to the builtin Thread.create
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewSymbol fAnd( {DesugarStat fThread(fEq(NewSymbol Body Pos) Pos) Params} NewSymbol) Pos)
+
          [] fWildcard(Pos) then
+         %---------------------
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal( NewSymbol NewSymbol Pos)
+
          [] fCase(Val Clauses Else=fNoElse(_) Pos=pos(File Line _ _ _ _)) then
+         %--------------------------------------------------------------------
             % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             %fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} Else Pos) Params} NewSymbol) Pos)
             fCase({DesugarExpr Val Params} {List.map Clauses fun{$ I} {DesugarCaseClause I DesugarExpr Params} end} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
+
          [] fCase(Val Clauses Else Pos) then
+         %----------------------------------
             % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            %fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} fEq(NewSymbol Else Pos) Pos) Params} NewSymbol) Pos)
-            %fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern {DesugarExpr Body Params} ) end} {DesugarExpr Else Params} Pos)
             fCase({DesugarExpr Val Params} {List.map Clauses fun{$ I} {DesugarCaseClause I DesugarExpr Params} end} {DesugarExpr Else Params} Pos)
+
          [] fClass(_ _ _ _) then
+         %----------------------
             % fClass(FSym AttributesAndProperties Methods Pos)
             {DesugarClass AST Params}
+
          [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
-            %FIXME: handle multiple caseclauses
+         %---------------------------------------------------------
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(  NewSymbol
@@ -676,6 +806,7 @@ define
                      fTry({DesugarExpr Body Params} fCatch([fCaseClause(NewSymbol {DesugarExpr fCase(NewSymbol Clauses fRaise(NewSymbol Pos) CatchPos) Params} )] CatchPos) fNoFinally Pos)
                      Pos)
          [] fTry(Body fNoCatch Finally Pos) then
+         %--------------------------------------
             % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
             % put the try-finally expression, without its Finally code, in a new try expression
             % with no finally code catching all exceptions.
@@ -706,6 +837,7 @@ define
                            Pos)
                         Params}
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
+         %------------------------------------------------------
             % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
             % put the try-finally expression, without its Finally code, in a new try expression
             % with no finally code catching all exceptions.
@@ -735,27 +867,47 @@ define
                                               Pos)))
                            Pos)
                         Params}
+
          [] fSelf(_) andthen @(Params.'self')==unit then
+         %----------------------------------------------
             raise selfUsedOutsideMethod end
+
          [] fSelf(_)  then
+         %----------------
             @(Params.'self')
+
          [] fRaise(E Pos) then
+         %--------------------
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
+
          [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
+         %--------------------------------------------------------
             NewSymbol=fSym({New SyntheticSymbol init(Pos1)} Pos1)
          in
             {DesugarExpr fApply(fConst(Boot_Value.'dotExchange' Pos1) [LHS CHS RHS] Pos2) Params}
+
          [] fSym(_ _) then
+         %----------------
             AST
+
          [] fConst(_ _) then
+         %------------------
             AST
+
          [] fDollar(_) then
+         %-----------------
             AST
+
          [] fAtom(_ _) then
+         %-----------------
             raise namerLeftFAtomIntactAtDesugar end
+
          [] fEq(LHS _ _) then
+         %-------------------
             fAnd(AST LHS)
+
          [] fFunctor(Id SpecsList Pos) then
+         %---------------------------------
             {DesugarExpr {DesugarFunctor AST Params} Params}
          else
             {Show '---'}
@@ -765,8 +917,9 @@ define
       end
 
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       fun {DesugarStat AST Params}
-      %---------------------------
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
          % Desugar Statements.
          %{Show 'debug DesugarStat'}
          %{DumpAST.dumpAST AST _}
@@ -777,18 +930,23 @@ define
 
 
          [] fLocal(Decls Body Pos) then
+         %-----------------------------
             % for fLocal, declarations are always statements.
             % if the fLocal is a statement, its body must be a statement and is handled as such
             % Do not recursively desugar declarations, as there are all fSym thanks for DeclsFlattener.
             fLocal(Decls {DesugarStat Body Params} Pos)
 
          [] fApply(Op Args Pos) then
+         %-----------------------------
             % both Op and Args must be expression and expressions list respectively
             fApply({DesugarOp Op Args Pos Params} {List.map Args fun {$ I} {DesugarExpr I Params} end } Pos)
 
          [] fEq(LHS RHS Pos) then
+         %-----------------------------
             fEq({DesugarExpr LHS Params} {DesugarExpr RHS Params} Pos)
+
          [] fProc(FSym Args Body Flags Pos) then
+         %--------------------------------------
             % Only special thing is to handle the possible nesting marker in the arguments list.
             % In that case the nesting marker is replaced by a new symbol, and the body is unified with that symbol.
             % We use functions HandleDollarArg and InjectDollarIfNeeded, which are also used for functional methods
@@ -796,56 +954,85 @@ define
             NewArgs
          in
             NewArgs={List.map Args fun{$ I} {HandleDollarArg I DollarSym} end}
-
             fProc({DesugarExpr FSym Params} NewArgs {DesugarStat {InjectDollarIfNeeded Body @DollarSym}  Params} Flags Pos)
+
          [] fFun(FSym Args Body Flags Pos) then
+         %--------------------------------------
             ReturnSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             % Need to Desugar the top-level fProc, eg in the case of a statement function (fun {$ ..}),
             % so that the $ also gets desugared
             {DesugarStat fProc(FSym {List.append Args [ReturnSymbol]} {HandleLazyFlag ReturnSymbol Body Flags Pos} Flags Pos) Params}
+
          [] fColonEquals(Cell Val Pos) andthen @(Params.'self')==unit then
+         %--------------------------------------
             fApply( fConst(Boot_Value.catAssign Pos) [{DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+
          [] fColonEquals(Cell Val Pos) then
+         %--------------------------------------
             fApply( fConst(Boot_Value.catAssignOO Pos) [@(Params.'self') {DesugarExpr Cell Params} {DesugarExpr Val Params}] Pos)
+
          [] fBoolCase( Cond TrueCode Else=fNoElse(_) Pos) then
+         %--------------------------------------
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} Else Pos)
 
          [] fBoolCase( Cond TrueCode FalseCode Pos) then
+         %--------------------------------------
             % Cond is a value, hence an expression.
             % Both branches are statements because the if itself is a statement
             fBoolCase( {DesugarExpr Cond Params} {DesugarStat TrueCode Params} {DesugarStat FalseCode Params} Pos)
+
          [] fThread(Body Pos) then
+         %--------------------------------------
             % Create a wrapping proc taking no argument, and pass it to the builtin Thread.create.
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(Boot_Thread.create Pos) [NewProcSym] Pos)) Pos)
 
          [] fLock(Body Pos) andthen @(Params.'self')\=unit then
+         %--------------------------------------
             {DesugarStat fLockThen(fApply(fConst(OoExtensions.'getObjLock' Pos) [@(Params.'self')] Pos) Body Pos) Params}
+
          [] fLock(_ _) andthen @(Params.'self')==unit then
+         %--------------------------------------
             raise lockNeedsSelfInDesugarStat end
+
          [] fLockThen(Lock Body Pos) then
+         %--------------------------------------
             % Create a wrapping proc taking no argument, and pass it to the builtin Base.lockIn
             NewProcSym=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
             fLocal(NewProcSym fAnd(fProc(NewProcSym nil {DesugarStat Body Params} nil Pos) fApply(fConst(LockIn Pos) [Lock NewProcSym] Pos)) Pos)
+
          [] fCase(Val Clauses fNoElse(_) Pos=pos(File Line _ _ _ _)) then
+         %--------------------------------------
             fCase({DesugarExpr Val Params} {List.map Clauses fun{$ I} {DesugarCaseClause I DesugarStat Params} end} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
+
          [] fCase(Val Clauses Else Pos) then
+         %--------------------------------------
             fCase({DesugarExpr Val Params} {List.map Clauses fun {$ I} {DesugarCaseClause I DesugarStat Params} end} {DesugarStat Else Params} Pos)
+
          [] fClass(_ _ _ _) then
+         %--------------------------------------
             % fClass(FSym AttributesAndProperties Methods Pos)
             {DesugarClass AST Params}
+
          [] fAssign(_ _ _) andthen @(Params.'self')==unit then
+         %--------------------------------------
             raise assignAttributeNeedsSelf end
+
          [] fAssign(LHS RHS Pos) then
+         %--------------------------------------
             fApply( fConst(Boot_Object.attrPut Pos) [@(Params.'self') {DesugarExpr LHS Params} {DesugarExpr RHS Params}] Pos)
+
          [] fObjApply(_ _ _) andthen @(Params.'self')==unit then
+         %--------------------------------------
                raise staticCallNeedsSelf end
+
          [] fObjApply(LHS RHS Pos) then
+         %--------------------------------------
             {DesugarStat
                fApply(
                   fApply(fConst(Value.'.' Pos)
@@ -853,7 +1040,9 @@ define
                        fConst(apply Pos) ] Pos)
                   [RHS @(Params.'self') LHS] Pos)
                Params}
+
          [] fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos) then
+         %--------------------------------------
             %FIXME: handle multiple caseclauses
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
@@ -864,7 +1053,9 @@ define
                         fNoFinally
                         Pos)
                    Pos)
+
          [] fTry(Body fNoCatch Finally Pos) then
+         %--------------------------------------
             Temp1=fSym({New SyntheticSymbol init(Pos)} Pos)
             Temp2=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
@@ -886,7 +1077,9 @@ define
                                               Pos)))
                            Pos)
                         Params}
+
          [] fTry(Body fCatch(Clauses CatchPos) Finally Pos) then
+         %--------------------------------------
             % From http://www.mozart-oz.org/documentation/notation/node6.html#label27
             % put the try-finally statement, without its Finally code, in a try expression
             % with no finally code catching all exceptions. The try expression will have a value of unit
@@ -915,15 +1108,25 @@ define
                                               Pos)))
                            Pos)
                         Params}
+
          [] fFunctor(Id SpecsList Pos) then
+         %--------------------------------------
             {DesugarExpr {DesugarFunctor AST Params} Params}
+
          [] fRaise(E Pos) then
+         %--------------------------------------
             fApply(fConst(Exception.'raise' Pos) [ {DesugarExpr E Params} ] Pos)
+
          [] fDotAssign(fOpApply('.' [LHS CHS] Pos1) RHS Pos2) then
+         %--------------------------------------
             {DesugarStat fApply(fConst(Boot_Value.'dotAssign' Pos1) [LHS CHS RHS] Pos2) Params}
+
          [] fSkip(_) then
+         %--------------------------------------
             AST
+
          [] fNoFinally then
+         %--------------------------------------
             AST
          %else
          %   {DefaultPass AST DesugarInt Params}
