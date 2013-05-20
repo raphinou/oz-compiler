@@ -34,7 +34,8 @@
 
 % configure listings package to handle code as Oz code
 %\lstset{language=Oz}
-\lstset{language=Oz,basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true}
+\lstset{language=Oz,basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true,
+escapechar=µ}
 
 % requires memoir
 % include git rev
@@ -81,12 +82,18 @@ The Mozart2 virtual machine was developed from scratch, with extensive additiona
 \subsection{Registers}\label{sec:intro:registers}
 The Mozart2 virtual machine works with four types of registers. The description of the registers uses the concept of abstractions, which is precisely defined in the next section. It is however sufficient for the understanding of this section to equate the concept of abstraction with the concept of procedure.
 \begin{description}
-  \item[X registers]are work registers that should not be used to permanently
-    store values. X registers are for example used to pass the arguments to calls. However, the values in these registers are lost after the call. %FIXME: isn't it X regs might be lost?
+  \item[X registers]X registers are work registers that should not be used to permanently
+    store values as their content is undefined after a call. They are thread-specific and caller-saved, meaning it is the
+    caller's responsibility to save the value of a X register if it will be
+    reused.  X registers are for example used to pass the arguments to calls. However, the values in these registers are lost after the call.
     %FIXME: combien de registres X disponibles,alloues?
-  \item[Y registers]are locally persisting registers. They all have to be initialised at once at the start of an abstraction's code, before their use, which requires to know how many Y registers are needed.
-  \item[G registers] are holding global variables, i.e. variables that are accessed by the abstraction, but that are not locally declared.
-  \item[K registers] are holding constant values, be it integers, floats or records.
+  \item[Y registers]are specific to the activation frame, and are used as locally persisting registers. They all have to be initialised at once at the start of an abstraction's code, before their use, which requires to know how many Y registers are needed.
+  \item[G registers] are holding global variables, i.e. variables that are
+    accessed by the abstraction, but that are not locally declared. They are
+    specific to the abstraction.
+  \item[K registers] are holding constant values, be it integers, floats or
+    records. They are specific to the abstraction's code area, which we will analyse in the
+    next section.
 \end{description}
 
 \subsection{Abstractions}\label{sec:vm:abstractions}
@@ -154,8 +161,8 @@ called, it defines three local functions. The two first reference the variable
 X, which is a global variable for them, and which has probably a different
 value at each call of Sqrt. However, the code area for each function is the
 same for every call of Sqrt, and the virtual machine can simply create a new
-abstraction with one global variable referencing the already existing code
-area. 
+abstraction referencing the already existing code area and defining the global
+it needs. 
 
 If we have 2 simultaneous calls to Sqrt, for example {Sqrt 2} and {Sqrt 5}, we
 would end up with the structure of Figure~\ref{fig:blurps} 
@@ -191,7 +198,7 @@ in the virtual machine.
 
 
 \section{Target Language}
-The compiler will have to generate code that can be passed to the assembler targeting the virtual machine. This assembler language has solid support for the virtual machine concepts as we'll see.
+The compiler generates code that can be passed to the assembler targeting the virtual machine. This assembler language has solid support for the virtual machine concepts as we'll see.
 The assembler accepts an Oz list of instructions that are Oz records. 
 
 \subsection{Register Operations}\label{sec:intro:opcode:registers}
@@ -199,12 +206,16 @@ Registers access instructions are proper to each type. To access the nth G X Y
 registers, the instruction will respectively be \lstinline!g(n)!,
 \lstinline!x(n)!, \lstinline!y(n)!. 
 
-K registers are used to store constants, and are not numbered, but identified by
+K registers are used to store constants, and are not numbered in the target
+language, but identified by
 the value they store. The constant 2 will appear in the code as
 \lstinline!k(2)!, the constant record \lstinline!r(a b c)! will appear in the
 code as \lstinline!k(r(a b c))!.
 
+
 As mentioned earlier, Y registers are persisting for the lifespan of the current frame. Their number has to be determined when the frame is initialised, and all needed Y registers are initialised at once with the instruction \lstinline!allocateY(n)! where n is the number of Y registers used in this frame.
+The deallocation of the Y registers occurs when a \lstinline!return! or
+\lstinline!tailCall! instruction is executed.
 
 X registers are work registers, and if a value in a X register needs to be accessed several time across calls, it has to be saved in a Y register. This is done with a move instruction: \lstinline!move(source_reg destination_reg)!.
 
@@ -217,7 +228,37 @@ Code positions can be identified by labels, which need to be atoms or names. A l
 Labels are required for jumps in the code. 
 Jumps will move the execution to the label they have as argument. For example \lstinline!branch(endLabel)! will jump to the position in the code identified by the label \lstinline!endLabel!.
 
-Conditional jumps will look at the value in a X register, and if this value is not true, it will jump to the code at the label it was given. That instruction also takes a label locating error handling code. Here is an example of conditional jump that will look at the value in X register 0: \lstinline!condBranch(x(0) elseLabel errorLabel)|!. If the value in x(0) is true, it continues execution. If it is false it jumps to the position in the code identified by the label \lstinline!elseLabel!. If an error occurs, it jumps to the label \lstinline!errorLabel!.
+Conditional jumps will look at the value in a X register, and if this value is
+not true, it will jump to the code at the label it was given. That instruction
+also takes a label locating error handling code. Here is an example of
+conditional jump that will look at the value in X register 0:
+\lstinline!condBranch(x(0) elseLabel errorLabel)|!. If the value in x(0) is
+true, it continues execution. If it is false it jumps to the position in the
+code identified by the label \lstinline!elseLabel!. If an error occurs in the
+test, it jumps to the label \lstinline!errorLabel!. This is illustrated in Figure~\ref{fig:target:condBranch}.
+If the value in register \lstinline!x(0)! is not tested successfully as a
+boolean, execution will jump to \lstinline!lbl(1)! and raise an exception. If
+the condition (the value in \lstinline!x(0)!) is true, the code will execute
+\lstinline!{Show 'true'}!, else it will execute \lstinline!{Show false}!.
+
+\begin{figure}[ht]
+\begin{lstlisting}
+
+                condBranch(x(0) 2 1)
+                move(k('true') x(0))
+                call(k(<P/1 Show>) 1)
+                branch(3)
+lbl(1)          move(k(badBooleanInIf) x(0))
+                tailCall(k(<P/1 Exception.raiseError>) 1)
+lbl(2)          move(k('false') x(0))
+                call(k(<P/1 Show>) 1)
+lbl(3)          return
+
+\end{lstlisting}
+\caption{Conditional branch example}
+\label{fig:target:condBranch}
+\end{figure}
+
 
 
 \subsection{Calls}\label{sec:opcode:calls}
@@ -229,13 +270,13 @@ passed to the call instruction, but have to be placed in the X registers from 0
 to Args-1 with move instructions before the call, as this is where the virtual
 machine will look for the arguments. The complete code for a call to a callee
 located in register Y 3 with three arguments which values come from Y registers
-0 to 2 will thus be of the form illustrated in
+4 to 6 will thus be of the form illustrated in
 Figure~\ref{fig:opcodes:callexample}.
 \begin{figure}[h]
 \begin{lstlisting}
-   move(y(0) x(0))
-   move(y(1) x(1))
-   move(y(2) x(2))
+   move(y(4) x(0))
+   move(y(5) x(1))
+   move(y(6) x(2))
    call(y(3) 3)
 \end{lstlisting}
 \caption{Opcodes for a call}
@@ -245,8 +286,10 @@ Figure~\ref{fig:opcodes:callexample}.
 
 A call done as last instruction of an abstraction should be made with the
 \lstinline!tailCall! instruction, as this lets the virtual machine optimise the
-execution. It has the exact same specification as the call instruction, only the
-name of the instruction differs: \lstinline!tailCall(Callee Args)!.
+execution. It has the exact same arguments as the call instruction, only the
+name of the instruction differs: \lstinline!tailCall(Callee Args)!. It is
+equivalent to a \lstinline!call! followed by a \lstinline!return!, with the
+additional guarantee that the frame is deallocated \emph{before} the call.
 
 \subsection{Records}\label{sec:opcode:records}
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
@@ -256,9 +299,14 @@ A record of arity Arity, with NumberOfFeatures features is unified with register
 The arity is supported by the virtual machine and includes the label and features without their respective values.
 
 There are two special cases of records that are handled specifically by the virtual machine.
-A con is a record with label '|' and with only 2 features numbers 1 and 2 and is initialised by
-\lstinline!createConsUnify(DestinationReg)!. Again, this instruction has to be followed by arrayFill instructions, two in this particular case.
-A tuple is a record with all numeric features. It is initialised with 
+A con is a record with label \lstinline!'|'! and with only 2 features numbers 1
+and 2 and is initialised by:
+\begin{lstlisting}
+createConsUnify(DestinationReg)
+\end{lstlisting}
+Again, this instruction has to be
+followed by \lstinline!arrayFill! instructions, two in this particular case.
+A tuple is a record with all successive numeric features from 1. It is initialised with 
 \begin{lstlisting}
    createTupleUnify(k(Label) NumberOfFeatures DestinationReg)
 \end{lstlisting}
@@ -279,7 +327,7 @@ that the abstraction can access in G registers numbered from 0. The first
 second the value of \lstinline!g(1)!,
 \ldots
 
-Figure~\ref{fig:opcodes:procedures:example} lists the code we will analyse.
+Figure~\ref{fig:opcodes:procedures:example} lists Oz code we will analyse.
 
 \begin{figure}[ht]
 \begin{lstlisting}
@@ -299,7 +347,8 @@ end
 
 
 As noted in the code comments, we suppose, the compiler having done its work of
-registers assignation, variables \lstinline!A! and \lstinline!B! are stored in registers X 0 and 1
+registers allocation, variables \lstinline!A! and \lstinline!B! are stored in
+registers \lstinline!x(0)! and \lstinline!x(1)!
 respectively, that the abstraction for procedure \lstinline!P! is to be stored in register Y
 0, and that \lstinline!P! accesses to the value \lstinline!A! and \lstinline!B!
 via the register \lstinline!g(0)! and \lstinline!g(1)!
@@ -317,6 +366,53 @@ to the assembler.
 \caption{Opcodes generated for example Oz code}
 \label{fig:opcodes:procedures:result}
 \end{figure}
+
+\subsection{Pattern Matching}
+The target language supports pattern matching with the instruction
+\begin{lstlisting}
+  patternMatch(XReg PatternMatchRecord)
+\end{lstlisting}
+where \lstinline!XReg! is the X register containing the value to test, and
+\lstinline!PatternMatchRecord! is a record specifying the patterns and their
+respective jump address in case of a match.
+Figure~\ref{fig:target:ozcase} gives a simple Oz case instruction, and Figure~\ref{fig:target:case} lists the generated opcodes.
+Section~\ref{sec:arch:codegen:case} covers pattern matching and the \lstinline!patternMatch! instruction thoroughly.
+ 
+\begin{figure}[ht]
+\begin{lstlisting}
+   case R
+   of l(1 2) then
+      {Show 'l'}
+   [] rec(a b) then
+      {Show 'rec'}
+   else
+      {Show 'else'}
+   end
+   ...
+\end{lstlisting}
+\caption{Example \lstinline!case! instruction}
+\label{fig:target:ozcase}
+\end{figure}
+
+\begin{figure}[ht]
+\begin{lstlisting}
+                patternMatch(x(0) k((l(1 2)#6)#(rec(a b)#7)))
+                branch(5)
+lbl(6)          move(k(l) x(0))
+                call(k(<P/1 Show>) 1)
+                branch(3)
+lbl(7)          move(k(rec) x(0))
+                call(k(<P/1 Show>) 1)
+                branch(3)
+lbl(5)          move(k('else') x(0))
+                call(k(<P/1 Show>) 1)
+lbl(3)          ...
+\end{lstlisting}
+\caption{Opcodes for the example \lstinline!case! instruction}
+\label{fig:target:case}
+\end{figure}
+
+
 
 
 \subsection{Exceptions}
@@ -368,7 +464,7 @@ Section \ref{sec:arch:codegen:exceptions}.
 The compiler takes as input the AST in the form of Oz records, and generates opcodes sent to the assembler. 
 This section will present and describe the records received from the parser and
 their corresponding Oz form.
-Not all will be described here as an exhaustive list is available at %http://www.mozart-oz.org/home/doc/compiler/node7.html#appendix.syntax. 
+\footnote{An authoritative list is available at \\http://www.mozart-oz.org/home/doc/compiler/node7.html\#appendix.syntax} 
 \subsection{Position in source code}
 Most records have the corresponding position in the source code available in
 their last feature, encoded in a record of the form:
@@ -381,9 +477,9 @@ source code.
 
 For clarity and brevity, in the examples of AST included in this document, the
 positions will always be represented by the featureless record \lstinline!pos!
-or a variable name \lstinline!Pos!. 
-\subsection{Basic data types}
-The basic data type described in this section are the simplest node found in the AST as they have no children and are the leafs of the tree.
+or a variable named \lstinline!Pos!. 
+\subsection{Literals}
+The basic data type described in this section are the simplest node found in the AST as they have no children and are always leafs of the AST.
 These are the basic data types with their corresponding records in the AST:
 \begin{description}
   \item[integers] \lstinline!fInt(Val Pos)!
@@ -391,19 +487,21 @@ These are the basic data types with their corresponding records in the AST:
   \item[atoms] \lstinline!fAtom(value position)!
 \end{description}
 
-\subsection{Variables}\label{sec:input:variables}
-A variable is found in a record \lstinline!fVar(VarName Pos)!.
-\lstinline!VarName! is simply the textual name that the programmer gave to this
-variable.
+\lstinline!fAtom! are also used to place \lstinline!unit!, \lstinline!true! and
+\lstinline!false! in the AST.
+
+\subsection{Identifiers}\label{sec:input:identifiers}
+An identifier is present in the AST by a tuple \lstinline!fVar(Ident Pos)!,
+where \lstinline!Ident! is the text of the identifier represented as an atom.
 
 \subsection{Unification}
 A unification is found in a record \lstinline!fEq(LHS RHS Pos)!.
 \lstinline!A=3! is present in the AST in the form of a record
-\lstinline!fEq(fVar(A pos) fInt(3 pos))!.
+\lstinline!fEq(fVar(A pos) fInt(3 pos) pos)!.
 
 \subsection{Instructions sequence}
 A sequence of instructions is wrapped in fAnd records, the first feature being usually one instruction, the second feature being a fAnd if more than one instruction follows,  or a single instruction. The code also handles the case when the two features are fAnd records. %FIXME: is this needed? 
-Here is an example:\\
+Here is an example of three unifications and the corresponding AST:\\
 \begin{tabular}{ p{0.3\textwidth} p{0.8\textwidth} }
   \begin{lstlisting}
     A=1
@@ -420,8 +518,10 @@ Here is an example:\\
   }
 \end{tabular}
 
-\subsection{Declarations}\label{sec:input:flocal}
-Declarations are found in records of the form fLocal(Declarations Body Pos), where declarations and Body are both AST subtrees. 
+\subsection{Local}\label{sec:input:flocal}
+\lstinline!local..in..end! are represented in the AST by tuples of the form
+\lstinline!fLocal(Declarations Body Pos)!, where \lstinline!Declarations! and
+\lstinline!Body! are both AST subtrees. 
 Figure~\ref{fig:input:decls_oz} shows Oz code declaring the three variables
 \lstinline!A!, \lstinline!B!
 and \lstinline!C!, and bounding variable \lstinline!A! with integer
@@ -436,7 +536,7 @@ in
   A=1
 end
 \end{lstlisting}
-\caption{Declaration of variables}
+\caption{Declaration of 3 variables}
 \label{fig:input:decls_oz}
 \begin{lstlisting}
 fLocal(
@@ -451,7 +551,7 @@ fLocal(
             fVar(A pos) 
             fInt(1 pos) ))
 \end{lstlisting}
-\caption{AST for declarations of variables}
+\caption{AST for the example declaring 3 variables}
 \label{fig:input:decls}
 \end{figure}
 
@@ -461,11 +561,44 @@ fLocal(
 Procedures are found in records of the form \lstinline!fProc(Name Arguments Body Flags Pos)!, 
 where the \lstinline!Arguments! and \lstinline!Body! features are AST subtrees. 
 %FIXME: what can be Name? fVar, $. Other possibilities?
-Example:
+Figure~\ref{fig:input:oz_procedure_def} and Figure~\ref{fig:input:ast_procedure_def} show a small oz procedure definition and its resulting AST.
+\begin{figure}[ht]
+\begin{lstlisting}
+   proc {P A1 A2}
+      {Show A1}
+      {Show A2}
+   end
+\end{lstlisting}
+\caption{Oz procedure definition}
+\label{fig:input:oz_procedure_def}
+
+\begin{lstlisting}
+   fProc(
+      fVar('P' pos)
+      [
+        fVar('A1' pos)
+        fVar('A2' pos)]
+      fAnd(
+         fApply(
+            fVar('Show' pos)
+            [fVar('A1' pos)]
+            pos)
+         fApply(
+            fVar('Show' pos )
+            [fVar('A2' pos)]
+            pos))
+      pos)
+\end{lstlisting}
+\caption{AST of the Oz procedure definition}
+\label{fig:input:ast_procedure_def}
+\end{figure}
+
+
 
 \subsubsection{Calls}
 %FIXME: distinguish arguments and parameters?
-Procedure calls are found in records of the form fApply(Proc Arguments Pos). 
+Procedure calls are found in records of the form 
+\lstinline!fApply(Proc Arguments Pos)!. 
 Example:
 
 \begin{lstlisting}
@@ -475,87 +608,92 @@ Example:
 will result in the AST portion:
 \begin{lstlisting}
 fApply(
-       fVar(Compute _)
-       |(fInt(1 _)
-         |(fInt( 2 _)
-           |fInt( 3 _))))
+       [ fVar(Compute pos)
+         fInt(1 pos)
+         fInt(2 pos)
+         fInt(3 pos)
+       ])
 \end{lstlisting}
 
 \subsection{Functions}\label{sec:input:functions}
-Function definitions are found in the AST in fFun records, with the same features found in fProc records. Functions are simply procedures that implicitly return exactly one value. This similarity between functions and procedures can be seen in their similar AST for definitions and calls. This similarity will be exploited later on to merge both forms of AST into one.
+Function definitions are found in the AST in \lstinline!fFun! tuples, with the
+same features found in \lstinline!fProc! records. Functions are simply
+procedures that implicitly return exactly one value. This similarity between
+functions and procedures can be seen in their similar AST for definitions and
+calls. It will be exploited later on to merge both forms of AST
+into one.
 However, only functions can be marked as lazy as in \lstinline!fun lazy {F N} .. end!. This lazy marker is translated in a flag.
 \subsubsection{Definitions}
 Function definitions are found in records fFun(Name Arguments Body Flags Pos). The features are identical to the procedure definition.
 \subsubsection{Calls}
 The calls of functions are identical to the call of procedures as they are found in fApply.
+
+%FIXME: title Operators?
 \subsection{Arithmetic operators}\label{sec:input:operators}
-Arithmetic operators are parsed as records of the form fOpApply(Operator Args Pos), which first feature is the operator to apply, and its second feature being the list of operands. It also has a position record as third feature. For example
+Arithmetic operators are parsed as records of the form
+\lstinline!fOpApply(Operator Args Pos)!, whose first feature is the operator to
+apply, its second feature being the list of operands. It also has a position
+record as third feature. For example
 \lstinline!5+2! is parsed as:
 \begin{lstlisting}
       fOpApply(
          '+'
-         |(
-            fInt(5 pos)
-            |(
-               fInt(2 pos )
-               
-            )
-         )
+         [
+           fInt(5 pos)
+           fInt(2 pos )
+         ]
          pos
       )
-
 \end{lstlisting}
 \subsection{Nesting marker \$}\label{sec:input:nestingmarker}
-In Oz, some statements can be transformed in expressions by the use of the \$ marker. This marker is found in the AST as a record fDollar() with a unique feature: it position.
+In Oz, some statements can be transformed in expressions by the use of the
+\lstinline[mathescape]!$\$$!
+marker. This marker is found in the AST as a record \lstinline!fDollar()! with a unique
+feature: it position.
 The statements that can be transformed in expressions are
 \begin{itemize}
   \item Function, Procedure, Functor and Class declarations. For example
-    \lstinline!X=fun{\$ A B} .. end!
+    \lstinline[mathescape]!X=fun{$\$$ A B} .. end!
   \item In the parameters list of a call to a procedure, in the location of an
-    expression. For example \lstinline!{Foo A..\$..N}!
+    expression. For example \lstinline[mathescape]!{Foo A..$\$$..N}!
   \item In a pattern position of a parameter of a call. For example
     \lstinline[mathescape]!{Foo bar(A..$\$$..N) baz}!
 \end{itemize}
-Note that although functions can unify their parameters with values, like in 
-\begin{lstlisting}
-  fun {F A ?R2}
-     R2=3*A
-     2*A
-  end
-\end{lstlisting}
-It makes absolutely no sense to put a nesting marker as second argument to a call of this function, like in 
-\lstinline[mathescape]!{F 2 $\$$}! because the call itself is already an expression.
-
+% FIXME: formalise pattern position. See with Sebastien
 
 \subsection{Cells}\label{sec:input:cells}
 \subsubsection{Assignation}
-fColonEquals(Cell Val Pos) %FIXME
+A new value can be stored in a cell with this Oz code: \lstinline!Cell:=Val!. This code will result in 
+this tuple in the AST: \lstinline!fColonEquals(Cell Val Pos)!. %FIXME 
 \subsubsection{Read}
-fAt(Cell Pos) % FIXME
+The value stored in a cell can be access with the \lstinline!@! operator, as is
+\lstinline!@Cell!, which results in this tuple in the AST: 
+\lstinline!fAt(Cell Pos)!
 \subsection{Records}\label{sec:input:records}
-Without describing the whole syntax, here is a reminder of the record syntax in Oz code. A record is refined by \lstinline!Label(F1:V1 F2:V2)! where the label and features ($F_i$) can be an atom or a variable, and the values ($V_i$) can in addition to this be the result of a function call. Features can be left out, in which case they are implicitly assigned increasing values from 1.
+Without being exhaustive, here is a reminder of the record syntax in Oz code. A
+record is refined by \lstinline!Label(F1:V1 F2:V2)! where the label and features
+(\lstinline[mathescape]!$F_i$!) can be an atom or a variable, and the values
+(\lstinline[mathescape]!$V_i$!) can in addition to this be the result of a function call. Features can be left out, in which case they are implicitly assigned increasing values from 1.
 
-Records are present in the AST in records with label fRecord. Its label is the first feature, and the second feature is the list of feature/value pairs. If no feature was specified, the entry in the list is simply the value. If a feature was specified, the entry in the list is a record fColon, with the first feature being the feature and second feature being the value. All this will become much clearer with the following examples.
+Records are present in the AST as tuple with label \lstinline!fRecord!. Its
+label is the first feature, and the second feature is the list of feature/value
+pairs. If no feature was specified, the entry in the list is simply the value.
+If a feature was specified, the entry in the list is a record fColon, with the
+first feature being the feature and second feature being the value. All this
+will become much clearer with the following examples.
 
 Here is the AST corresponding to the record definition \lstinline!rec(f1:v1 f2:v2)!. We see that the label (rec) is an atom located in an fAtom record. The pairs of features and their respective values are wrapped in fColon.
 
 \begin{lstlisting}
    fRecord(
       fAtom(rec pos)
-      |(
-         fColon(
-            fAtom(f1 pos)
-            fAtom(v1 pos)
-         )
-         |(
-            fColon(
-               fAtom(f2 pos)
-               fAtom(v2 pos)
-            )
-            nil
-         )
-      )
-   )
+      [
+       fColon(
+         fAtom(f1 pos)
+         fAtom(v1 pos))
+       fColon(
+         fAtom(f2 pos)
+         fAtom(v2 pos))])
 \end{lstlisting}
 
 When the feature is not explicitly given, the item in the list of features and their respective values is simply the value. Here is the AST of this record \lstinline!rec(v1 f2:V2)!. The first item in the list is simply an atom, the value of the first feature. Note that the value of the feature f2 is a variable in this case.
@@ -563,17 +701,11 @@ When the feature is not explicitly given, the item in the list of features and t
 \begin{lstlisting}
    fRecord(
       fAtom(rec pos)
-      |(
-         fAtom(v1 pos)
-         |(
-            fColon(
-               fAtom(f2 pos)
-               fVar(V2 pos)
-            )
-            nil
-         )
-      )
-   )
+      [
+       fAtom(v1 pos)
+       fColon(
+          fAtom(f2 pos)
+          fVar(V2 pos))])
 \end{lstlisting}
 
 
@@ -604,13 +736,18 @@ Oz enables the programmer to protect a critical section with a lock previously c
 This code results in a fLockThen record in the AST, with 3 features: the lock L,
 the body of the critical section, and the position in the code:
 \lstinline!fLock(L Body Pos)!.
+
 \subsection{If then else}
-The if..then..else construct is put in records:
-fBoolCase( Condition ThenCode ElseCode)
+The \lstinline!if..then..else! construct is put in records:
+\begin{lstlisting}
+   fBoolCase( Condition ThenCode ElseCode)
+\end{lstlisting}
 The else part is optional in Oz. In this case, ElseCode is a record \lstinline!fNoElse(pos)! in the AST.
-\subsection{Boolean combinations}\label{sec:input:booleancombinations}
+
+\subsection{Short-circuit boolean combinators}\label{sec:input:booleancombinations}
 The boolean conjunction operation in Oz represented by the keyword \lstinline!andthen!. Such a conjunction is present in the AST in the form of a record \lstinline!fAndThen(First Second)!, where first and second must be expressions with a boolean value.
 The boolean disjunction operation is done thanks to the keyword \lstinline!orelse!, present in the AST in the form of a record \lstinline!fOrElse(First Second)!.
+
 \subsection{Case Instruction and Pattern Matching}\label{sec:input:patternmatching}
 The Case instruction in Oz is of the following form where optional parts are enclosed in double square brackets ([[ ]]).
 \begin{lstlisting}
@@ -628,7 +765,7 @@ This ends up in the AST in a record of the form \lstinline!fCase(Value Clauses E
 \lstinline!Clauses! is a list of records each representing one clause and containing the clause' pattern, guards and code. We will analyse these further below.
 The else part of the instruction is optional. If no else is provided, then ElseCode in the AST is a record \lstinline!fNoElse(pos)!.
 
-A clause with no guards is present in the AST in the form of a record \lstinline!fCaseClause(Pattern Body)!. \lstinline!Pattern! can be a constant value (integer, string, record, \ldots), present in the AST as described earlier. It can also be a record where a feature value is not a constant but a variable (in a \lstinline!fVar(Name pos)! record as described in section \ref{sec:input:variables}). In case of a match of the constant feature values in the pattern, this declares said variable and assigns the value of the corresponding feature in the value the pattern is tested against. Here is an example:
+A clause with no guards is present in the AST in the form of a record \lstinline!fCaseClause(Pattern Body)!. \lstinline!Pattern! can be a constant value (integer, string, record, \ldots), present in the AST as described earlier. It can also be a record where a feature value is not a constant but a variable (in a \lstinline!fVar(Name pos)! record as described in section \ref{sec:input:identifiers}). In case of a match of the constant feature values in the pattern, this declares said variable and assigns the value of the corresponding feature in the value the pattern is tested against. Here is an example:
 \begin{lstlisting}
   R=lab(a b c d)
   case R
@@ -638,11 +775,11 @@ A clause with no guards is present in the AST in the form of a record \lstinline
 \end{lstlisting}
 Features of a record in a pattern can also have the wildcard \lstinline!_! as value, represented in the AST as described in section \ref{sec:input:wildcard}.
 
-The pattern can also be or contain an open record specifying only the first features which should match, as in the following example:
+The pattern can also be or contain an open record specifying only a subset of features which should match, as in the following example:
 \begin{lstlisting}
   R=lab(a b c d)
   case R
-  of lab(a b ...) then
+  of lab(3:c 4:_ ...) then
     % Code for record with label lab
     % and value a and b for two first features.
   end
@@ -653,27 +790,24 @@ and its AST representation:
 \begin{lstlisting}
    fOpenRecord(
       fConst(lab pos)
-      |(
-         fColon(
-            fConst(1 pos)
-            fConst(a pos)
-         )
-         |(
-            fColon(
-               fConst(2 pos)
-               fConst(b pos)
-            )
-            nil
-         )
-      )
-   )
+      [
+       fColon(
+          fConst(1 pos)
+          fConst(a pos))
+       fColon(
+          fConst(2 pos)
+          fConst(b pos))])
 \end{lstlisting}
 
 Records and open records can of course be nested.
 
-A clause with guards is present in the AST in the form of a record \lstinline!fSideCondition(Pattern Decls Guards Pos)!, where \lstinline!Pattern! is as above, Decls is usually skipped (\lstinline!fSkip(pos)!)%FIXME: what are decls??
-and Guards is simply the AST of the code of the guard (without the \lstinline!andthen! introducing the guard).
-Guards must be an expression with a boolean value, possibly using the boolean combinations of section \ref{sec:input:booleancombinations}.
+A clause with guards is present in the AST in the form of a record
+\lstinline!fSideCondition(Pattern Decls Guards Pos)!, where \lstinline!Pattern!
+is as above, \lstinline!Decls! is usually skipped
+(\lstinline!fSkip(pos)!)%FIXME: what are decls?? IMPORTANT check with sebastien
+and \lstinline!Guards! is simply the AST of the code of the guard (without the \lstinline!andthen! introducing the guard).
+\lstinline!Guards! must be an expression with a boolean value, possibly using
+the short-circuit boolean combinators of section \ref{sec:input:booleancombinations}.
 
 Variables can also be used in patterns for their value, and not as a new capture
 declaration. This is done by prefixing the variable with an exclamation mark.
@@ -690,29 +824,34 @@ of rec(A b c) then
 end
 \end{lstlisting}
 
-and escaped variable ends up in the AST as wrapped in an \lstinline!fEscape!
-record. \lstinline!A! appears in the AST as \lstinline!fEscape( fVar(A pos) pos)!.
+An escaped variable ends up in the AST as wrapped in an \lstinline!fEscape!
+tuple. \lstinline$!A$ appears in the AST as \lstinline!fEscape( fVar(A pos) pos)!.
 \nav{The next transformation of \lstinline!fEscape! nodes is done by the Namer,
 see Section \ref{sec:arch:namer:patternmatching}.}
 
-Oz pattern matching also support what is called pattern conjunction, enabling to assign the value of a subexpression of the pattern to a variable. It is better illustrated by an example:
+Oz pattern matching also support what is called pattern conjunction, enabling to
+capture the value of a subexpression of the pattern. It is better
+illustrated by an example:
 \begin{lstlisting}
    case V 
-   of rec(V=inner(a b ...)) then
+   of rec(I=inner(a b ...)) then
    ...
    end
 \end{lstlisting}
 
-In the clause'code, the variable V will have the value of the inner record.
+In the clause'code, the variable \lstinline!I! will have the value of the inner record.
 These pattern conjunctions are present in the AST in \lstinline!fEq! record just 
 like unification instructions.
 Note that just like unifications (and unlike \lstinline!local..in..end!), the variable implicitly declared can be at the
 left as well as at the right side of the equal sign. So the pattern
 \lstinline!rec(V=inner(a b ...))! is equivalent to \lstinline!rec(inner(a b ...)=V)!
+And also like in unification, the capturing side can be a pattern, it doesn't
+have to be a single variable.
 
 
+% CONTINUE
 \subsection{Classes}
-Let's illustrated the AST we get for a class definition with an example:
+Analysing classes is best illustrated by an example of Oz code:
 
 \begin{lstlisting}
    class C
@@ -1147,13 +1286,13 @@ the parser is
 \end{lstlisting}
 The first transformation applied to these nodes takes place in the desugar step,
 described in Section \ref{sec:arch:desugar:dotassign}.
-\subsection{Functors}
+\subsection{Functors}\label{sec:input:functors}
 Modular applications can be developed in Oz by using functors. A functor
 computes a module, taking modules as input and producing a new module as output.
-A module groups together related operations, and is made of an interface and an implementation.
+A module groups together related operations, and consists of an interface and an implementation.
 The interface publishes entry points to the module implementation, the rest of
 the implementation being unreachable from the outside.
-A functor can \lstinline!import! definitions, \lstinline!export! entry points to
+A functor can \lstinline!import! other modules, \lstinline!export! entry points to
 its implementation, and \lstinline!define! its implementation, as illustrated by
 the code in Figure~\ref{fig:compiled_functor}.
 \begin{figure}[h]
@@ -1176,14 +1315,20 @@ end
 A distinction is made between compiled and computed functors
 \footnote{A detailed description is available at
 http://www.mozart-oz.org/home/doc/apptut/node6.html}
-A compiled functor has only access to the base environment, and are of the form
-illustrated in \ref{fig:compiled_functor}.
+
+A computed functor has its name coming from the fact that some of its code is evaluated
+at compile time, resulting in a functor that has been computed, in opposition to
+compiled functors, which have their code only being compiled and not evaluated.
+To distinguish both steps, we say a functor is evaluated when it is compiled, and we say it is
+applied when it is effectively imported in a program.
+
+The code executed when building computed functors can for example computed a
+data structure to be carried with the computed functor.
 
 
-Computed functors have access to all data structure that the compiled functor
-supply when it is evaluated. This mean that the evaluation of a compiled functor
-can build data structures to be used in the computed functor. Computed functors are supported in Oz with
-\lstinline!require! and \lstinline!prepare!.This is better illustrated by an example, in
+Computed functors are supported in Oz with
+\lstinline!require! and \lstinline!prepare!, which define code parts to be evaluated when
+building the functor. This is better illustrated by an example, in
 Figure~\ref{fig:computed_functor}, coming from the online Oz
 documentation\footnote{Also at http://www.mozart-oz.org/home/doc/apptut/node6.html}.
 
@@ -1209,16 +1354,10 @@ documentation\footnote{Also at http://www.mozart-oz.org/home/doc/apptut/node6.ht
 
 The key point in this functor definition is the presence of the
 \lstinline!require! and \lstinline!prepare! sections. When this functor is
-compiled, the \lstinline!require! and \lstinline!prepare! are not evaluated.
-Hence the compiled vector contains code to build the sample flights list. It is only
-when the functor is computed that the \lstinline!require! and the
-\lstinline!prepare! sections are evaluated. The computed functor thus contains a list of sample flights, which
-can be used in its \lstinline!define! section.
+compiled, the \lstinline!require! and \lstinline!prepare! are evaluated.
+Hence the computed vector contains the sample flights list.
 This means that the code will have access sample flights that were selected when
-the functor was evaluated, and not when it was compiled!
-This approach also makes it possible to build a list of one million elements
-without storing it in the compiled functor.
-
+the functor was evaluated (built), and not when it was applied (imported)!
 
 Functors appear in the AST in \lstinline!fFunctor!:
 \begin{lstlisting}
@@ -1230,7 +1369,7 @@ The second value is a list containing all \lstinline!import!,
 \lstinline!require!, \lstinline!prepare!, \lstinline!define! and
 \lstinline!export! information. 
 
-We'll illustrate these record by using the example code in
+We'll illustrate these records by using the example code in
 Figure~\ref{fig:functor_example_code}.
 \begin{figure}[ht]
 \begin{lstlisting}
@@ -1257,7 +1396,7 @@ Figure~\ref{fig:functor_example_code}.
 
 
 The \lstinline!import! information are present in a record \lstinline!fImport!
-holding a list of \lstinline!fImportItem(Id Aliases Location)!s as illustration in
+holding a list of \lstinline!fImportItem(Id Aliases Location)!s as illustrated in
 Figure~\ref{fig:functor_example_import}.
 The \lstinline!Id! is simply the variable defined for the \lstinline!import!.
 \lstinline!Aliases! is a list of pairs \lstinline!'#'(Var Key)! binding
@@ -2680,6 +2819,148 @@ to see how an \lstinline!fapply! node is desugared.
 
 
 \subsubsection{Functors}\label{sec:arch:desugar:functors}
+Let's first note that anonymous functors are expressions, and named functors are
+statements but that the transformations described below are applied exactly the same way
+on expression and statement functors.
+
+A different treatment is applied to compiled and computed functors, which differ
+as explained in Section~\ref{sec:input:functors}.
+
+A compiled functor is desugared in a call \lstinline!{NewFunctor [ImportRecord ExportRecord ApplyFun]}! taking three
+arguments:
+\begin{description}
+  \item[ImportRecord] is of the form  illustrated in
+    Figure~\ref{fig:desugar:import_record}
+    where \lstinline!ModName! is the name
+    of the variable identifying this imported module, and
+    \lstinline!AliasesAtomsList! is the list of atoms identifying the imported
+    functions. An example is given in Figure~\ref{fig:desugar:import_record_example}.
+  \item[ExportRecord] is a record with label \lstinline!'export'!. Its features are the
+    exported keys, and the values of each feature is the atom \lstinline!value!.
+    This tells the virtual machine that the value corresponding to this can can
+    have any type. With static analysis, it would be possible to restrict the
+    type more. An example is given in Figure~\ref{fig:desugar:export_record}.
+  \item[ApplyFun] is a function taking one parameter, as shown in
+    Figure~\ref{fig:desugar:apply_fun}. When a functor is applied, this function is called
+    and it is the record it returns that gives entry points to the module
+    functionality. The structure of this function can be put in relation with
+    the functor variables scopes illustrated in Figure~\ref{fig:functors_scope}
+    on page \pageref{fig:functors_scope}.
+\end{description}
+
+\begin{figure}[ht]
+\begin{lstlisting}
+  import(ModName(info(type:AliasesAtomsList 
+                 from:``x-oz://system/''#ModName#``.ozf''))) 
+\end{lstlisting}
+\caption{\lstinline!ImportRecord! argument of \lstinline!NewFunctor! call}
+\label{fig:desugar:import_record}
+\end{figure}
+
+
+\begin{figure}[ht]
+\begin{lstlisting}
+µ
+{\fontfamily{ppl}\selectfont This import directive:}
+µ
+   import
+      DumpAST(dumpAST PPAST) at '../lib/DumpAST.ozf'
+µ
+{\fontfamily{ppl}\selectfont will result in this import record definition:}
+µ
+   import('DumpAST'(info(type:[dumpAST] from:'../lib/DumpAST.ozf')))
+\end{lstlisting}
+\caption{\lstinline!ImportRecord! example}
+\label{fig:desugar:import_record_example}
+\end{figure}
+
+\begin{figure}[h]
+\begin{lstlisting}
+µ
+{\fontfamily{ppl}\selectfont This export directive:}
+µ
+   export
+      dumpAST:DumpAST
+µ
+{\fontfamily{ppl}\selectfont will result in this import record definition:}
+µ
+   export(dumpAST:value)
+\end{lstlisting}
+\caption{\lstinline!export! directive example}
+\label{fig:desugar:export_record}
+\end{figure}
+
+\begin{figure}[h]
+\begin{lstlisting}
+   fun {$ ImportParamSym}
+      local
+         <importedSymbolsDeclarations>
+         <defineDeclarations>
+      in
+         <importBinds>
+         <defineStats>
+         'export'( dumpAST:DumpAST ...)
+      end
+   
+   end
+\end{lstlisting}
+\caption{\lstinline!ApplyFun! structure}
+\label{fig:desugar:apply_fun}
+\end{figure}
+
+\nav{The resulting \lstinline!fApply! is further desugared, see Section~\ref{sec:arch:desugar:calls} on page \pageref{sec:arch:desugar:calls}}
+
+Computed functors are desugared differently. A computed vector has at least one
+\lstinline!require! or \lstinline!prepare!. It is desugared in a new outer
+functor itself defining an inner functor.  This is best illustrated by the
+example of a functor in Figure~\ref{fig:desugar:computed_functor_example} and
+its desugared result in
+Figure~\ref{fig:desugar:desugared_computed_functor_example}.
+
+\begin{figure}[ht]
+\begin{lstlisting}
+   functor
+   require <req>
+   prepare <prep>
+   import <imp>
+   export <exp>
+   define <def>
+   end
+\end{lstlisting}
+\caption{Computed functor example}
+\label{fig:desugar:computed_functor_example}
+\end{figure}
+
+\begin{figure}[ht]
+\begin{lstlisting}
+   local
+      functor Outer
+      import <req>
+      export inner:Inner
+      define
+         functor Inner
+         import <imp>
+         export <exp>
+         define
+            <defDecls><prepareDecls>
+         in
+            <defStats>
+         end
+         <prepareStats>
+      end
+   in
+      {ApplyFunctor BaseURL Outer}.inner
+   end
+\end{lstlisting}
+\caption{Desugared computed functor}
+\label{fig:desugar:desugared_computed_functor_example}
+\end{figure}
+
+As the outer functor is immediately applied, its \lstinline!import! and \lstinline!define! sections are evaluated.
+But these are, or include, the original functor's \lstinline!require! and \lstinline!prepare! sections, and this
+construction ensures the behaviour we need.
+%FIXME: improve explanations
+This result is recursively desugared.
 
 \subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
@@ -3199,7 +3480,8 @@ in
          end
          {P3}
       end
-      {Show A}  % Use A after a nested proc triggered the creation of a new local.
+      {Show A}  % Use A after a nested proc triggered the creation 
+                % of a new local.
    end
 end
 \end{lstlisting}
@@ -3223,7 +3505,10 @@ in
          {P3}
       end
    end
-   {Show A}  % A is defined locally, and the nested procs defined should not trigger the creation of a new local, but P1's new local for A should reference the A declared by the local .. in .. end
+   {Show A}  % A is defined locally, and the nested procs defined 
+             % should not trigger the creation of a new local, but P1's
+             % new local for A should reference the A declared by 
+             % the local .. in .. end
 end
 \end{lstlisting}
 
@@ -3247,7 +3532,8 @@ in
       {P2}
       {P3}
    end
-   {Show A}  % Use A after a nested proc triggered the creation of a new local.
+   {Show A}  % Use A after a nested proc 
+             % triggered the creation of a new local.
 end
 \end{lstlisting}
 
@@ -3413,7 +3699,7 @@ The opcodes generated for this call will be
   call(y(0) 3)
 \end{lstlisting}
 
-\subsubsection{Case}
+\subsubsection{Case}\label{sec:arch:codegen:case}
 Case statements are amongst the most complex instructions to handle in code generation. This is because different pattern types are handled differently. 
 
 
@@ -3853,40 +4139,45 @@ Possibly include some measure?
 
 \chapter{Pattern Variables}\label{appendix:patternvariables}
 %FIXME: arrange layout
-Statements:
-$
-D1 D2                        PV(D1) \cup PV(D2)
-x                            \{x\}
-(S)                          PV(S)
-(D in S)                     PV(S) - PV(D)
-local D in S end             PV(S) - PV(D)
-proc ... {E ...} ... end     PV(E)
-fun ... {E ...} ... end      PV(E)
-class E ... end              PV(E)
-functor E ... end            PV(E)
-E = ...                      PV(E)
-otherwise                    \emptyset
-$
+\section{Statements}
+
+\begin{tabular} {l l}
+\lstinline!D1 D2                      ! & \lstinline!PV(D1)! $\cup$ \lstinline!PV(D2)! \\
+\lstinline!x                          ! & \lstinline!{x}!                  \\
+\lstinline!(S)                        ! & \lstinline!PV(S)             ! \\
+\lstinline!(D in S)                   ! & \lstinline!PV(S) - PV(D)     ! \\
+\lstinline!local D in S end           ! & \lstinline!PV(S) - PV(D)     ! \\
+\lstinline!proc ... {E ...} ... end   ! & \lstinline!PV(E)             ! \\
+\lstinline!fun ... {E ...} ... end    ! & \lstinline!PV(E)             ! \\
+\lstinline!class E ... end            ! & \lstinline!PV(E)             ! \\
+\lstinline!functor E ... end          ! & \lstinline!PV(E)             ! \\
+\lstinline!E = ...                    ! & \lstinline!PV(E)             ! \\
+\lstinline!otherwise                  ! & $\emptyset$          \\
+\end{tabular}
 
 
-Declarations:
 
-$
-x                                         \{x\}
-(E)                                       PV(E)
-(D in [ S ] E)                            (PV(S) \cup PV(E)) - PV(D)
-local D in [ S ] E end                    (PV(S) \cup PV(E)) - PV(D)
-E1 = E2                                   PV(E1) \cup PV(E2)
-[E1 ... En]                               PV(E1) \cup ... \cup PV(En)
-E1|E2                                     PV(E1) \cup PV(E2)
-E1\#...\#En                                 PV(E1) \cup ... \cup PV(En)
-il([ f1: ] E1 ... [ fn: ] En [ ... ])     PV(E1) \cup ... \cup PV(En)
-otherwise                                 \emptyset
-$
+\section{Expressions}
+
+\begin{tabular} {l l}
+\lstinline!x                                       ! & \lstinline!{x} !                                   \\
+\lstinline!(E)                                     ! & \lstinline!PV(E) !                                    \\
+\lstinline!(D in [ S ] E)                          ! & \lstinline!(PV(S)!$\cup$ \lstinline! PV(E)) - PV(D) !\\
+\lstinline!local D in [ S ] E end                  ! & \lstinline!(PV(S)!$\cup$ \lstinline! PV(E)) - PV(D) !\\
+\lstinline!E1 = E2                                 ! & \lstinline!PV(E1)!$\cup$ \lstinline! PV(E2)         !\\
+\lstinline![E1 ... En]                             ! & \lstinline!PV(E1)!$\cup$ \lstinline! ... \cup PV(En)!\\
+\lstinline!E1|E2                                   ! & \lstinline!PV(E1)!$\cup$ \lstinline! PV(E2)         !\\
+\lstinline!E1\#...\#En                             ! & \lstinline!PV(E1)!$\cup$ \lstinline! ... \cup PV(En)!\\
+\lstinline!l([ f1: ] E1 ... [ fn: ] En [ ... ])    ! & \lstinline!PV(E1)!$\cup$ \lstinline! ... \cup PV(En)!\\
+\lstinline!otherwise                               ! &              $\emptyset$                               \\
+\end{tabular}
+
+% Open subsequent chapter on any page
+\openany
 
 \chapter{Symbol Description}\label{appendix:symbol}
-A symbol instance holds information about the variable it replaced in the AST. Symbols introduced by the compile are called synthetic symbols.
-The attributes of the class are:
+A symbol instance holds information about the variable it replaced in the AST. Symbols introduced by the compiler are called synthetic symbols.
+The attributes of the class \lstinline!Symbol! are:
 \begin{description}
   \item[id] A unique id for the symbol, used for debugging purposes.
   \item[name] The name of the variable it represents. This can be empty for symbols introduced by the compiler.
@@ -3905,6 +4196,16 @@ The attributes of the class are:
     However, I preferred to postpone this to the optimising step. \lstinline!ref! references a symbol local to the enclosing procedure, building a chain that will eventually lead to a symbol of type localProcId enabling the resolution of global variables. %FIXME: improve description..
 \end{description}
 
+\chapter{Compiling to a file}
+
+The functor in \ref{fig:desugar:computed_functor_example} is clearly an
+expression, but the virtual machine can only execute statements. So the question
+arises: how can a expression be compiled and saved to a file? Well, the compiler 
+applies a trick. When compiling an expression, the compiler unifies the
+expression with a variable \lstinline!Result!, executes that statement and then
+saves \lstinline!Result! in a file.
+When compiling this functor to a file, the compiler actually unifies this functor with a
+\lstinline!Result! variable, and writes this variable's value to a file.
 
 
 \end{appendices}
