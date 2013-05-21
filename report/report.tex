@@ -10,6 +10,8 @@
 \usetikzlibrary{arrows,automata,shapes}
 \tikzstyle{block} = [rectangle, draw, fill=blue!20, 
     text width=5em, text centered, rounded corners, minimum height=4em]
+\tikzstyle{pass} = [rectangle, draw, fill=blue!20, text centered, rounded corners]
+\tikzstyle{txt} = [text centered]
 \setcounter{secnumdepth}{3} 
 \setcounter{tocdepth}{3} 
 
@@ -1467,12 +1469,40 @@ namer, see Section~\ref{sec:arch:namer:functors}.}
 
 
 
-% CONTINUE
 
 \chapter{Compiler}
 \section{Architecture}
-The AST received from the parser goes through several transformations. These transformations are implemented by functions taking as only argument the AST, and they return the transformed AST.
-These functions all have the same structure:
+The AST received from the parser goes through several transformations called
+passes. Each pass has its specific purpose and is applying a specific
+transformation to the AST. The compiler's passes are illustrated in Figure~\ref{fig:compiler_passes}
+
+
+\begin{figure}[h]
+\begin{tikzpicture}[auto,every matrix/.style={ampersand replacement=\&,column sep=2cm,row sep=2cm},
+                             to/.style={->,>=stealth',shorten >=1pt,semithick,font=\sffamily\footnotesize}]
+  \node[pass](declsFlattener) at (0,0) {DeclsFlattener};
+  \node[pass](namer) at (3,0) {Namer};
+  \node[pass](desugar) at (5.5,0) {Desugar};
+  \node[pass](unnester) at (8.5,0) {Unnester};
+  \node[pass](globaliser) at (8.5,-1) {Globaliser};
+  \node[pass](codegen) at (5,-1) {CodeGen};
+  \node[txt](opcodes) at (5,-2) {\lstinline!declareY(2)|createVar(y(0))|...!};
+
+  \draw[to]  (declsFlattener.east) -- (namer.west);
+  \draw[to]  (namer.east) -- (desugar.west);
+  \draw[to]  (desugar.east) -- (unnester.west);
+  \draw[to]  (unnester.south) -- (globaliser.north);
+  \draw[to]  (globaliser.west) -- (codegen.east);
+  \draw[to]  (codegen.south) -- (opcodes.north);
+\end{tikzpicture}
+\caption{Internals of the virtual machine}
+\label{fig:compiler_passes}
+\end{figure}
+
+
+These transformations are implemented by functions
+taking as only argument the AST, and they return the transformed AST.
+These functions all have the same structure, as displayed in Figure~\ref{fig:pass_structure}.
 \begin{figure}[h]
 \begin{lstlisting}
    fun {Transform AST}
@@ -1489,12 +1519,46 @@ These functions all have the same structure:
    end
 \end{lstlisting}
 \caption{Structure of a transformation function}
+\label{fig:pass_structure}
 \end{figure}
-Having the same structure enables the use of the function \lstinline!DefaultPass!, which calls the function passed as second arguments recursively on the AST with \lstinline!Params! as last argument, but returns the AST unchanged. This facilitates the recursive calls for default behaviour on elements not modified by the transformation.
+Having the same structure enables the use of the function
+\lstinline!DefaultPass! listed in Figure~\ref{fig:default_pass}, which calls the
+function passed as second arguments recursively on the AST with
+\lstinline!Params! as last argument, but returns the root of the AST unchanged. This
+facilitates the recursive calls for default behaviour on elements not modified
+by the transformation.
+
+
+\begin{figure}[h]
+\begin{lstlisting}
+   fun {DefaultPass AST F Params}
+      % beware of the order. a record is also a list!
+      if {List.is AST} then
+         {List.map AST fun {$ I} {F I Params} end}
+      elseif {Record.is AST} then
+         case AST
+         of pos(_ _ _ _ _ _) then
+            % Do not go down into position records
+            AST
+         else
+            {Record.map AST fun {$ I} {F I Params} end}
+         end
+      else
+         AST
+      end
+   end
+\end{lstlisting}
+\caption{DefaultPass function}
+\label{fig:default_pass}
+\end{figure}
+
+
+
 Params is a record with label \lstinline!params!, and features are added
 according to use. For example, this \lstinline!Params! argument is used by
 the \lstinline!Globaliser! described in Section \ref{sec:arch:globaliser}. All
-passes take a Params as last argument, even if some do not use it. 
+passes take a \lstinline!params! record as last argument, even if some do not use it. 
+This early design decision proved very beneficial afterwards.
 % Should I add that fAnd takes a pos feature and fAndThen not, and that I had to
 % tweak the function WrapIn as a consequence?
 
@@ -1502,8 +1566,10 @@ passes take a Params as last argument, even if some do not use it.
 Although all passes work exclusively on the AST, the transformations described in later sections can and will often be illustrated more clearly and concisely by giving the Oz code corresponding to the ASTs before and after the transformation. 
 
 \subsection{Declarations Flattener}\label{sec:arch:declsflattener}
-The Oz language accepts complex instructions in the declaration part of \lstinline!local Decls in Body end!. This brings the need to decide what variables are declared for each instruction present in the \lstinline!Decls!. 
-For example, in unification, only the left hand side variable gets declared, and only B is implicitly declared in the following code snippet:
+The Oz language accepts complex instructions in the declaration part of
+\lstinline!local Decls in Body end!. It is thus necessary to decide what variables are declared for each instruction present in the \lstinline!Decls!. 
+For example, in unifications, only the left hand side variable gets declared,
+and only \lstinline!B! is implicitly declared in the following code snippet:
 \begin{lstlisting}
    local
       B=2*A
@@ -1511,33 +1577,61 @@ For example, in unification, only the left hand side variable gets declared, and
       ...
    end
 \end{lstlisting}
-Luckily, this has been clearly formalised by the Oz implementers and published on the web\footnote[]{http://www.mozart-oz.org/documentation/notation/node6.html}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
+Fortunately, this has been clearly formalised by the Oz implementers and published on the web\footnote{http://www.mozart-oz.org/documentation/notation/node6.html}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
 
 \subsection{Namer}\label{sec:arch:namer}
 %FIXME: add fFOR
 The namer  basically replaces all occurrences of a variable's \lstinline!fVar! by \lstinline!fSym! records holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
 
-In declarations, the namer creates a new symbol for the declared variables, in other code, it looks at already defined symbols and replaces \lstinline!fVar!s by a \lstinline!fSym! record containing the existing symbol for that variable. This works because a variable can only be used after it has been declared. The namer can thus be sure to find a symbol for variables it encounters in the AST, or it is an error.
+In declarations, the namer creates a new symbol for the declared variables, in
+other code, it looks at already defined symbols and replaces \lstinline!fVar!s
+by a \lstinline!fSym! record containing the existing symbol for that variable.
+This works because a variable can only be in the subtree whose root is the
+variable declaration's instruction (be it a \lstinline!local Decls in Body end!
+declaring variables in \lstinline!Decls!, a
+\lstinline!proc {Id P1 P2}! declaring its formal parameters, \ldots) . The namer
+can thus be sure to find a symbol for variables it encounters in the AST, or it
+is an error.
 
 The \lstinline!Namer! also has some work to do on patterns and the variables it
 implicitly declares. As a consequence, it also handles and transforms the AST
-for functions and procedures.
+for functions and procedures, which implicitly declare their formal parameters.
 
 The set of maps from a variable name to its corresponding symbol is called environment, and is maintained by the namer.
 
 
 \subsubsection{Declarations}
-So the question raises of when do variables get declared.
-One such construct is of course the explicit declaration instruction \lstinline!local Decls in Body end!, present in the AST in the form of \lstinline!fLocal! records introduced in section \ref{sec:input:flocal}. At this stage, \lstinline!Decls! only contains simple variables declaration, thanks to the declaration flattener (see Section \ref{sec:arch:declsflattener}). \lstinline!fLocal! introduces a new environment, in which the variables declared in its first feature are added to the environment of the code present in its second feature, possibly erasing mappings for variables with the same name coming from the parent environment. 
+Variables can be declared in different ways and instructions.
+One such instruction is of course the explicit declaration instruction
+\lstinline!local Decls in Body end!, present in the AST in the form of
+\lstinline!fLocal! records introduced in section \ref{sec:input:flocal}. At this
+stage, \lstinline!Decls! only contains simple variables declaration, thanks to
+the declaration flattener (see Section \ref{sec:arch:declsflattener}).
+\lstinline!fLocal! introduces a new environment, in which the variables declared
+in its first feature are added to the environment of the code present in its
+second feature, possibly erasing mappings for variables with the same name
+coming from the parent environment. 
 
-Another kind of declaration is found in the definition of procedures and functions. Indeed, fProc (section \ref{sec:input:procedures} and fFun (section \ref{sec:input:functions}) records also implicitly declare the variables for their formal parameters. % see test 029
+It is these manipulations of the environments that make that the code in
+Figure~\ref{fig:namer_nested_locals} does not throws an error of impossible
+unification of A with 6. Indeed, the inner variable A gets another symbol
+assigned than the outer one, and replaces it in the environment of the inner
+instructions. Thus there is no ambiguity in the \lstinline!Show! instruction as
+to which its argument is, and it effectively shows 6.
 
-Still another kind of declaration happens in pattern matching (section \ref{sec:input:patternmatching}), when a record present in the pattern has a feature that is a variable. This case is analysed specifically in section\ref{sec:arch:namer:patternmatching}.
+Another kind of declaration is found in the definition of procedures and
+functions. Indeed, \lstinline!fProc! (Section~\ref{sec:input:procedures}) and
+\lstinline!fFun! (Section~\ref{sec:input:functions}) records also implicitly
+declare the variables for their formal parameters. % see test 029
+
+Still another kind of declaration happens in pattern matching
+(Section~\ref{sec:input:patternmatching}), when a record present in the pattern
+has a feature that is a variable. This case is analysed specifically in
+Section~\ref{sec:arch:namer:patternmatching}.
 
 These variables get implicitly declared and added to the environment in which not only the clause' body but also its guards will be executed.
 
 
-It is these manipulations of the environments that make that the code in Figure~\ref{fig:namer_nested_locals} does not throws an error of impossible unification of A with 6. Indeed, the inner variable A gets another symbol assigned than the outer one, and replaces it in the environment of the inner instructions. Thus there is no ambiguity in the \lstinline!Show! instruction as to which its argument is, and it effectively shows 6.
 \begin{figure}
 \begin{lstlisting}
 local
@@ -1556,12 +1650,13 @@ end
 
 
 \subsubsection{Non-declaration code}
-In code not declaring variables, the namer's job is much simpler: it will simply
-replace all occurrences of fVar records by a fSym record having the corresponding symbol as first feature.
+In code not declaring variables, the namer's transformation is much simpler: it will simply
+replace all occurrences of \lstinline!fVar! records by a \lstinline!fSym! record having the corresponding symbol as first feature.
+
+
 \subsubsection{Case Pattern Matching}\label{sec:arch:namer:patternmatching}
-For pattern matching with the \lstinline!case! instruction the namer will have
-more work to do, which we will discuss now. Let's note
-\lstinline!PatternX(Var1,Var2,..)! the pattern identified by X and implicitly
+ Let's note
+\lstinline!PatternX(Var1,Var2,..)! the Xth pattern tested and implicitly
 declaring variables \lstinline!Var1!,\lstinline!Var2!,\ldots, and let's use the same convention for code fragments \lstinline!CodeX(Var1,Var2,..)! and guards \lstinline!GuardsX(Var1,Var2,..)! using those implicitly declared variables.
 
 The transformation of the AST corresponding this Oz code:
@@ -1595,17 +1690,18 @@ Here is the way how it is achieved. The compiler traverses each clause in turn,
 and collects all symbols introduced during this operation. It creates a new
 environment for this clause, which is updated with captures done in the
 pattern. After that, the namer traverses the ASTs of the Guards and the Code
-using this updated environment. and restores the original environment, on which
+using this updated environment, and restores the original environment, on which
 the next clause will build its own environment. This shows clearly that
-although all capture variables are are technically reachable from all clauses'
+although all capture variables are technically reachable from all clauses'
 bodies, it will never be the case as the environment on which a clause builds
 its own is the environment of the case instruction, not the environment updated
 by the previous clause. 
 %FIXME: add reference and detailed description of secure storage
 
+%FIXME: add CTMCP to bibliography 
 In addition, the \lstinline!fSym! record corresponding to these capture
 variables are themselves stored in an unforgeable secure structure (as
-described in CTMCP Section 3.7.5) which is itself wrapped in an
+described in CTMCP Section~3.7.5) which is itself wrapped in an
 \lstinline!fConst!. The reason of this manipulation is to prevent manipulations
 of those symbols by later compiler passes. Now these will be handled as
 constants in all subsequent compiler passes. Another consequence of this is
@@ -1613,31 +1709,33 @@ that the records implicitly declaring variables in a pattern are seen as
 constant records, all features being constants! And these are treated as such,
 notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
 
+%FIXME: explain fPatMatConjunction
 To ease the work of future passes and improve readability of their code, the
-namer also replaces \lstinline!fEq! records of pattern conjunctions in
-\lstinline!fPatMatConjunction! records.
+namer also replaces \lstinline!fEq! tuples of pattern conjunctions by
+\lstinline!fPatMatConjunction! tuples.
 
 Patterns with guards require some additional work. These are present in the AST
 as \lstinline!fSideCondition(Pattern Decls Guards Pos)!. First, a new symbol is
 introduced and unified with the \lstinline!Guards! expression. The record in the
-AST is replaced by \lstinline!fNamedSideCondition(Pattern Decls GuardsStatement GuardSymbol Pos)! when guard statement is the unification of the newly
+AST is replaced by \lstinline!fNamedSideCondition(Pattern Decls GuardsStatement GuardSymbol Pos)! 
+where \lstinline!GuardStatement! is the unification of the newly
 introduced symbol \lstinline!GuardSymbol!. The \lstinline!GuardSymbol! is
 declared together with capture variables. 
 This transformation cannot be completely represented in Oz code, notably the
 transformation of the guards in statement. It will become clear when looking at
-the \lstinline!CodeGen! why this transformation is done like this.
-%FIXME: add ref to codegen and check this is clearly explained.
+the \lstinline!CodeGen! why this transformation is done like this (the
+description of the CodeGen code Section~\ref{sec:codegen:fNamedSideCondition} has more
+details on page \pageref{sec:codegen:fNamedSideCondition}).
 
 
 Escaped variables are transformed by the namer, which introduces a capture
-symbol and then validates that it has the value of the escaped variable.
- A pattern with an escaped variables, like \lstinline!rec(!Var)! is
+symbol and then validates in a new guard that it has the value of the escaped variable.
+ A pattern with an escaped variables, like \lstinline$rec(!Var)$ is
 transformed in \lstinline!rev(Capt) and then Capt==Var!
 Although this transformation might be seen as a \lstinline!Desugar! transformation, it is
-done in the \lstinline!Namer! because the pit already traverses and transforms the
+done in the \lstinline!Namer! because it already traverses and transforms the
 patterns, and all code infrastructure was already in place. Putting this
-transformation in the \lstinline!Desugar! pass would have introduced code duplication and
-incur a performance cost.
+transformation in the \lstinline!Desugar! pass would have introduced code duplication.
 
 % FIXME: add example?
 
@@ -1669,6 +1767,8 @@ The namer thus replaces pattern variables by a synthetic symbol, and wraps the b
 
 
 
+
+%CONTINUE
 \subsubsection{Classes}\label{sec:arch:namer:classes}
 The work of the namer on classes is in most cases straight-forward. It goes through the record
 \lstinline!fClass(Id Specs Methods Pos)! and names variables as one would expect:
@@ -1710,8 +1810,8 @@ in
       end
 \end{lstlisting}
 
-Not also that the variable being the label of the method can have the same name
-as the class! Inside the class the variable will reference the method, and not the class, 
+Note also that the variable being the label of the method can have the same name
+as the class. Inside the class the variable will reference the method, and not the class, 
 as illustrated in: 
 \begin{lstlisting}
    class C
@@ -3949,11 +4049,13 @@ For this, the compiler code defines the function
 is starting a new sequence. The function needs to get passed as arguments the current clause and
 the current sequence type, held in the variable \lstinline!SequenceType!
 
-When a new sequence is started, the previous sequence has to be closed: its
+\label{sec:codegen:fNamedSideCondition}When a new sequence is started, the previous sequence has to be closed: its
 prefix and code buffer must be added to \lstinline!Code!. However, building the
 prefix for a clause with guards requires knowledge of the register in which the
 value of the guards expression is stored. This is found in the fourth features
-of the pattern's \lstinline!fNamedSideCondition! record in the AST.
+of the pattern's \lstinline!fNamedSideCondition! record in the AST, and is why
+ \lstinline!fNamedSideCondition! has an additional feature compared to
+ \lstinline!fSideCondition!.
 The last visited clause'pattern is stored in \lstinline!ThisPattern!. This is
 needed for the closing code, which also generates the opcode for the last sequence.
 
