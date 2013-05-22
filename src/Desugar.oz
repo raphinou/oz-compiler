@@ -472,8 +472,8 @@ define
             %            <defDecls><prepareDecls>
             %         in
             %            <defStats>
-            %            <prepareStats>
             %         end
+            %         <prepareStats>
             %      end
             %   in
             %      {ApplyFunctor BaseURL Outer}.inner
@@ -516,12 +516,13 @@ define
          %................................................................................
          fun {DesugarCompiledFunctor fFunctor(Id SpecsList Pos) FunctorSpecs Params}
          %................................................................................
-            % Desugar it as a call to Feature.new with 3 arguments:
+            % Desugar it as a call to Functor.new with 3 arguments:
             % - ImportRecord
             % - ExportRecord
             % - ApplyFunction
             %
             % ImportRecord is of the form import( ModName(info(type:AliasesAtomsList from:"x-oz://system/"#ModName#".ozf"))) where ModName
+            % is the name of the variable identifying this imported module
             % For this import:
             %    import
             %       DumpAST(dumpAST PPAST) at '../lib/DumpAST.ozf'
@@ -538,11 +539,9 @@ define
             %    local
             %       <importedSymbolsDeclarations>
             %       <defineDeclarations>
-            %       <prepareDeclarations>
             %    in
             %       <importBinds>
             %       <defineStats>
-            %       <prepareStats>
             %       'export'( dumpAST:DumpAST ...)
             %    end
             %
@@ -602,9 +601,10 @@ define
                Decls:=FunctorSpecs.defineDecls|@Decls
             end
 
-            if FunctorSpecs.prepareDecls\=nil then
-               Decls:=FunctorSpecs.prepareDecls|@Decls
-            end
+            % FIXME: can be deleted, no prepare in this case
+            %if FunctorSpecs.prepareDecls\=nil then
+            %   Decls:=FunctorSpecs.prepareDecls|@Decls
+            %end
 
 
             % bind import variables and aliases
@@ -617,9 +617,10 @@ define
                                  end}
             StatsList:= fRecord(fConst('export' Pos) {List.map FunctorSpecs.'exportItems' fun{$ fExportItem(I)} I end})|
                         nil
-            if FunctorSpecs.prepareStats\=nil then
-               StatsList := FunctorSpecs.prepareStats| @StatsList
-            end
+            % FIXME: can be deleted, no prepare in this case
+            %if FunctorSpecs.prepareStats\=nil then
+            %   StatsList := FunctorSpecs.prepareStats| @StatsList
+            %end
             if FunctorSpecs.defineStats\=nil then
                StatsList := FunctorSpecs.defineStats|@StatsList
             end
@@ -779,10 +780,8 @@ define
 
          [] fCase(Val Clauses Else=fNoElse(_) Pos=pos(File Line _ _ _ _)) then
          %--------------------------------------------------------------------
-            % As usual: declare a new symbol, unify it with each clause's body, and put it as last expression
             NewSymbol=fSym({New SyntheticSymbol init(Pos)} Pos)
          in
-            %fLocal(NewSymbol fAnd({DesugarStat fCase({DesugarExpr Val Params} {List.map Clauses fun {$ fCaseClause(Pattern Body)} fCaseClause( Pattern fEq(NewSymbol Body Pos) ) end} Else Pos) Params} NewSymbol) Pos)
             fCase({DesugarExpr Val Params} {List.map Clauses fun{$ I} {DesugarCaseClause I DesugarExpr Params} end} fApply(fConst(Boot_Exception.'raiseError' Pos) [{DesugarExpr fRecord(fConst(kernel pos) [fConst(noElse pos) fConst(File pos) fConst(Line pos) Val]) Params} ] Pos) Pos)
 
          [] fCase(Val Clauses Else Pos) then

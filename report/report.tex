@@ -1812,7 +1812,10 @@ in
 
 Note also that the variable being the label of the method can have the same name
 as the class. Inside the class the variable will reference the method, and not the class, 
-as illustrated in: 
+as illustrated in Figure~\ref{fig:class_method_binding}. The private methods'
+variables are available inside the class, overriding the mapping to the class
+\lstinline!C!.
+\begin{figure}[h]
 \begin{lstlisting}
    class C
       meth init skip end
@@ -1824,12 +1827,16 @@ as illustrated in:
       end
    end
 \end{lstlisting}
-We see here that the private methods' variables are available inside the class, overriding the mapping to the class' \lstinline!C!.
- We can conclude that the namer has to define a new environment when entering the class.
+\caption{Private method overriding the mapping of C}
+\label{fig:class_method_binding}
+\end{figure}
 
-Let's now look at the situation when the method head is captured (see page
+
+
+We can now look at the situation when the method head is captured (see
+Section~\ref{compilerinput:classes:headcapture} page
 \pageref{compilerinput:classes:headcapture} for the AST form).
-Here is code illustrating the specific points needing attention:
+Here is code illustrating the specific points requiring attention:
 \begin{lstlisting}
    class C
       meth init skip end
@@ -1840,7 +1847,7 @@ Here is code illustrating the specific points needing attention:
          {Show F}
       end
       meth clone()
-        {New C ini}
+        {New C init}
       end
    end
 \end{lstlisting}
@@ -1854,7 +1861,7 @@ These attention points are:
     defined (\lstinline!C! in method \lstinline!clone! references the class \lstinline!C!)
 \end{itemize}
 
-The conclusion is again that when the namer enters a method, it has to define a new environment.
+Again, when the namer enters a method, it defines a new environment.
 
 Having covered all special behaviour to support, we can now look at how the namer works to 
 respect these constraints.
@@ -1883,7 +1890,7 @@ these actions in order
   \item restore the previous environment
 \end{enumerate}
 
-I then wraps the class definition in a \lstinline!local..in..end! declaring the
+It then wraps the class definition in a \lstinline!local..in..end! declaring the
 variables to be declared collected while traversing the class (these are
 variables that were encountered as method label), and prepend the class
 definition by the initialisation code collected:
@@ -1893,7 +1900,7 @@ definition by the initialisation code collected:
 The AST received by the namer for a try instruction is:
 \begin{lstlisting}
    fTry(
-      Code
+      Body
       fCatch(
          |(
             fCaseClause(
@@ -1916,7 +1923,9 @@ as the pattern of a case clause (see Section \ref{sec:arch:namer:patternmatching
 A new environment is created for each clause, to which the pattern might add
 bindings, which are then available when naming the code of the clause.
 New symbols are possibly introduced by the patterns, which then have to be
-declared in a wrapping \lstinline!local..in..end! instruction.
+declared in a \lstinline!local..in..end! instruction wrapping the named
+\lstinline!try!  instruction. This construction is very similar to the one
+presented in Section~\ref{sec:arch:namer:patternmatching}.
 
 \subsubsection{Functors}\label{sec:arch:namer:functors}
 The work done by the namer on \lstinline!fFunctor(Id SpecsList Pos)! nodes is trivial, but the
@@ -1924,8 +1933,8 @@ order of naming the items of the \lstinline!SpecsList! is important. For
 example, \lstinline!import!ed variables have to be named before traversing the
 \lstinline!define! block, or else these wouldn't be available to that code!
 
-It is possible to sketch the scope of variables with the code in
-Figure~\ref{fig:functors_scope}. We see that the variables declared by require
+It is possible to sketch the scope of variables introduces by a functor with the code in
+Figure~\ref{fig:functors_scope}. The variables declared by \lstinline!require!
 are available to all other parts of the functor, which is not the case of the
 variables defined by \lstinline!prepare!, which are not available in the
 \lstinline!require! statements. 
@@ -1971,14 +1980,14 @@ in
 \end{lstlisting}
 
 \nav{The next transformation applied on \lstinline!fFunctor! nodes is found in
-the desugar pass, Section\ref{sec:arch:desugar:functors}.}
+the desugar pass, Section~\ref{sec:arch:desugar:functors}.}
 
 
 \subsubsection{Compiler Code Notes}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
 These local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
-Notice that NamerForBody calls NamerForDecls when a function or procedure is
-defines, and NamerForCaptures patterns \lstinline!fCaseClause!s. Here is for
+Notice that \lstinline!NamerForBody! calls \lstinline!NamerForDecls! when a function or procedure is
+defined, and calls \lstinline!NamerForCaptures! for patterns in \lstinline!fCaseClause!s. Here is for
 example the (redacted) code handling a definition in non-declaration part of a
 function with no pattern argument:
 
@@ -2002,12 +2011,19 @@ function with no pattern argument:
      {Params.env restore()}
      Res
 \end{lstlisting}
-The environment, mapping variable names to their respective symbol, is stored in the object available through Params.env. This object's \lstinline!backup! method will backup the current environment and create a new one with the exact same bindings.
-We see in this code that the function creates a new environment based on its parent environment, which is backuped to be restored when done. The name of the function is passed to \lstinline!NamerForBody!, because the name of the function must have been declared previously and be present in the environment. 
+
+The environment, mapping variable names to their respective symbol, is stored in
+the object available through \lstinline!Params.env!. This object's
+\lstinline!backup! method will backup the current environment and create a new
+one with the exact same bindings.
+The function creates a new environment based on its parent environment, which is
+backed up to be restored when done. The name of the function is passed to \lstinline!NamerForBody!, because the name of the function must have been declared previously and be present in the environment. 
 The formal parameters of the function however are passed to \lstinline!NamerForDecls!, as these are variables implicitly declared, that have to be added to the current environment. This updated environment is then used by \lstinline!NamerForBody! to transform the function's body.
 At the end, the parent's environment is restored, ensuring that formal parameters of the function are not available outside of the function.
 
-This code also illustrates how it comes that functions can access variables defined in the defining environment (such functions are called closures): all those are inherited by the function's environment!
+This code also illustrates how functions can access variables
+available in the defining environment (such functions are called closures): all
+those are inherited by the function's environment.
 
 Some parts of the namer code are not that simple. For example \lstinline!NamerForBody! 
 declares a function \lstinline!HandlePatternArgs!
@@ -2028,7 +2044,7 @@ New symbols introduced for for escaped variables are collected in
 
 As for the work of the namer in case of classes, it involves several steps as described
 in Section \ref{sec:arch:namer:classes}.
-Several functions are defined to help these steps. \lstinline!NameMethodLabelInt!
+Several functions are defined to help these steps. \lstinline!NameMethodLabel!
 is the function used when traversing the methods list the first time to name
 only the method labels.
 \lstinline!NameMethod! is used when traversing the methods the second time to
@@ -2037,7 +2053,6 @@ name the arguments and the body.
 Once these functions are defined, the namer's code for classes is quite simple,
 and can be included here to illustrate the different steps:
 
-% FIXME: hasn't this code changed?
 \begin{lstlisting}
             % Name class, then switch to a new environment when inside the class
             NamedClass={NamerForBody Var Params}
@@ -2086,10 +2101,12 @@ The desugar function handles statements and expression differently, and defines 
 %FIXME: Give references: Concepts, Techniques and Models of Computer Programming, p81.
 Handling expressions and statements is often very similar, but sometime require significant differences of treatment. Hence the use two different local functions in the Desugar pass.
 
-From this raises the question of categorising an instruction as a statement or an expression. And this is not as straightforward as one may think, as the context in which the instruction is used can change the type of an instruction from statement to expression. This is illustrated by the following example.
-% FIXME: storage element?? Find better name.
+It is important that a lot of instructions can be used both as expression and as
+statement. Here is an example.
 In Oz, a cell is a mutable storage element which is created with an initial value (\lstinline!C={NewCell 0}!), it can be given a new value (\lstinline!C:=NewValue!) and its value can be read (\lstinline!@C!). There's also an exchange operation \lstinline!{Exchange C Old New}! which ``atomically binds Old with the old content of the cell, and set New to be the new content''.%FIXME: reference pvr book page 415.
-Assigning a new value to a cell is usually a statement returning no value, but when used as the right hand side of an assignment, it becomes an expression, whose value is the Old value of the cell !
+Assigning a new value to a cell is usually a statement returning no value, but
+when used as the right hand side of an unification, it becomes an expression,
+whose value is the Old value of the cell.
 \begin{figure}[h]
 \begin{lstlisting}
 local
@@ -2105,39 +2122,28 @@ end
 \caption{Cell assignment as statement and as expression}
 \label{fig:statement_and_expression1}
 \end{figure}
-Another illustration is the instruction \lstinline!local ... in ... end! which can be a statement as in Figure \ref{fig:statement_and_expression1}, but also an expression as in the code snippet in Figure \ref{fig:statement_and_expression2}
-
-\begin{figure}[h]
-\begin{lstlisting}
-   A = local C=2 in 2*C end
-   {Show A}
-\end{lstlisting}
-\caption{local \ldots in \ldots end as an expression}
-\label{fig:statement_and_expression2}
-\end{figure}
 
 Determining if an instruction is a statement or and expression is done
 recursively from top to bottom, the starting case being that the program is a
-statement, the ending case being that variables, constants, base operators,
-\ldots are expressions.  In Figure \ref{fig:statement_and_expression1}, the
+statement. In Figure \ref{fig:statement_and_expression1}, the
 whole code snippet which we consider in this case as a complete program is a
 statement. This \lstinline!local...in...end! instruction is thus a statement.
-The declaration part of this instruction is always a statement. The body is
-also a statement because the whole local...in...end is a statement. If it were
-an expression (as in Figure \ref{fig:statement_and_expression2}), the body
-would have been an expression! In our case, the body is a sequence of
-instructions, resulting in a hierarchy of fAnd records in the AST. Thus we see that a sequence
-can be a statement or an expression, in which case the value
+The declaration part of this instruction is always a list of \lstinline!fSym!. The body is
+also a statement because the whole \lstinline!local...in...end! is a statement. If it were
+an expression , the body
+would have been an expression. In our case, the body is a sequence of
+instructions, resulting in a hierarchy of \lstinline!fAnd! records in the AST. Thus we see that a sequence
+can be a statement or an expression, in the latter case the value
 of the whole sequence is the value of the last instruction which must be an expression. This illustrates the
 need of distinct functions when statement and expressions must be handled
 differently. 
 
-The fact is that the character (statement or
+The fact is that the kind (statement or
 expression) of a sequence of instructions is determined at the start of the
-sequence, the top of the fAnd hierarchy in the AST. But the impact of this
+sequence, the top of the \lstinline!fAnd! hierarchy in the AST. But the impact of this
 distinction is found at the very bottom of this hierarchy: the last
 instruction, the end of the sequence. To be able to distinguish both cases, we
-need to branch as soon as we determine the instruction's character.
+need to branch as soon as we determine the instruction's kind.
 
 If we note \lstinline!F! the pass of the compiler, \lstinline!FExpr! the locally defined
 function handling expressions, and \lstinline!FStat! corresponding function for
@@ -2151,36 +2157,49 @@ these rules of identification, and call \lstinline!FStat! on statements and
   \item[program] the program is a statement
   \item[fLocal] 
     \begin{itemize}
-      \item the declarations are all just fSym, since the DeclsFlattener has
-        move all other code to the body. These \lstinline!fSym!s are neither expressions nor statement, they are just fSym declarations, and the declaration part is a statement.
-      \item the body has the same character as its parent fLocal
+      \item the declarations are all just \lstinline!fSym!s, since the
+        \lstinline!DeclsFlattener! has
+        moved all other code to the body. These \lstinline!fSym!s are neither
+        expressions nor statements, they are just \lstinline!fSym! declarations, and the declaration part is a statement.
+      \item the body is of the same kind as its parent \lstinline!fLocal!
     \end{itemize}
   \item[fAnd] 
     \begin{itemize}
       \item the first feature is a statement
-      \item the second feature has same character as its parent fAnd
+      \item the second feature has same character as its parent \lstinline!fAnd!
     \end{itemize}
   \item[fEq] both sides are expressions
-  \item[fProc] if the procedure's definition is an expression, its identifier must be the nesting marker \$, else its identifier is an expression. The arguments are expressions, and the body is a statement.
-  \item[fFun] are similar to fProc, because a function definition is desugared in a procedure definition as described in Section \ref{sec:arch:desugar:functions}.
+  \item[fProc] if the procedure's definition is an expression, its identifier
+    must be the nesting marker \$, else its identifier is an expression. The
+    arguments are patterns, and the body is a statement except if one of its
+    formal parameters is the nesting marker, in which case the body is an
+    expression.
+  \item[fFun] are similar to \lstinline!fProc!, because a function definition is desugared
+    in a procedure definition as described in Section
+    \ref{sec:arch:desugar:functions}. The body of a \lstinline!fFun! is an expression.
   \item[fApply] calls can be statements or expressions, but in both cases the callee and its arguments are all expressions. 
-  \item[fColonEquals] can be statement or expression, but Cell and Val are in both cases expressions.
-  \item[fAt(Cell Pos)] is an expression, as is Cell
-  \item[fSym] , outside of \lstinline!local..in..end!'s declaration part, are expressions
-  \item[fConst] are expressions
-  \item[fRecord] are expressions, as are its label and values.
-  \item[fCase] can be a statement or an expression. The \lstinline!fCaseClause!s and the else code have the same type as their parent fCase. The patterns in the \lstinline!fCaseClause!s are expressions, as are the guards.
+  \item[fColonEquals] can be statement or expression, but \lstinline!Cell! and
+    \lstinline!Val! are in both cases expressions.
+  \item[fAt(Cell Pos)] can only be used as an expression. \lstinline!Cell! is an expression.
+  \item[fRecord] can only be used as expressions. Its label, features and values are
+    expressions.
+  \item[fCase] can be a statement or an expression. The value tested is an
+    expression. The \lstinline!fCaseClause!s
+    and the else code have the same type as their parent \lstinline!fCase!. The patterns in
+    the \lstinline!fCaseClause!s are patterns, and the guards are expressions.
 \end{description}
 
 %FIXME: do i keep this next paragraph?
 All expressions and statements in the AST will be visited by Desugar. Even if the statement itself is not transformed, as is the case for a unification, its children will be visited and possibly transformed. For example
-X=5+2 will still be a unification after it's been desugared, but its children will have been transformed in X={Number.'+' 5 2}.
+\lstinline!X=5+2! will still be a unification after it's been desugared, but its
+children will have been transformed in \lstinline!X={Number.'+' 5 2}!.
 
 
 
 \subsubsection{Arithmetic operators}
+%FIXME: add table of operators
 Infix arithmetic operators are transformed in the call of their respective function.
-The operators are parsed as fOpApply records as described in section \ref{sec:input:operators}. Building further on the example of that section, the AST coming from the parser
+The operators are parsed as \lstinline!fOpApply! tuples as described in section \ref{sec:input:operators}. Building further on the example of that section, the AST coming from the parser
 
 \begin{verbatim}
       fOpApply(
@@ -2211,7 +2230,7 @@ will be transformed in:
 \end{verbatim}
 
 \subsubsection{Functions}\label{sec:arch:desugar:functions}
-Functions are transformed in their canonical procedure form. This is done simply by replacing the function by a procedure with exactly the same characteristics, except that it takes one additional argument (the return value), and the body of this procedure is the unification of this new argument with the original body of the function. This resulting AST is itself recursively ``desugared''.
+Functions are transformed in their canonical procedure form. This is done simply by replacing the function by a procedure with exactly the same characteristics, except that it takes one additional argument (the return value), and the body of this procedure is the unification of this new argument with the original body of the function. This resulting AST is itself recursively desugared.
 
 For example, the code
 \begin{lstlisting}
@@ -2220,74 +2239,46 @@ For example, the code
    end
 
 \end{lstlisting} 
-is parsed as:
-\begin{verbatim}
-      fFun(
-         fSym(F pos
-         |(
-            fSym(A pos)
-            |(
-               fSym(B pos)
-               nil
-            )
-         )
-         fOpApply(
-            '+'
-            |(
-               fSym(A pos)
-               |(
-                  fSym(B pos)
-                  nil
-               )
-            )
-            pos
-         )
-         
-         pos
-      )
-\end{verbatim}
-and transformed by the desugar pass to become:
-\begin{verbatim}
-     fProc(     
-         fSym(F)
-         |(    
-            fSym(A pos)
-            |(
-               fSym(B pos)
-               |(
-                  fSym(R pos)
-                  
-               )
-            )
-         )
-         fEq(
-            fSym(R)
-            fApply(
-               fConst('+' pos
-               |(
-                  fSym(A pos)
-                  |(
-                     fSym(B pos)
-                     nil
-                  )
-               )
-               pos
-            )
-            pos
-         )
-
-         pos
-      )
-
-\end{verbatim}
-
-We can also illustrate this transformation in Oz code. For the same example, the resulting Oz code is
+will have its AST transformed such that it corresponds to this Oz code:
 \begin{lstlisting}
    proc {F A B ?R}
       R={Number.'+' A B}
    end
 \end{lstlisting} 
-We see that a new symbol, that we denoted \lstinline!R! for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
+A new symbol, denoted \lstinline!R! for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
+
+
+The function definition is parsed as:
+\begin{verbatim}
+      fFun(
+         fSym(F pos)
+         [  fSym(A pos)
+            fSym(B pos) ]
+         fOpApply(
+            '+'
+            [ fSym(A pos)
+              fSym(B pos)]
+            pos)
+         pos)
+\end{verbatim}
+and transformed by the desugar pass to become:
+\begin{verbatim}
+     fProc(     
+         fSym(F)
+         [  fSym(A pos)
+            fSym(B pos)
+            fSym(R pos) ]
+         fEq(
+            fSym(R)
+            fApply(
+               fConst('+' pos)
+               [  fSym(A pos)
+                  fSym(B pos)]
+               pos)
+            pos)
+         pos)
+\end{verbatim}
+
 
 Lazy functions have in their flags a lazy atom: \lstinline!fAtom(lazy pos)!.
 The desugar step of lazy function simply revolves in wrapping in a thread a call to the builtin \lstinline!waitNeeded! on the return symbol before unifying it with the body of the function. If the function of the example we worked on until now had been marked as lazy, the transformation would have yielded this result, in Oz notation:
@@ -2326,10 +2317,17 @@ desugared as expressions.
 \nav{The next operation on an fApply node takes place in the unnester, see Section
 \ref{sec:arch:unnester:calls}.}
 \subsubsection{Records}\label{sec:arch:desugar:records}
-As mentioned in the description of records in Section \ref{sec:input:records}, the features can be left out, and are in that case implicit, with increasing integer values starting at 1. The Desugar pass will make this features explicit.
+As mentioned in the description of records in Section \ref{sec:input:records},
+the features can be left out, and are in that case implicit, with increasing
+integer values starting at 1. The Desugar pass will make these features explicit.
 
 In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in \lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the programmer to avoid conflict, as implicit feature assignment does not check for explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is coherent with Mozart 1, but causes an error. %FIXME: check this is all ok.
-An additional action was added in the desugar step for records. First, \lstinline!fRecord! that have all label, features and values constant are replaced by a \lstinline!fConst! with as value the record reconstructed. This greatly simplifies the AST for these records as is illustrated in the next example, and can be done because the value of the record can be used as is in later steps, notably the opcodes generation. 
+Records undergo two additional transformations. First, \lstinline!fRecord! that
+have all label, features and values constant are replaced by a
+\lstinline!fConst! with as value the record reconstructed. This greatly
+simplifies the AST for these records as is illustrated in the next example, and
+can be done because the value of the record can be used as is in later steps,
+notably the opcodes generation. This transformation is called constant folding.
 \begin{lstlisting}
       fRecord(
          fAtom(rec pos)
@@ -2354,57 +2352,51 @@ is transformed in
 \end{lstlisting}
 
 
-Records with non constant labels and/or features are replaced by a call to \lstinline!Boot_Record.makeDynamic!. The goal of this transformation is to leave in the AST only records with constant label and features. MakeDynamic takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by \lstinline!{makeDynamic Rec '#'(1:F1 2:V1 3:F2 4:V2)}! .
-In the AST, this replaces 
+Records with non constant labels and/or features are replaced by a call to \lstinline!Boot_Record.makeDynamic!. The goal of this transformation is to leave in the AST only records with constant label and features. MakeDynamic takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by 
 \begin{lstlisting}
-  fRecord(Label 
-          |(fColon(Feature1 Value1 pos)
-            |(fColon(Feature2 Value2 pos)
-              nil))
-  )
+   {makeDynamic Rec '#'(1:F1 2:V1 3:F2 4:V2)}
 \end{lstlisting}
-where Label, \lstinline!Feature1! and \lstinline!Feature2! can be
-\lstinline!fSym!s, by
-\begin{lstlisting}
-  fApply(
-         fConst(makeDynamic pos) 
-         |(Label
-           |(fRecord(fConst('#' pos) 
-                        |(Label
-                           |(fColon(1 Feature1)|
-                             |(fColon(2 Value1)|
-                               |(fColon(3 Feature2)|
-                                 |(fColon(4 Value2)|
-                                   nil))))))
-             nil)
-          )
-\end{lstlisting}
-We see that we end up with a AST that only contains records with constant label and features: only the values are not constants.
-%FIXME: why do this transformation?
-Although this is not strictly a desugar step, it was added here to avoid adding a compiler pass only for this action.
+
+We end up with an AST that only contains records with constant label and features: only the values are not constants.
+%FIXME: why do this transformation? Check with sebastien
+
 \subsubsection{Pattern Matching}
 Records and open records present in a pattern undergo the same desugar
-transformation as normal records.
+transformation as normal records. Patterns however can only have constant label
+and features.
 \subsubsection{Wildcards}
 Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \lstinline!_! is replaced by the expression \lstinline!local NewSymbol in NewSymbol end!.
 Patterns with guards, found in the AST as \lstinline!fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos)! 
-have their features handled according their statement/instruction character:
-\lstinline!Pattern! is an expression, \lstinline!Decls! are left as is,
+have their features handled according their statement/expression character:
+\lstinline!Pattern! is a pattern, \lstinline!Decls! are left as is,
 \lstinline!Guards! is a statement (see the introduction
 of \lstinline!fNamedSideCondition! by the namer in Section
 \ref{sec:arch:namer:patternmatching}) and \lstinline!GuardSymbol! is just a
 symbol, left as is.
 
 Pattern conjunctions, present in \lstinline!fPatMatConjunction! records, have
-their features desugared and are then placed in a secure structure like fSym in
+their features desugared and are then placed in a secure structure like
+\lstinline!fSym! in
 patterns are by the namer (Section \ref{sec:arch:namer:patternmatching}).
-This is done because not other transformation should be done on the pattern
+This is done because no other transformation should be done on the pattern
 conjunction's member before it is used by the code generator.
 
 
 \subsubsection{Threads}
 %FIXME: is the following correct?
-As expression, threads are present at this stage in the form, in Oz notation, \lstinline!V = thread Body end!, and this is desugared in the resulting statement \lstinline!thread V=Body end!. This statement is then itself desugared.
+A thread expression \lstinline!thread Body end! is desugared in the resulting
+statement 
+\begin{lstlisting}
+   local 
+      X 
+   in 
+      thread X=Body end 
+      X 
+   end 
+\end{lstlisting}
+
+This statement is then itself desugared.
+
 Transforming a thread statement is more involved, though still quite simple. The transformation consists in the creation of a procedure with no argument which body is the desugared body (which is a statement) of the thread, and then passing this procedure the internal \lstinline!Thread.create! procedure.
 In Oz notation, \lstinline!thread Body end! is transformed in 
 \begin{lstlisting}
@@ -2417,7 +2409,7 @@ In Oz notation, \lstinline!thread Body end! is transformed in
       {Thread.create P}
    end
 \end{lstlisting}
-This transformation occurs in the AST of course, and here is the AST transformation illustrated. \lstinline!fThread(Body Pos)! is transformed in this AST (taken from the compiler source code):
+At the AST level \lstinline!fThread(Body Pos)! is transformed in this AST (taken from the compiler source code):
 \begin{lstlisting}
   fLocal(NewProcSym 
          fAnd( fProc(NewProcSym nil {DesugarStat Body Params} nil pos) 
@@ -2488,13 +2480,30 @@ or an expression as in
                 unit
              end
 \end{lstlisting}
-in which case each clause is desugared as expression.
+in which case each clause is desugared as an expression.
+
 As for the \lstinline!if..then..else! instruction, the absence of an else clause
-it indicated by a record fNoElse in the AST, which is left as is and will only
-be useful for the opcode generation function.
+is indicated by a record \lstinline!fNoElse! in the AST. If no else clause was
+present, the desugar step introduces one which raises an error, transforming
+
+\begin{lstlisting}
+   case Rec
+   of action(A) then
+      {DoAction A}
+   end
+\end{lstlisting}
+in
+\begin{lstlisting}
+   case Rec
+   of action(A) then
+      {DoAction A}
+   else
+      {Boot_Exception.'raiseError' kernel(noElse File Line Rec)}
+   end
+\end{lstlisting}
 
 \subsubsection{Booleans Combinations}
-Combinations of boolean expressions with \lstinline!andthen! are desugared in
+Conjunctions of boolean expressions with \lstinline!andthen! are desugared in
 \lstinline!if..then..else! expressions. Here is the translation
 rule:
 \lstinline!Cond1 andthen Cond2! is translated in \lstinline!if Cond1 then Cond2 else false end! 
@@ -2520,11 +2529,14 @@ end
 
 This form will then be handled by later passes of the compiler.
 \subsubsection{Classes}\label{sec:arch:desugar:classes}
-Thanks to the support by the virtual machine of classes, handling classes in the
+Handling classes in the
 compiler revolves in desugaring the class definition in a call to
 \lstinline!OoExtensions.'class'!. 
 The AST node \lstinline!fClass(FSym Specs Methods Pos)! gets transformed in 
-\lstinline!fApply( fConst(OoExtensions.'class' Pos) [ Parents Meths Attrs Feats Props PrintName FSym] Pos)!.
+\begin{lstlisting}
+   fApply( fConst(OoExtensions.'class' Pos) [ Parents Meths Attrs Feats Props PrintName FSym] Pos)
+\end{lstlisting}
+
 The \lstinline!Desugar! function just has to correctly build the arguments of
 the call. Of course, the arguments are themselves ASTs. So an argument that is a
 list will be in fact a \lstinline!fRecord!.
@@ -2556,7 +2568,7 @@ found in the message. Here is an illustration:
 \end{lstlisting}
 will be implemented by this method:
 \begin{lstlisting}
-  proc {Foo Self> M}
+  proc {Foo Self M}
      X Y
   in
      X = M.1
@@ -2567,17 +2579,20 @@ will be implemented by this method:
 Of course, the compiler handles keyed arguments, where the features of the
 message \lstinline!M! are not only numeric.
 
-As described on page \pageref{compilerinput:classes:headcapture}, the message
+As described in Section~\ref{compilerinput:classes:headcapture} on page \pageref{compilerinput:classes:headcapture}, the message
 corresponding to the method call can be captured and made available to the body of the
 method. The message being the second argument of the ``proxy'' procedure, it is
 easy to make it available in the method body by prepending it with a unification
-of the header capture symbol and the message symbol itself.
+of the header capture symbol and the message symbol itself. A better approach
+might be to use the capture symbol directly as the message symbol in a future
+revision of the code.
 
 Handling default values needs special care. The unification of the symbol with its default value may only be done
 if no value was provided in the message \lstinline!M!. But this can only be done at run time, hence the compiler
 has to inject code in the AST to check if a value was provided for the method argument.
 Here is the code injected in the AST, where \lstinline!Index! is the index of the argument that is handled and 
-\lstinline!MessageSymbol! is the symbol corresponding the \lstinline!self!:
+\lstinline!MessageSymbol! is the symbol corresponding the message of the method
+call:
 \begin{lstlisting}
       fEq(Sym 
           fBoolCase(fApply(fConst(Value.hasFeature pos) 
@@ -2595,6 +2610,13 @@ which, written in Oz, is:
          Default
       end
 \end{lstlisting}
+
+Note that this code behaviour is different from 
+\begin{lstlisting}
+   {CondSelect MessageSymbol Index Default}
+\end{lstlisting}
+as in the latter case, all arguments of \lstinline!CondSelect! will be evaluated
+first. 
 
 The body of the method is desugared with an additional bit of information compared to normal procedures: the symbol corresponding to \lstinline!self!, the object on which the method is called. 
 The availability of \lstinline!self! is not the only difference in the desugarisation of the methods' bodies. Some operators also have another meaning inside methods, like for example \lstinline!@!.
@@ -2624,9 +2646,10 @@ definition.
 lock object for the class, which can then be used with the \lstinline!lock!
 instruction, which then appears in the AST as \lstinline!fLock(Body Pos)!, which
 differ from the nodes \lstinline!fLockThen! described in Section
-\ref{sec:input:locks}, also by not specifying the lock object. \lstinline!fLock!
-needs to be desugared to make the lock object explicit. The lock object of in a
-class instance can be obtained by a call to
+\ref{sec:input:locks}, notably because it doesn't take the lock object as
+argument. \lstinline!fLock!
+needs to be desugared to make the lock object explicit. Instance an instance of
+a class, the lock object can be obtained by a call to
 \lstinline!OoExtensions.'getObjLock'!, which can then be used in a
 \lstinline!fThenLock! instruction. In practice, the node
 \label{desugar:classes:lock}
@@ -2648,50 +2671,9 @@ which is itself desugared.
 \lstinline!PrintName! is an atom which is the name of the class, or '' if it is
 an anonymous class.
 
-And that's it for handling classes in the compiler, the virtual machine will
-handle everything linked to classes for us.
+This is all the compiler has to do to support classes. From this point, the AST
+has no more references to classes. The virtual machine will handle everything related to classes for us.
 
-\subsubsection{Compiler Code Notes}
-The desugar pass is implemented by a function named \lstinline!Desugar!. It defines multiple local functions:
-\begin{description}
-  \item[DesugarOp] called to desugar operators
-  \item[DesugarRecordFeatures] working on record features, making them explicit if need be, and also desugaring the value corresponding to each feature.
-  \item[TransformRecord] called to transform records as described above, just after it has been desugared.
-  \item[IsConstantRecord] called by \lstinline!TransformRecord! to determine if the record for which the AST is passed as argument is a record with constant label, features and values
-  \item[HandleLazyFlag] will wrap the body of a function in a thread if needed, as described in Section \ref{sec:arch:desugar:functions}.
-  \item[DesugarExpr] called to desugar expressions
-  \item[DesugarStat] called to desugar statements
-  \item[DesugarClass] is handling class definitions 
-\end{description}
-
-The program itself being a statement, the function Desugar simply call DesugarStat on the AST of the whole program. This will trigger further calls to DesugarExpr and DesugarStat that will traverse and transform the whole AST.
-
-%FIXME: do I keep this? Should I add more explanations of other functions, like
-% TransformRecord
-\lstinline!DesugarClass! defines multiple local functions:
-\begin{description}
-  \item[TransformMethod] Takes one method signature and an index, and build its
-    element of the '\#' record containing the class' methods. The Body is also desugared with the SelfSymbol passed in Params.
-    This is needed, eg for desugaring @attribute in catAccessOO rather than in
-    catAccess. In this case, \lstinline!DesugarOp! will check if
-    \lstinline!self! is available to decide which result to produce.
-    Functional methods, defined with one of their formal parameters being the
-    nesting marker, are also handled by this function, using functions
-    \lstinline!HandleDollarArg! and \lstinline!InjectDollarIfNeeded! also used
-    to work on function procedures.
-    As we've seen, several constructs (like parameters default values, method head capture, nesting marker
-    as formal parameter) need to inject symbol declarations and initialisations
-    in a method's body. It is \lstinline!TransformMethod! that manages all this,
-    constructing a list of pair \lstinline!Symbol#InitCode! which is then used
-    to inject declaration and initialisation code in the body of the method.
-  \item[TransformAttribute] will set the default value to 
-    \lstinline!{Boot_Name.newUnique 'ooFreeFlag'}! if none was provided.
-\end{description}
-With these functions defined, the code of \lstinline!DesugarClass! is greatly
-simplified and easy to understand.
-
-\subsubsection{For loops}
-% FIXME: todo
 \subsubsection{Exceptions}\label{sec:arch:desugar:exceptions}
 \lstinline!fRaise! nodes are desugared in a call to the builtin
 \lstinline!Exception.'raise'!. The exception is an expression, and desugared as
@@ -2729,11 +2711,11 @@ Desugaring an \lstinline!fTry! node without \lstinline!finally! code is not much
 more complex.  If the try instruction is an expression (resp. statement), the
 body and the clauses' code are desugared as expressions (resp. statements).
 A \lstinline!case! instruction is introduced, using the very same clauses as the
-catch, transforming\footnote[number]{Illustration code from http://www.mozart-oz.org/documentation/notation/node6.html\#label27}. 
+catch, transforming\footnote{Illustration code from http://www.mozart-oz.org/documentation/notation/node6.html\#label27}. 
 \begin{lstlisting}
   try SE1 
   catch C1 [] ... [] Cn 
-  [ finally S ] 
+  [[ finally S ]]
 end
 \end{lstlisting}
 
@@ -2746,7 +2728,7 @@ catch X then
    else 
       raise X end 
    end 
-[ finally S ] 
+[[ finally S ]]
 end
 \end{lstlisting}
 
@@ -2754,7 +2736,7 @@ As this code shows, the very same clauses can be reused for the case
 instruction, without the need of complex AST transformation.
 
 Note that an \lstinline!else! clause is introduced in the \lstinline!case!
-instruction. This is simply to re-raise the exception if no pattern match,
+instruction. This is simply to re-raise the exception if no pattern matched,
 meaning that the exception was not caught at this level.
 In the transformed code, note also that a new symbol, \lstinline!X! is
 introduced. This results in the new AST transformation for a try expression from
@@ -2809,14 +2791,15 @@ to
 end  
 \end{lstlisting}
 
-
+This example does not include \lstinline!catch! clauses for brevity. They can be considered
+as being part of \lstinline!Body!.
 A new variable (\lstinline!X!) is introduced and unified with a new try
-expression which body is a sequence made of the original try statement
+expression whose body is a sequence made of the original \lstinline!try! statement
 without its \lstinline!finally! code followed by \lstinline!unit!.
 This means that if execution of the original \lstinline!try! statement does not raise an
 exception, the variable \lstinline!X! will have the value \lstinline!unit!.
-The new try catches all exceptions, which can only be exceptions not caught
-by the original try expression, with one clause which body is a record with label
+The new try catches all exceptions (which can only be exceptions not caught
+by the original try expression) with one clause whose body is a record with label
 \lstinline!ex! holding the caught exception as value.
 
 This construction ensures that the \lstinline!finally! code can be executed,
@@ -2856,9 +2839,9 @@ expression by putting it in a sequence which second element is simply the
 expressions in the same way, and test if the value bound to \lstinline!X! is a
 record with label \lstinline!ex! to know if an exception was raised. 
 But we have to accept a \lstinline!try! expression which
-value is a record with lable \lstinline!ex!! The consequence is that the
-transformation applied in case of \lstinline!try! expressions is of the same
-vein, but with a different value for the new \lstinline!try! expression.
+value is a record with label \lstinline!ex!! The consequence is that the
+transformation applied in case of \lstinline!try! expressions is very similar, 
+but with a different value for the new \lstinline!try! expression.
 The body of the new \lstinline!try! expression is simply a record of label
 \lstinline!ok! and holding as value the original try expression.
 It will thus transform this expression
@@ -2887,7 +2870,7 @@ end
 Wrapping the value of the original \lstinline!try! expression in a record
 with a specific label (\lstinline!ok! in our case) enables us to check, 
 after execution of the \lstinline!finally! code, if the
-execution was successful or not. If an exception was raise, it is re-raise. If
+execution was successful or not. If an exception was raised, it is re-raised. If
 no exception was raised, the expression's value is extracted from the success
 record and returned.
 
@@ -2898,8 +2881,8 @@ the unnester (see Section \ref{sec:arch:unnester:exceptions}).}
 \subsubsection{Array assignation}\label{sec:arch:desugar:dotassign}
 The node \lstinline!fDotAssign! found in the AST is of the form 
 \begin{lstlisting}
-   fDotAssign(fOpApply('.' [A I] Pos1) 
-              V 
+   fDotAssign(fOpApply('.' [LHS CHS] Pos1) 
+              RHS 
               Pos2) 
 \end{lstlisting}
 and is desugared in 
@@ -2918,8 +2901,12 @@ on expression and statement functors.
 A different treatment is applied to compiled and computed functors, which differ
 as explained in Section~\ref{sec:input:functors}.
 
-A compiled functor is desugared in a call \lstinline!{NewFunctor [ImportRecord ExportRecord ApplyFun]}! taking three
-arguments:
+A compiled functor is desugared in a call 
+\begin{lstlisting}
+   {NewFunctor [ImportRecord ExportRecord ApplyFun]}
+\end{lstlisting}
+
+taking three arguments:
 \begin{description}
   \item[ImportRecord] is of the form  illustrated in
     Figure~\ref{fig:desugar:import_record}
@@ -2927,11 +2914,12 @@ arguments:
     of the variable identifying this imported module, and
     \lstinline!AliasesAtomsList! is the list of atoms identifying the imported
     functions. An example is given in Figure~\ref{fig:desugar:import_record_example}.
+    %FIXME: validate the formulation of statis analysis with sebastien
   \item[ExportRecord] is a record with label \lstinline!'export'!. Its features are the
     exported keys, and the values of each feature is the atom \lstinline!value!.
     This tells the virtual machine that the value corresponding to this can can
     have any type. With static analysis, it would be possible to restrict the
-    type more. An example is given in Figure~\ref{fig:desugar:export_record}.
+    type more. An example of an ExportRecord is given in Figure~\ref{fig:desugar:export_record}.
   \item[ApplyFun] is a function taking one parameter, as shown in
     Figure~\ref{fig:desugar:apply_fun}. When a functor is applied, this function is called
     and it is the record it returns that gives entry points to the module
@@ -3021,9 +3009,7 @@ Figure~\ref{fig:desugar:desugared_computed_functor_example}.
 \end{lstlisting}
 \caption{Computed functor example}
 \label{fig:desugar:computed_functor_example}
-\end{figure}
 
-\begin{figure}[ht]
 \begin{lstlisting}
    local
       functor Outer
@@ -3053,6 +3039,45 @@ But these are, or include, the original functor's \lstinline!require! and \lstin
 construction ensures the behaviour we need.
 %FIXME: improve explanations
 This result is recursively desugared.
+
+\subsubsection{Compiler Code Notes}
+The desugar pass is implemented by a function named \lstinline!Desugar!. It defines multiple local functions:
+\begin{description}
+  \item[DesugarOp] called to desugar operators
+  \item[DesugarRecordFeatures] working on record features, making them explicit if need be, and also desugaring the value corresponding to each feature.
+  \item[TransformRecord] called to transform records as described above, just after it has been desugared.
+  \item[IsConstantRecord] called by \lstinline!TransformRecord! to determine if the record for which the AST is passed as argument is a record with constant label, features and values
+  \item[HandleLazyFlag] will wrap the body of a function in a thread if needed, as described in Section \ref{sec:arch:desugar:functions}.
+  \item[DesugarExpr] called to desugar expressions
+  \item[DesugarStat] called to desugar statements
+  \item[DesugarClass] is handling class definitions 
+\end{description}
+
+The program itself being a statement, the function Desugar simply call DesugarStat on the AST of the whole program. This will trigger further calls to DesugarExpr and DesugarStat that will traverse and transform the whole AST.
+
+%FIXME: do I keep this? Should I add more explanations of other functions, like
+% TransformRecord
+\lstinline!DesugarClass! defines multiple local functions:
+\begin{description}
+  \item[TransformMethod] Takes one method signature and an index, and build its
+    element of the '\#' record containing the class' methods. The Body is also desugared with the SelfSymbol passed in Params.
+    This is needed, eg for desugaring @attribute in catAccessOO rather than in
+    catAccess. In this case, \lstinline!DesugarOp! will check if
+    \lstinline!self! is available to decide which result to produce.
+    Functional methods, defined with one of their formal parameters being the
+    nesting marker, are also handled by this function, using functions
+    \lstinline!HandleDollarArg! and \lstinline!InjectDollarIfNeeded! also used
+    to work on function procedures.
+    As we've seen, several constructs (like parameters default values, method head capture, nesting marker
+    as formal parameter) need to inject symbol declarations and initialisations
+    in a method's body. It is \lstinline!TransformMethod! that manages all this,
+    constructing a list of pair \lstinline!Symbol#InitCode! which is then used
+    to inject declaration and initialisation code in the body of the method.
+  \item[TransformAttribute] will set the default value to 
+    \lstinline!{Boot_Name.newUnique 'ooFreeFlag'}! if none was provided.
+\end{description}
+With these functions defined, the code of \lstinline!DesugarClass! is greatly
+simplified and easy to understand.
 
 \subsection{Unnester}\label{sec:arch:unnester}
 The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
