@@ -1768,7 +1768,6 @@ The namer thus replaces pattern variables by a synthetic symbol, and wraps the b
 
 
 
-%CONTINUE
 \subsubsection{Classes}\label{sec:arch:namer:classes}
 The work of the namer on classes is in most cases straight-forward. It goes through the record
 \lstinline!fClass(Id Specs Methods Pos)! and names variables as one would expect:
@@ -2512,12 +2511,19 @@ evaluation stops as soon as possible, i.e. when a false condition is
 encountered.
 
 \lstinline!orelse! combinations are similarly translated from \lstinline!Cond1 orelse Cond2! to \lstinline!if Cond1 then true else Cond2 end!  
+The example of Figure~\ref{fig:desugar:orelsesrc} is transformed in the code in
+Figure~\ref{fig:desugar:orelse}.
+\begin{figure}[h]
 \begin{lstlisting}
 (A==1 andthen B==2) orelse C==3
 \end{lstlisting}
+\caption{\lstinline!orelse! code to be desugared}
+\label{fig:desugar:orelsesrc}
+\end{figure}
+
 becomes
 
-%FIXME: add label for this example reused later, id: DESUGARFANDTHEN
+\begin{figure}[h]
 \begin{lstlisting}
 if (if A==1 then B==2 else false end)
 then
@@ -2526,6 +2532,10 @@ else
   C==3
 end
 \end{lstlisting}
+\caption{Desugaring \lstinline!orelse!}
+\label{fig:desugar:orelse}
+\end{figure}
+
 
 This form will then be handled by later passes of the compiler.
 \subsubsection{Classes}\label{sec:arch:desugar:classes}
@@ -3080,28 +3090,43 @@ With these functions defined, the code of \lstinline!DesugarClass! is greatly
 simplified and easy to understand.
 
 \subsection{Unnester}\label{sec:arch:unnester}
-The unnester will result in an AST in which there are only elementary instructions. For example, after the unnester, the arguments of functions all are simple variables. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
+The unnester will result in an AST in which there are only elementary
+instructions. For example, after the unnester, the arguments of functions all
+are symbols. The instructions susceptible to be unnested are inspected each in turn in the following subsections.
 \subsubsection{Unification}\label{sec:arch:unnester:unification}
 The unnesting result of a unification instruction depends on the elementary
-character of each side. \lstinline!fConst!, \lstinline!fSym!,
-\lstinline!fDollar! and \lstinline!fAtom! are considered elementary AST nodes.
+character of each side. \lstinline!fConst! and \lstinline!fSym! are considered elementary AST nodes.
 Considering the elementary character of both sides of the unification, we have to handle three situations:
 \begin{description}
   \item[Both elementary]In this case there is nothing to do
-  \item[One complex, one elementary] The unnesting is done according what the complex instruction is: 
+  \item[One complex, one elementary] The unnesting is done according what the
+    complex expression is: 
     \begin{description}
-      \item[Call] This is code of the form \lstinline!V={P E1...En}!, which needs to be transformed in the form \lstinline!{P E1...En V}!, where the variable we assign to is passed as last argument of the call. Note this transformation is not done if one if the arguments is the nesting marker (see section \ref{sec:arch:unnester:nestingmarker}).
+      \item[Call] This is either a call without nesting marker in a pattern position, \lstinline!V={P E1...En}!,
+        which needs to be transformed in the form \lstinline!{P E1...En V}!, i.e. the elementary side is injected as last argument of the call.
+        Or it is a call with the nesting marker in a pattern position, of the form \lstinline[mathescape]!V={P E1..$\$$..En}!, which needs to be
+        transformed in \lstinline!{P E1..V..En}!.
       \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of fAnd records. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
       \item[Declaration (local)] The value of a \lstinline!local..in..end! in a
         unification is the value of its body. Hence, the unification
         \lstinline!V = local declarations in body end! is moved in side the
         \lstinline!local!'s body resulting in the code \lstinline!local declarations in V=body end!. This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
-      \item[if then else] The unification is simply moved inside each branch, and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively unnested as Is1 and Is2 can be, for example,  sequences of instructions.
+      \item[if then else] The unification is simply moved inside each branch,
+        the symbol being unified with the branch body and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively unnested as Is1 and Is2 can be, for example,  sequences of instructions.
+      \item[case] Similar to the previous item, the elementary side  unified with the case expression is unified in each
+        clause with its respective body.
+      \item[try] The unification is moved inside every \lstinline!catch! clause, but not in
+        the \lstinline!finally! code. It needs extra precaution though and is analysed specifically in
+        Section~\ref{sec:arch:unnester:exceptions}.
+      \item[Anonymous procedure] The elementary side replaces the fDollar, for
+        example
+        \lstinline[mathescape]!P = proc {$\$$ A} Body end! is transformed in
+        \lstinline[mathescape]!proc {P A} Body end!
     \end{description}
   \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with the left side then with the right side, and unnesting the resulting code.
 \end{description}
 
-Only \lstinline!fApply! nodes require a bit more work, because the unified
+In the case of \lstinline!fApply! the unified
 symbol may have to be injected in place of a nesting marker deeply nested in
 a record argument, like in this example:
 
@@ -3115,6 +3140,21 @@ To handle this case, arguments have to be tested to see if a nesting marker is
 present, and the code needs to descent in the record arguments.
 Once the unified symbol is injected in the arguments list, a recursive call is
 done to unnest the \lstinline!fApply! itself.
+
+This part of the code requires enhancements, as it does not compile this code successfully:
+
+\begin{lstlisting}
+   local
+      A P
+   in
+      A=a
+      proc {P ?R}
+         R=rec(a:1 b:2)
+      end
+      {Show {P rec(A:$ b:2)}}
+   end
+\end{lstlisting}
+
 
 All cases covered by the unnesting of unifications make recursive calls on their
 result.
@@ -3132,12 +3172,21 @@ It is transformed due to both sides being non-elementary, in this form in a firs
      T = {Show}
   end
 \end{lstlisting}
+The unnester will work on the already transformed code
+\begin{lstlisting}
+  local
+     T
+  in
+     T = {Number.'+' 3 4}
+     T = {Show}
+  end
+\end{lstlisting}
 and finally in this form by the transformation of the assignment of a procedure call in the same procedure call with the return variable passed as additional argument:
 \begin{lstlisting}
   local
      T
   in
-     T = 3+4
+     {Number.'+' 3 4 T}
      {Show T}
   end
 \end{lstlisting}
@@ -3145,247 +3194,6 @@ The order of the assignments of the first step explains why this doesn't work:
 \begin{lstlisting}
   {Show} = 3+4
 \end{lstlisting}
-
-\subsubsection{Calls}\label{sec:arch:unnester:calls}
-All arguments are unnested one by one. Elementary arguments are left untouched
-Complex arguments are extracted from the arguments list by:
-\begin{enumerate}
-  \item declaring a new symbol. 
-  \item unifying this new symbol with the argument
-  \item replacing the argument by the new symbol in the argument list.
-\end{enumerate}
-
- This means the call is wrapped in a local..in..end, the declarations part declaring the new symbol, the body part unifying this symbol with the complex expression that was the original argument, followed by the (to be unnested) function call with the new symbol replacing the complex argument. When a call has multiple complex arguments, this results in a local..in..end hierarchy with the depth corresponding to the number of complex arguments. %FIXME: check if we can change the code to have only one local declaring all variables.
-
-Here is an example of unnesting in Oz code:
-\begin{lstlisting}
-  {F {F2 A} B}
-\end{lstlisting}
-will be transformed in:
-\begin{lstlisting}
-  local
-    NewVar
-  in
-    NewVar={F2 A}
-    {F NewVar B}
-  end
-\end{lstlisting}
-
-Of course, the function called can itself be the result of a function call, and this is handled too:
-\begin{lstlisting}
-  { {F1 A} B }
-\end{lstlisting}
-will result in an AST for this code:
-\begin{lstlisting}
-  local
-    NewVar
-  in
-    NewVar = {F1 A}
-    { NewVar B }
-  end
-\end{lstlisting}
-
-If a nesting marker is found in a record argument, one more step is required:
-declaring a new symbol and putting it in the place of the nesting marker.
-\begin{lstlisting}
-  Res={P rec($)}
-\end{lstlisting}
-will be translated in
-\begin{lstlisting}
-  Res=local
-         DollarSymbol
-      in
-         local 
-            Arg=rec(DollarSymbol)
-         in
-            {P Arg}
-            DollarSymbol
-         end
-      end
-\end{lstlisting}
-% FIXME: do I try to limit the nesting of local..in..end?
-
-\subsubsection{Declarations (local)}
-The unnester will not touch at the declaration part of a \lstinline!local..in..end! instruction. It will only unnest the body.
-\subsubsection{If then else}
-The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 end! depends on the type of Cond. 
-\begin{itemize}
-  \item If \lstinline!Cond! is elementary, the unnesting is done simply by unnesting the two branched.
-  \item If \lstinline!Cond! is complex, a new symbol is created and unified with it. This is then followed by the \lstinline!if..then..else! instruction in which the complex condition is replace by the symbol newly introduced:
-    \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
-\end{itemize}
-Looking at the result of the Desugar pass for the boolean combination example, this code
-%FIXME: add reference to that earlier example, id: DESUGARFANDTHEN
-\begin{lstlisting}
-if (if A==1 then B==2 else false)
-then
-  true
-else
-  C==3
-end
-\end{lstlisting}
-
-Will become
-
-\begin{lstlisting}
-local
-   Cond
-in
-   Cond=(if A==1 then B==2 else false end)
-   if Cond
-   then
-     true
-   else
-     C==3
-   end
-end
-\end{lstlisting}
-and then, by unnesting the \lstinline!if..then..else!:
-\begin{lstlisting}
-local
-   Cond
-in
-   if A==1 then Cond=(B==2) else Cond=false end
-   if Cond
-   then
-     true
-   else
-     C==3
-   end
-end
-\end{lstlisting}
-
-\subsubsection{Case}
-Unnesting \lstinline!case! instructions is very similar to unnesting
-\lstinline!if..then..else! instructions. If the value tested is not elementary,
-it has to be extracted and replaced by a new variable unified with it.
-\begin{lstlisting}
-case {Label R}
-of l then
-   {Show 'L record'}
-end
-\end{lstlisting}
-
-\begin{lstlisting}
-local
-   V
-in
-   V = {Label R}
-   case V 
-   of l then
-      {Show 'L record'}
-   end
-end
-\end{lstlisting}
-   
-
-\subsubsection{Records}\label{sec:arch:unnester:records}
-The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
-There is a catch however: records in tail positions of a procedure need to be unnested
-differently. To understand why, let's first look at how records are unnested
-when they are not in tail position.
-
-Here is an example where the value of a feature is an if expression.
-\begin{lstlisting}
-   R=rec(a:if B then 2 else V end b:2)
-\end{lstlisting}
-Supposing the record is not in tail position, it will be transformed in
-\begin{lstlisting}
-  local
-    NewVar
-  in
-    NewVar=if B then 2 else V end
-    R=rec(a:NewVar b:2)
-  end
-\end{lstlisting}
-And this requires a new unnesting step (see the unnesting of unifications Section \ref{sec:arch:unnester:unification}) resulting in 
-\begin{lstlisting}
-  local
-    NewVar
-  in
-    if B then NewVar=2 else NewVar=V end
-    R=rec(a:NewVar b:2)
-  end
-\end{lstlisting}
-
-Note that the unnester applies the exact same transformation to open records.
-
-Now let's examine what happens when we have an unbounded tail.
-
-   fun {Fill V}
-      {Delay 5000} % Represents long computation
-      if V>1000 then
-	      nil
-      else
-         V+1|{Fill V+1}
-      end
-   end
-
-The expected behaviour is that the consumer of the items can start to work as
-soon as there is one item inserted. Such a consumer can be this procedure.
-
-   proc {Print L}
-      case L
-      of X|Xs then
-         {Show X}
-      [] nil then
-         skip
-      end
-   end
-
-however, if the record \lstinline!V+1|{Fill V+1}! is desugared in 
-\begin{lstlisting}
-   V1=V+1
-   V2={Fill V+1}
-   Ret=V1|V2
-\end{lstlisting}
-%FIXME: explain where Ret comes from
-The record will be accessible only after the statement 
-\lstinline!V2={Fill V+1}!. This means that the consumer will only be able to start working when the
-producer returns!
-The solution is to unnest it like this:
-\begin{lstlisting}
-   Ret=V1|V2
-   V1=V+1
-   V2={Fill V+1}
-\end{lstlisting}
-In that case, the consumer will be able to start working as soon as
-\lstinline!V1! is bounded, ie as soon as \lstinline!V1=V+1! is executed.
-
-Determining if a record is in tail position is done top-down.
-The body of a procedure is in tail position. For \lstinline!fAnd(First Second)!,
-\lstinline!First! is not in tail position, and \lstinline!Second! is in tail
-position only if its parent \lstinline!fAnd! was in tail position.
-Same reasoning applies for clauses of a \lstinline!fCase! and branches of a
-\lstinline!fBoolCase!.
-
-
-
-\subsubsection{Nesting Marker}\label{sec:arch:unnester:nestingmarker}
-It is also the unnester that will handle the nesting marker and remove it from the AST. There are three cases that are handled.
-\begin{description}
-  \item[Definitions of procedures] At this step, if we found a nesting marker as the identifier of a procedure, it is necessarily in an assignment statement. The unnester needs to transform \lstinline[mathescape]!X=proc{$\$$ A..N}! in \lstinline!proc{X A..N}!.
-  \item[As argument of a call] In this case, the nesting marker has to be replaced by the variable the expression is assigned to. For example, \lstinline[mathescape]!X={P A $\$$ B}! needs to be transformed in  \lstinline!{P A X B}!. Note that this transformation is excluding the unification transformation described earlier in section \ref{sec:arch:unnester:unification}: either there is a nesting marker and the symbol the call expression is assigned to replaces the nesting marker in the arguments list, OR the symbol the call expression is assigned to is added as last argument to the call and in that case no argument may be the nesting marker.
-  \item[In matching an argument] %FIXME: to do
-\end{description}
-
-\subsubsection{Compiler Code Notes}
-The unnester is implemented by a function called \lstinline!Unnester!. The unnester implements multiple local functions:
-\begin{itemize}
-  \item  \lstinline!IsElementary! will return if the AST passed as argument is elementary.
-  \item  \lstinline!UnnestFEq! is called to unnest unification ASTs
-  \item  \lstinline!BindVarToExpr! is the function called by \lstinline!UnnestFEq! when one side is elementary, and the other complex.
-  \item  \lstinline!UnnestFApply! is called to unnest calls
-  \item  \lstinline!UnnestFRecord! is called to unnest records and open records. Its structure is similar to that of \lstinline!UnnestFApply!.
-  \item  \lstinline!UnnestFBoolCase! is called to unnest \lstinline!if..then..else! instructions.
-\end{itemize}
-If the unnester encounters a record in the AST for which no specific operation is prescribed, it recursively unnests each feature of the record.
-
-The unnester also tracks if an instruction is in tail position or not, simply by
-maintaining a \lstinline!tail! field in the \lstinline!params! record. As this
-is a top-down communication, a parent node passing information to its children,
-there is no need to use a cell. The parent simply passes the correctly updated
-record to its children.
 
 \subsubsection{Exceptions}\label{sec:arch:unnester:exceptions}
 \lstinline!raise! expressions at this stage are present in the form
@@ -3396,7 +3204,6 @@ A \lstinline!try! expression at this stage is found in the form
 \begin{lstlisting}
    Sym = try Body 
        [ catch y then CatchExpr ] 
-       [ finally S ] 
        end
 \end{lstlisting}
 and the unnesting simply consists of injecting the unification inside the
@@ -3406,7 +3213,6 @@ and the unnesting simply consists of injecting the unification inside the
       X = Body 
       Sym = X 
    [ catch y then Sym = CatchExpr ] 
-   [ finally S ] 
    end
 \end{lstlisting}
 
@@ -3481,12 +3287,305 @@ exception can be raise anymore, and there is no risk of executing the
 assignation \lstinline!Y=error! in the \lstinline!catch! clause.
 
 
-Don't forget that the statement produced is then recursively unnested.
+Remember that the statement produced is then recursively unnested.
 
 \nav{The next transformation applied to these \lstinline!try! statements take place
 in the code generator, Section \ref{sec:arch:codegen:exceptions}.}
 
 
+
+\subsubsection{Calls}\label{sec:arch:unnester:calls}
+All arguments are examined in turn, one by one. Elementary arguments are left untouched
+Complex arguments are extracted from the arguments list by:
+\begin{enumerate}
+  \item declaring a new symbol. 
+  \item unifying this new symbol with the argument
+  \item replacing the argument by the new symbol in the argument list.
+\end{enumerate}
+
+Here is an example of unnesting in Oz code:
+\begin{lstlisting}
+  {F {F2 A} B}
+\end{lstlisting}
+will be transformed in:
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    NewVar={F2 A}
+    {F NewVar B}
+  end
+\end{lstlisting}
+
+If multiple arguments are complex, all are declared in the same
+\lstinline!local..in..end! instruction.
+
+Of course, the function called can itself be the result of a function call, and this is handled too:
+\begin{lstlisting}
+  { {F1 A} B }
+\end{lstlisting}
+will result in an AST for this code:
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    NewVar = {F1 A}
+    { NewVar B }
+  end
+\end{lstlisting}
+
+If a nesting marker is found in a record argument, it is replaced by the other
+side of the unification, transforming
+\begin{lstlisting}
+   Res={P rec($)}
+\end{lstlisting}
+into
+\begin{lstlisting}
+   {P rec(Res)}
+\end{lstlisting}
+
+\subsubsection{Declarations (local)}
+The unnester will not touch at the declaration part of a
+\lstinline!local..in..end! instruction. It will only traverse the body.
+\subsubsection{If then else}
+The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 end! depends on the type of Cond. 
+\begin{itemize}
+  \item If \lstinline!Cond! is elementary, the unnesting is done simply by unnesting the two branches.
+  \item If \lstinline!Cond! is complex, a new symbol is created and unified with it. This is then followed by the \lstinline!if..then..else! instruction in which the complex condition is replace by the symbol newly introduced:
+    \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
+\end{itemize}
+Looking at the result of the Desugar pass for the boolean combination example on
+Figure~\ref{fig:desugar:orelse} page \pageref{fig:desugar:orelse}, this code
+\begin{lstlisting}
+if (if A==1 then B==2 else false)
+then
+  true
+else
+  C==3
+end
+\end{lstlisting}
+
+Will become
+
+\begin{lstlisting}
+local
+   Cond
+in
+   Cond=(if A==1 then B==2 else false end)
+   if Cond
+   then
+     true
+   else
+     C==3
+   end
+end
+\end{lstlisting}
+and then, by unnesting the \lstinline!if..then..else!:
+\begin{lstlisting}
+local
+   Cond
+in
+   if A==1 then Cond=(B==2) else Cond=false end
+   if Cond
+   then
+     true
+   else
+     C==3
+   end
+end
+\end{lstlisting}
+
+There is notation abuse in these last examples, as \lstinline!Cond=(B&=& 2)!
+should have been written \lstinline!{Value.'==' B 2 Cond}! to be exact. This was
+not done to focus on the transformation at hand.
+
+\subsubsection{Case}
+Unnesting \lstinline!case! instructions is very similar to unnesting
+\lstinline!if..then..else! instructions. If the value tested is not elementary,
+it has to be extracted and replaced by a new symbol unified with it.
+\begin{lstlisting}
+case {Label R}
+of l then
+   {Show 'L record'}
+end
+\end{lstlisting}
+
+\begin{lstlisting}
+local
+   V
+in
+   V = {Label R}
+   case V 
+   of l then
+      {Show 'L record'}
+   end
+end
+\end{lstlisting}
+   
+
+\subsubsection{Records}\label{sec:arch:unnester:records}
+The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
+There is a catch however: records in tail positions of a procedure need to be unnested
+differently. To understand why, let's first look at how records are unnested
+when they are not in tail position.
+
+Here is an example where the value of a feature is an if expression.
+\begin{lstlisting}
+   R=rec(a:if B then 2 else V end b:2)
+\end{lstlisting}
+Supposing the record is not in tail position, it will be transformed in
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    NewVar=if B then 2 else V end
+    R=rec(a:NewVar b:2)
+  end
+\end{lstlisting}
+And this requires a new unnesting step (see the unnesting of unifications Section \ref{sec:arch:unnester:unification}) resulting in 
+\begin{lstlisting}
+  local
+    NewVar
+  in
+    if B then NewVar=2 else NewVar=V end
+    R=rec(a:NewVar b:2)
+  end
+\end{lstlisting}
+
+Note that the unnester applies the exact same transformation to open records in
+patterns.
+
+
+
+Figure~\ref{fig:unnester:fill_tail} lists code with a record in tail position.
+
+\begin{figure}[h]
+\begin{lstlisting}
+   fun {Fill V}
+      {Delay 5000} % Represents long computation
+      if V>1000 then
+	      nil
+      else
+         V+1|{Fill V+1}
+      end
+   end
+\end{lstlisting}
+\caption{Producer with record in tail position}
+\label{fig:unnester:fill_tail}
+\end{figure}
+
+
+The expected behaviour is that the consumer of the items can start to work as
+soon as there is one item inserted. Such a consumer can be the procedure of
+Figure~\ref{fig:unnester:consumer}.
+\begin{figure}[h]
+\begin{lstlisting}
+   proc {Print L}
+      case L
+      of X|Xs then
+         {Show X}
+      [] nil then
+         skip
+      end
+   end
+\end{lstlisting}
+\caption{Consumer procedure}
+\label{fig:unnester:consumer}
+\end{figure}
+
+
+However, if the record \lstinline!V+1|{Fill V+1}! is desugared in 
+\begin{lstlisting}
+   V1=V+1
+   V2={Fill V+1}
+   Ret=V1|V2
+\end{lstlisting}
+%FIXME: explain where Ret comes from
+The record will be accessible only after the statement 
+\lstinline!V2={Fill V+1}!. This means that the consumer will only be able to
+start working only when the producer returns.
+The solution is to unnest it like this:
+\begin{lstlisting}
+   Ret=V1|V2
+   V1=V+1
+   V2={Fill V+1}
+\end{lstlisting}
+In that case, the consumer will be able to start working as soon as
+\lstinline!V1! is bound, i.e. as soon as \lstinline!V1=V+1! is executed.
+
+Another illustration is given in Figure~\ref{fig:unnester:mymap}. Figure~\ref{fig:unnester:wrongmymap} shows
+the situation if the unnesting is done incorrectly: the return value
+will be available only after \lstinline!V2! is available, i.e. only after
+\lstinline!MyMap! has
+traversed the whole list.
+
+\begin{figure}[h]
+\begin{lstlisting}
+fun {MyMap L F}
+   case L
+   of X|Xs then
+      {F X}|{MyMap Xs F}
+   [] nil then
+      nil
+   end
+end
+\end{lstlisting}
+\caption{Record in tail position of MyMap function}
+\label{fig:unnester:mymap}
+\end{figure}
+
+
+\begin{figure}[h]
+\begin{lstlisting}
+   V1={F X}
+   V2={MyMap Xs F}
+   Ret=V1|V2
+\end{lstlisting}
+\caption{Wrong unnesting in tail position in MyMap}
+\label{fig:unnester:wrongmymap}
+\end{figure}
+
+Determining if a record is in tail position is done top-down.
+The body of a procedure is in tail position. For \lstinline!fAnd(First Second)!,
+\lstinline!First! is not in tail position, and \lstinline!Second! is in tail
+position only if its parent \lstinline!fAnd! was in tail position.
+Same reasoning applies for clauses of a \lstinline!fCase! and branches of a
+\lstinline!fBoolCase!.
+
+
+
+\subsubsection{Nesting Marker}\label{sec:arch:unnester:nestingmarker}
+It is also the unnester that will handle the nesting marker and remove it from
+the AST. There are three cases that are handled and have been covered. Here is a
+recapitulation:
+\begin{description}
+  \item[Definitions of procedures] At this step, if we found a nesting marker as the identifier of a procedure, it is necessarily in an assignment statement. The unnester needs to transform \lstinline[mathescape]!X=proc{$\$$ A..N}! in \lstinline!proc{X A..N}!.
+  \item[As argument of a call] In this case, the nesting marker has to be
+    replaced by the variable the expression is unified with. For example, \lstinline[mathescape]!X={P A $\$$ B}! needs to be transformed in  \lstinline!{P A X B}!. 
+  \item[Inside a pattern argument] This can be considered as a more general case
+    of the second bullet. The nesting marker is replaced by the symbol the
+    expression is unified with.
+\end{description}
+
+\subsubsection{Compiler Code Notes}
+The unnester is implemented by a function called \lstinline!Unnester!. The unnester implements multiple local functions:
+\begin{itemize}
+  \item  \lstinline!IsElementary! will return \lstinline!true! if the AST passed as argument is elementary.
+  \item  \lstinline!UnnestFEq! is called to unnest unification ASTs
+  \item  \lstinline!BindVarToExpr! is the function called by \lstinline!UnnestFEq! when one side is elementary, and the other complex.
+  \item  \lstinline!UnnestFApply! is called to unnest calls
+  \item  \lstinline!UnnestFRecord! is called to unnest records and open records. Its structure is similar to that of \lstinline!UnnestFApply!.
+  \item  \lstinline!UnnestFBoolCase! is called to unnest \lstinline!if..then..else! instructions.
+\end{itemize}
+If the unnester encounters a record in the AST for which no specific operation is prescribed, it recursively unnests each feature of the record.
+An improvement to the code would be to explicitly handle every kind of record
+found in the AST.
+
+The unnester also tracks if an instruction is in tail position or not, simply by
+maintaining a \lstinline!tail! field in the \lstinline!params! record. As this
+is a top-down communication, a parent node passing information to its children,
+there is no need to use a cell. The parent simply passes the correctly updated
+record to its children.
 
 \subsection{Globaliser}\label{sec:arch:globaliser}            
 This pass handles the global variables of a procedure, that is, variables used by a procedure that it does not declare (implying that the declaration is done at an upper level). It is interesting to note that the concept of global variables is only defined for procedures.
