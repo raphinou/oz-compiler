@@ -1,5 +1,6 @@
-% The nested procedure P2 uses the variable A declared at the top level,
-% and the variable C, declared by its parent
+% Nested proc accessing var 1 and 2 levels higher
+  % The nested procedure P2 uses the variable A declared at the top level,
+  % and the variable C, declared by its parent
 local
    P1 A
 in

@@ -1,5 +1,6 @@
-% A new local variables is used by P *before* it is also used by a nested proc definition.
-% We need to be sure that the new local in T references the new local in P.
+% Variable used before a nested proc also uses it
+  % A new local variables is used by P *before* it is also used by a nested proc definition.
+  % We need to be sure that the new local in T references the new local in P.
 local
    A P B
 in

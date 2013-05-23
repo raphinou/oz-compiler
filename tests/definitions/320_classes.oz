@@ -1,4 +1,4 @@
-% private and dynamic method labels
+% Private and dynamic method labels
 % also tests otherwise method
 local
  C L A I

@@ -1,4 +1,4 @@
-% functor without prepare
+% Functor without prepare
 local
    F=functor
       export

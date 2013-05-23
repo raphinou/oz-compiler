@@ -1,25 +1,25 @@
 % Declarative memoization in Oz
 
- % Author: Lyle Kopnicky
- % Date: Jan. 20, 2010
+% Author: Lyle Kopnicky
+% Date: Jan. 20, 2010
 
- % In Chapter 4 of CTM, the authors claim that it is not possible to
- % memoize a function declaratively without changing the interface to
- % thread state around. I will now show you how it can be done.  I've
- % already shown this to Prof. Van Roy, and he acknowledges that my
- % solution works, but that it is not as efficient in memory usage as
- % the stateful version. Still, I thought you folks might find it of
- % interest.
+% In Chapter 4 of CTM, the authors claim that it is not possible to
+% memoize a function declaratively without changing the interface to
+% thread state around. I will now show you how it can be done.  I've
+% already shown this to Prof. Van Roy, and he acknowledges that my
+% solution works, but that it is not as efficient in memory usage as
+% the stateful version. Still, I thought you folks might find it of
+% interest.
 
- % It is worth stating that I was inspired by techniques I had learned
- % in Haskell, a lazy functional language. Here's some info on the
- % Haskell Wiki: http://www.haskell.org/haskellwiki/Memoization
- % Here's an article I just found that goes even further with the
- % idea of using a trie to memoize functions:
- % http://conal.net/blog/posts/elegant-memoization-with-functional-memo-tries/
+% It is worth stating that I was inspired by techniques I had learned
+% in Haskell, a lazy functional language. Here's some info on the
+% Haskell Wiki: http://www.haskell.org/haskellwiki/Memoization
+% Here's an article I just found that goes even further with the
+% idea of using a trie to memoize functions:
+% http://conal.net/blog/posts/elegant-memoization-with-functional-memo-tries/
 
- % Let's start with a function that has rather poor performance: the
- % Fibonacci function. Here is the original, unmemoized Fib function:
+% Let's start with a function that has rather poor performance: the
+% Fibonacci function. Here is the original, unmemoized Fib function:
 
 local
    WaitList

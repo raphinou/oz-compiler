@@ -1,4 +1,4 @@
-% dollar present in a record argument of a procedure
+% Dollar present in a record argument of a procedure
 local
    P
 in

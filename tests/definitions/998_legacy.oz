@@ -1,3 +1,4 @@
+% Legacy namer test
 local
    P1 A
 in

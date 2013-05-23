@@ -1,4 +1,4 @@
-% key arguments in class methods
+% Key arguments in class methods
 local
    C I
 in

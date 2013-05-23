@@ -1,4 +1,4 @@
-% method with no argument and class with not feat or attr.
+% Method with no argument and class with not feat or attr.
 local
    C I
 in

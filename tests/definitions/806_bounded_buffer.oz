@@ -1,5 +1,4 @@
 % Bounded buffer, also using monitor
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 local
    NewQueue Insert Delete DeleteNonBlock DeleteAll Size

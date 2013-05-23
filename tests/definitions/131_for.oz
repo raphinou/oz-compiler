@@ -1,4 +1,4 @@
-% for statement over lists with pattern matching
+% Statement 'for' over lists with pattern matching
 local
    L=[ rec(a 1) rec(b 2) rec(c 3)]
 in

@@ -1,3 +1,4 @@
+% Class feature access
 local
    C I
 in

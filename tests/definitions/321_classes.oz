@@ -1,4 +1,4 @@
-% private method which has same name has its containing class
+% Private method which has same name has its containing class
 local
  C L A I
 in

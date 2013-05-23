@@ -1,4 +1,4 @@
-% cases with captures and guards
+% Cases with captures and guards
 local
    R=lab(a b c)
    R2=rec(inner:R b c)

@@ -1,3 +1,4 @@
+% Simple class instanciation and object method call
 local
    C I
 in

@@ -30,6 +30,10 @@ testsfrom: tests/TestRunner.ozf lib/Compile.ozf
 	cd tests && ./run_test_definitions_from.sh ${from}
 lib/Run.ozf: src/Run.oz lib/Compile.ozf
 	ozc -c src/Run.oz -o lib/Run.ozf
+lib/Compilec.ozf: src/Compilec.oz lib/Compile.ozf
+	ozc -c src/Compilec.oz -o lib/Compilec.ozf
+compile: lib/Compilec.ozf
+		ozengine lib/Compilec.ozf
 run: lib/Run.ozf
 	ozengine lib/Run.ozf	
 clean:

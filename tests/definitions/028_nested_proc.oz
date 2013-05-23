@@ -1,4 +1,5 @@
-% global A is redeclared by T, and the argument passed to the call of T is that global.
+% Locally vars overriding globals
+  % global A is redeclared by T, and the argument passed to the call of T is that global.
 local
    A P B
 in

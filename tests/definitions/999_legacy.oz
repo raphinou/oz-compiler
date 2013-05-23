@@ -1,4 +1,5 @@
-% This code failed in an ealier version, left here for safety.
+% Legacy namer test
+  % This code failed in an ealier version, left here for safety.
 local
    A P B
 in

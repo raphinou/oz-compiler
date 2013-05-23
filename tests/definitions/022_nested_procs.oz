@@ -1,10 +1,11 @@
-% P uses a global variable after a child proc (T) definition used it.
-% In this case, the new local for P was triggered by a child proc definition
-% before a direct use of the variable by the procedure.
-% We need to check that the symbol for A in the call {T A} is the one
-% referenced by the symbol for A in the definition of T
-% The inner proc also uses the outer proc's argument directly: the outer proc's
-% argument is a global to the inner proc
+% Use of a variable after nested proc definition using it also
+ % P uses a global variable after a child proc (T) definition used it.
+ % In this case, the new local for P was triggered by a child proc definition
+ % before a direct use of the variable by the procedure.
+ % We need to check that the symbol for A in the call {T A} is the one
+ % referenced by the symbol for A in the definition of T
+ % The inner proc also uses the outer proc's argument directly: the outer proc's
+ % argument is a global to the inner proc
 local
    A P B
 in

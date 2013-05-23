@@ -1,20 +1,20 @@
 % Variations on barrier synchronization
 
-% By Peter Van Roy, Dec. 3, 2008
+ % By Peter Van Roy, Dec. 3, 2008
 
-% This file gives some more examples of functional
-% building blocks as concurrency patterns.  The examples
-% also show when we can stay in the declarative
-% concurrent model and when we need to use ports.
+ % This file gives some more examples of functional
+ % building blocks as concurrency patterns.  The examples
+ % also show when we can stay in the declarative
+ % concurrent model and when we need to use ports.
 
-% Barrier synchronization is a basic operation in
-% concurrent and parallel computing.  We start n tasks
-% concurrently and we synchronize on the completion of
-% all tasks.
+ % Barrier synchronization is a basic operation in
+ % concurrent and parallel computing.  We start n tasks
+ % concurrently and we synchronize on the completion of
+ % all tasks.
 
-% The procedure Barrier takes a list of zero-argument
-% procedures, representing tasks, executes them
-% concurrently and terminates when all have terminated.
+ % The procedure Barrier takes a list of zero-argument
+ % procedures, representing tasks, executes them
+ % concurrently and terminates when all have terminated.
 local
    Barrier
    PartialBarrier

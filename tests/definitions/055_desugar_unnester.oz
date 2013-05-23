@@ -1,4 +1,4 @@
-% functional procedure definitions (nesting marker in arguments list)
+% Functional procedure definitions (nesting marker in arguments list)
 local
    P
 in

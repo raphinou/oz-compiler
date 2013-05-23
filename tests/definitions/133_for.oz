@@ -1,4 +1,4 @@
-% for loop over multiple lists
+% For loop over multiple lists
 % Skipping until I fix the multiple list behaviour
 % --SKIP TEST--
 local

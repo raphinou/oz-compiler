@@ -1,3 +1,4 @@
+% Pattern arguments, proc and fun
 local
    F P
 in

@@ -1,4 +1,4 @@
-% pattern conjunction
+% Pattern conjunction
 local
    R=rec(inner(a b))
 

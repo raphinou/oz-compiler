@@ -1,4 +1,4 @@
-% inherintance from a final class
+% Inherintance from a final class
 local
    C1 C2 I
 in

@@ -1,4 +1,4 @@
-% server with port object
+% Server with port object
 local
    Xform
    XformPipeMaker

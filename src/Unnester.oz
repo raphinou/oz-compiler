@@ -51,10 +51,6 @@ define
                true
             [] fSym then
                true
-            [] fDollar then
-               true
-            [] fAtom then
-               true
             else
                false
             end

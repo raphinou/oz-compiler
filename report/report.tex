@@ -2351,9 +2351,12 @@ is transformed in
 \end{lstlisting}
 
 
-Records with non constant labels and/or features are replaced by a call to \lstinline!Boot_Record.makeDynamic!. The goal of this transformation is to leave in the AST only records with constant label and features. MakeDynamic takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by 
+Records with non constant labels and/or features are replaced by a call to
+\lstinline!Boot_Record.makeDynamic!. The goal of this transformation is to leave
+in the AST only records with constant label and features.
+\lstinline!MakeDynamic! takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by 
 \begin{lstlisting}
-   {makeDynamic Rec '#'(1:F1 2:V1 3:F2 4:V2)}
+   {Boot_Record.makeDynamic Rec '#'(1:F1 2:V1 3:F2 4:V2)}
 \end{lstlisting}
 
 We end up with an AST that only contains records with constant label and features: only the values are not constants.
@@ -3588,9 +3591,25 @@ there is no need to use a cell. The parent simply passes the correctly updated
 record to its children.
 
 \subsection{Globaliser}\label{sec:arch:globaliser}            
-This pass handles the global variables of a procedure, that is, variables used by a procedure that it does not declare (implying that the declaration is done at an upper level). It is interesting to note that the concept of global variables is only defined for procedures.
+This pass handles the global variables of a procedure, that is, variables used
+by a procedure that it does not declare (implying that the declaration is done
+at an upper level in the AST). It is interesting to note that the concept of global variables is only defined for procedures.
 Just as locals attached an environment to their body, procedures attach their own unique procId to their arguments, declarations and body.
 Symbols for variables declared by a procedure, including formal parameters, get assigned the procId of said procedure.
+
+Here is a simple example of a procedure havind one global variable,
+\lstinline!A!:
+\begin{lstlisting}
+A=1
+proc {P}                 % A is global to P
+   B=2
+in
+   {Show A+B}
+end
+\end{lstlisting}
+
+When \lstinline!P! is executed, it will show 3, using its locally declared
+variable \lstinline!B!, and its global variable \lstinline!A!.
 
 Special attention has to be paid to nested procedure declarations.
 The globals of procedures in the code have to be determined from the inside to the outside: determine the globals of the deepest nested procedure, and go up. 
@@ -3601,7 +3620,7 @@ The globals of a procedure are:
   \item minus the variables it declares itself
 \end{itemize}
 
-Here is an example:
+
 \begin{lstlisting}
 A=1
 proc {P1}                 % A is global to P1
@@ -3629,11 +3648,17 @@ In the example we see that \lstinline!P3! uses 2 variables declared by another p
 \lstinline!P2! does not directly use any variable, but it defines \lstinline!P3! which itself has 2 global variables. Those two variables are thus also globals to \lstinline!P2!.
 \lstinline!P1! also does not use any variable directly, but it gets 2 globals from \lstinline!P2!, of which it declares one: \lstinline!B!. \lstinline!P1! indeed only has one global: \lstinline!A!.
 
-In the abstract syntax tree, we replace symbols corresponding to a global variables by a new local symbol of type 'localised' referencing the symbol for this variables in the parent proc which might itself be a 'localised' symbol, and so on until we reach the level where the variables is declared.
+In the abstract syntax tree, we replace symbols corresponding to a global
+variables by a new local symbol of type \lstinline!localised! referencing the
+symbol for this variables in the parent proc which might itself be a
+\lstinline!localised! symbol, and so on until we reach the level where the variables is declared.
 
 %FIXME: add illustration of references to parent proc's variables
 
-In the abstract syntax tree, \lstinline!fProc! is replaced by \lstinline!fDefineProc! taking 1 additional argument: the newly created local variables referencing a variable in the surrounding procedure. This additional information will enable the code generator handle global variables.
+In the abstract syntax tree, \lstinline!fProc! is replaced by
+\lstinline!fDefineProc! taking 1 additional argument: the newly created local
+variables referencing a variable in the surrounding procedure. This additional
+information will enable the code generator to handle global variables.
 
 Handling globals correctly requires to handle numerous cases, and determining the algorithm to use requires some care, as illustrated by these examples:
 
@@ -3731,7 +3756,7 @@ end
 Two procedures defined at the same level must have have their respective new local symbols reference the same symbol at the parent level (whether it be a new local symbol created at the parent level or the existing symbol of a declared variable at the parent level). In this example, \lstinline!P2! and \lstinline!P3! each create a new local for \lstinline!A! and both trigger the creation of a new local in \lstinline!P1! for \lstinline!A!. But only one new local should be created in \lstinline!P1! for \lstinline!A!, and both locals in \lstinline!P2! and \lstinline!P3! should reference it.
 
 
-Example V:
+\begin{figure}[h]
 \begin{lstlisting}
 local
    A
@@ -3752,21 +3777,35 @@ in
              % triggered the creation of a new local.
 end
 \end{lstlisting}
+\caption{Use of a local variable after a nested proc definition accesses it as
+global}
+\label{fig:globaliser:examplev}
+\end{figure}
+
 
 In the end, the algorithm used is the following.
 Each call of the globaliser takes the AST sub tree and an additional \lstinline!Params! argument with three fields:
 \begin{itemize}
    \item the current procId
    \item a list of global variables already seen in the current procId
-   \item a list, each item being the list of new local symbols created for the global with same index in the previous list.
+   \item a list, each item being the list of new local symbols created for the
+     global at the same position in the previous list.
 \end{itemize}
 
 The globaliser handles the following nodes:
 %FIXME: improve layout if the nest list?
 \begin{description}
-   \item[fProc] When handling a \lstinline!fProc!, the globaliser call gets the informations from the parent in its \lstinline!Params! argument. Because we enter a new level of procedure nesting, a \lstinline!NewParams! is initialised to be passed to recursive globaliser calls handling children nodes. NewParams is initialised with a new procId and two empty lists. 
+   \item[fProc] When handling a \lstinline!fProc!, the globaliser call gets the
+     informations from the parent in its \lstinline!Params! argument. Because we
+     enter a new level of procedure nesting, a \lstinline!NewParams! is
+     initialised to be passed to recursive globaliser calls handling children
+     nodes. \lstinline!NewParams! is initialised with a new procId and two empty lists. 
       The symbol of the procedure itself gets the procId of its parent, found in \lstinline!Params!. The arguments of the procedure get the procId of the currently handled procedure, found in \lstinline!NewParams!. At that time the globaliser function is called recursively on the children nodes, with \lstinline!NewParams! as additional argument.
-      Once all children have been traversed, the list of their globals and their respective newly created locals is found in \lstinline!NewParams!.  We have multiple new locals corresponding to one global in the case of 2 siblings procedure definitions referring the same global as in example V. 
+      Once all children have been traversed, the list of their globals and their
+      respective newly created locals is found in \lstinline!NewParams!.  We
+      have multiple new locals corresponding to one global in the case of 2
+      siblings procedure definitions referring the same global as in
+      Figure~\ref{fig:globaliser:examplev}. 
       Globals whose procId match the \lstinline!NewParams!' procId are ignored, as those are variables that are declared at this level, and the chain of references must stop here for these variables.
       For each remaining global, we look at the list of their locals. 
       If one of these has the procId matching the current level, all other locals are changed to reference this one. This is because this specific symbol has been created by a direct use at this level, and we will use this one as the new localised symbol at this level. Then we push the global on the parent's globals list and add the local symbol to its corresponding list of new locals (those lists are found in \lstinline!Params!)
@@ -3776,7 +3815,14 @@ The globaliser handles the following nodes:
 \end{description}
 
 \subsubsection{Compiler Code Notes}
-The globaliser is implemented by a function called \lstinline!Globaliser!. It defines a local class \lstinline!GlobalsManager! used to ease the management of the newly localised symbols created and their relations to procIds. It also defines a function \lstinline!AssignScope! used to assign scope to variable declarations. \lstinline!Globaliser! transforms \lstinline!fProc!, \lstinline!fLocal! and \lstinline!fSym! nodes, leaves untouched the nodes \lstinline!fConst! and \lstinline!pos!, and raises an error if it finds a \lstinline!fVar! or \lstinline!fAtom!. All other nodes are traversed with the \lstinline!DefaultPass! function.
+The globaliser is implemented by a function called \lstinline!Globaliser!. It
+defines a local class \lstinline!GlobalsManager! used to ease the management of
+the newly localised symbols created and their relations to procIds. It also
+defines a function \lstinline!AssignScope! used to assign scope to variable
+declarations. \lstinline!Globaliser! transforms \lstinline!fProc!,
+\lstinline!fLocal! and \lstinline!fSym! nodes, and it leaves untouched the nodes
+\lstinline!fConst! and \lstinline!pos!. All other nodes are traversed with the
+\lstinline!DefaultPass! function.
 
 \subsection{CodeGen}\label{sec:arch:codegen}
 The last pass of the compiler will not return a new AST, but a list of opcodes to be passed to the assembler. It is implemented by the function \lstinline!CodeGen!, which is also responsible for register allocation to symbols present in the AST.
@@ -3795,6 +3841,31 @@ before initialising this Y register with a \lstinline!createVar! instruction.
 
 Handling the body parts simply consists in traversing the body AST and generate
 the needed opcodes.
+
+For example, the code fragment in Figure~\ref{fig:codegen:2vars_decls_oz} declares two variables \lstinline!A! and
+\lstinline!B!, and the opcodes for the declarations is shown in
+Figure~\ref{fig:codegen:2vars_decls_opcode}. These opcodes will be followed by
+the opcodes for \lstinline!Body!.  
+\begin{figure}[h]
+\begin{lstlisting}
+   local
+      A B
+   in
+      Body
+   end
+\end{lstlisting}
+\caption{Declaration of two variables in Oz}
+\label{fig:codegen:2vars_decls_oz}
+\begin{lstlisting}
+   allocateY(2)
+   createVar(y(0))
+   createVar(y(1))
+\end{lstlisting}
+\caption{Opcodes for the declaration of two variables}
+\label{fig:codegen:2vars_decls_opcode}
+\end{figure}
+
+
 
 
 \subsubsection{If then else}
@@ -3820,18 +3891,34 @@ Rather than give convoluted explanations, it is easier to look at the code gener
      lbl(EndLabel)|nil
   end
 \end{lstlisting}
-It first moves the symbol containing the boolean to be tested in a X register, which is then used in a \lstinline!condBranch! opcode, taking as additional arguments the labels identifying the start of the else branch, and the start of the error handling code. The ``then'' branch directly follows the \lstinline!condBranch!. After that come the error code and the else branch. Note that at the end of the ``then'' branch, a branch opcode is needed to jump over the code corresponding to the else branch and the error handling. 
+It first moves the symbol containing the boolean to be tested in a X register,
+which is then used in a \lstinline!condBranch! opcode, taking as additional
+arguments the labels identifying the start of the else branch, and the start of
+the error handling code. The ``then'' branch directly follows the
+\lstinline!condBranch!. After that come the error code and the else branch. Note
+that at the end of the ``then'' branch, a branch opcode is needed to jump over
+the code corresponding to the else branch and the error handling. However,
+putting the error code before the ''else'' code avoids an additional jump at the
+end of the latter. Putting the error code at the end would have required a jump
+at the end of the ''else'' code too.
+
 If no code is present in the else branch, no opcode is generated for that branch.
 
 \subsubsection{Unification with Records}
-At this step, the only place outside pattern matching (described later) where we can find records are in the right hand side of unifications, i.e. the second features of fEq, or in pattern matching which will be discussed later. 
+At this step, the only place outside pattern matching (described later) where we can find records are in the right hand side of unifications, i.e. the second features of fEq. 
 
 The virtual machine requires, for performance reasons, the compiler to generate different opcodes for cons, tuples and records.
-If the record is a cons, i.e. a record with label '|' and with exactly two features labeled 1 and 2, we need to issue a \lstinline!makeConsUnify(DestReg)!. 
+If the record is a cons, i.e. a record with label '\lstinline!|!' and with
+exactly two features labeled 1 and 2, we need to issue a \lstinline!createConsUnify(DestReg)!. 
 
-If the arity is made of numbers only, i.e. we have the arity of a tuple, we need to issue a \lstinline!makeTupleUnify(k(Label) FeaturesList DestReg)! instruction. Else we need to issue a \lstinline!makeRecordUnify(k(Arity) FeaturesList DestReg)! instruction.
-The function \lstinline!CompilerSupport.makeArity! is used to build the arity for use in \lstinline!makeRecordUnify!. It takes as argument the label and a list of pairs \lstinline!Label#Value!. If the labels passed in the list are labels of a tuple, it returns false, else it returns the constructed arity. It is based on the value returned by \lstinline!makeArity! that the compiler decides which instruction is issued.
-The \lstinline!FeaturesList! has to be ordered according to the features. This is important, as the \lstinline!makeConsUnify!/\lstinline!makeTupleUnify!/\lstinline!makeRecordUnify! instructions have to be followed by \lstinline!arrayFill! instructions, one for each value, in the same order as the features passed to the instruction.
+If the arity is made of numbers only, i.e. we have the arity of a tuple, we need
+to issue a \lstinline!createTupleUnify(k(Label) FeaturesList DestReg)!
+instruction. Else we need to issue a \lstinline!createRecordUnify(k(Arity) FeaturesList DestReg)! instruction.
+The function \lstinline!CompilerSupport.makeArity! is used to build the arity
+for use in \lstinline!createRecordUnify!. It takes as argument the label and a list of pairs \lstinline!Label#Value!. If the labels passed in the list are labels of a tuple, it returns false, else it returns the constructed arity. It is based on the value returned by \lstinline!makeArity! that the compiler decides which instruction is issued.
+The \lstinline!FeaturesList! has to be ordered according to the features. This
+is important, as the
+\lstinline!createConsUnify!/\lstinline!createTupleUnify!/\lstinline!createRecordUnify! instructions have to be followed by \lstinline!arrayFill! instructions, one for each value, in the same order as the features passed to the instruction.
 
 As an illustration, this unification of a variable with a record having one value not constant:
 \begin{lstlisting}
@@ -3843,26 +3930,25 @@ results in this AST
       fSym('R' pos)
       fRecord(
          fAtom(rec pos)
-         |(fColon( fAtom(a pos)
+         [ fColon( fAtom(a pos)
                    fSym('A' pos))
-           |(fColon( fAtom(b pos)
-                     fInt(2 pos))
-             nil)))
+           fColon( fAtom(b pos)
+                   fInt(2 pos)) ])
       pos)
 \end{lstlisting}
 and, if we note \lstinline!y(Variable)! the register assigned to \lstinline!Variable! by the compiler, it results in these opcodes being generated:
 
 \begin{lstlisting}
-   makeRecordUnify( k(<Arity rec(a b)>) 2 y(R) )
+   createRecordUnify( k(<Arity rec(a b)>) 2 y(R) )
    arrayFill(y(A))
    arrayFill(k(2)) 
 \end{lstlisting}
 
 \subsubsection{Unification}
-Unification not involving records simply issue a \lstinline!unify(LHS RHS)! instruction, where LHS is the register where the left-hand side is stored and RHS is the register for the right-hand side.
+Unifications not involving records simply issue a \lstinline!unify(LHS RHS)! instruction, where LHS is the register where the left-hand side is stored and RHS is the register for the right-hand side.
 \begin{lstlisting}
-A=10
-A=B
+   A=10
+   A=B
 \end{lstlisting}
 present in the AST in this form:
 \begin{lstlisting}
@@ -3885,20 +3971,29 @@ where \lstinline!Symbol(A)! (resp. \lstinline!Symbol(B)!) represents the instanc
 The opcodes generated for this AST are:
 
 \begin{lstlisting}
-will result in these opcodes being generated:
-unify(y(1) k(10))
-unnify(y(1) y(2))
+   unify(y(1) k(10))
+   unify(y(1) y(2))
 \end{lstlisting}
+if \lstinline!A! was allocated register \lstinline!y(1)! and \lstinline!B! was
+allocated register \lstinline!y(2)!.
 
 
 \subsubsection{Procedures/Abstractions}\label{sec:codegen:procedures}
 At this stage, only procedures are defined, as found in \lstinline!fDefineProc! records (created by the \lstinline!Globaliser!, see Section \ref{sec:arch:globaliser}) of the form:
-\lstinline!fDefineProc(fSym(Sym pos) Args Body Flags Pos NewLocals)!
+\begin{lstlisting}
+   fDefineProc(fSym(Sym pos) Args Body Flags Pos NewLocals)
+\end{lstlisting}
 As described in Section \ref{sec:opcode:procedures}, the body has first to be assembled. This requires to first assign registers to all symbols used in the body, generating the opcodes for the body (which might itself define procedures and thus do recursive calls) and pass it to the assembler which will return the CodeArea we need.
 The \lstinline!createAbstractionUnify! instruction can then be issued, unifying the assembled abstraction's code area \lstinline!CA! with the register assigned to the symbol \lstinline!Sym!:
-\lstinline!createAbstractionUnify(k(CA) GlobalsCount {RegFor Sym})!
+\begin{lstlisting}
+   createAbstractionUnify(k(CA) GlobalsCount {RegFor Sym})
+\end{lstlisting}
 \lstinline!GlobalsCount! in this instruction is the integer number of global variables present in CA. Each global variable has to be initialised in turn by an \lstinline!arrayFill! instruction. The first \lstinline!arrayFill! will initialise the abstraction's \lstinline!g(0)!, the second will initialise the abstraction's \lstinline!g(1)!, etc.\ldots
-If the variable in the enclosing environment referenced by the localised symbol is located in a X register, say 0, then the global is initialised by arrayFill(x(0)). Similarly if the variables in the enclosing environment is stored in register Y or g at index 0, then the global will be initialised with arrayFill(y(0)) or arrayFill(g(0)) respectively.
+If the variable in the enclosing environment referenced by the localised symbol
+is located in a X register, say 0, then the global is initialised by
+\lstinline!arrayFill(x(0))!. Similarly if the variables in the enclosing
+environment is stored in register Y or g at index 0, then the global will be
+initialised with \lstinline!arrayFill(y(0))! or \lstinline!arrayFill(g(0))! respectively.
 
 \subsubsection{Calls}\label{sec:codegen:calls}
 Calls are done with the opcode \lstinline!call(Callee NumberOfArgs)!. The arguments are not passed to \lstinline!call!, but will be accessed in registers X with index 0 to \lstinline!NumberOfArgs!. \lstinline!CodeGen! will thus first move all argument values to X registers, then issue the \lstinline!call!.
@@ -3954,21 +4049,21 @@ We look here at the code generated for the pattern matching, and don't consider
 the code declaring the symbols for the captures, as this has been extracted by
 the namer as described in Section \ref{sec:arch:namer:patternmatching}.
 
-This will result in opcodes of this form when testing against the value in register x(0):
+This will result in opcodes of this form when testing the value in register x(0) against two clauses part of one sequence:
 \begin{lstlisting}
   patternMatch(x(0) k('#'(Pattern1#lbl1 Pattern2#lbl2)))
-  branch(NextTestLabel)
+  branch(ElseLabel)
   lbl(1)
-  Code for clause1
+  ... Code for clause1 ...
   branch(EndLabel)
   lbl(2)
-  Code for clause2
-  lbl(NextTestLabel)
-
-  ... Other clauses ...
-
+  ... Code for clause2 ...
+  lbl(ElseLabel)
+  ... Else Code ...
   lbl(EndLabel)
 \end{lstlisting}
+
+
 
 The \lstinline!patternMatch! instruction takes two parameters: the register containing the
 value to test against, and a constant record with label '\#' and with one
@@ -3992,7 +4087,7 @@ to \lstinline!Boot_CompilerSupport.newPatMatConjunction!, passing as argument th
 of the same transformation applied to both features of the \lstinline!fPatMatConjunction! record.
 
 The patternmatch is immediately followed by an unconditional \lstinline!branch! instruction,
-which will jump to the \lstinline!ElseCode!, but is only reached if no match were found.
+which will jump to the \lstinline!ElseCode!, but is only reached if no match was found.
 
 When a match is found, the execution jumps to the label indicating the start of the clause'body.
 The opcodes of the clause'body are prefixed by instructions moving the capture
@@ -4010,7 +4105,8 @@ be grouped with other clauses. For each clause with guards, there will be a
 test instruction generated. In addition, the code for the guards needs access
 to the value of the captures in the pattern, meaning it must come after the
 test instruction. A consequence of this is that the test instruction may not jump to the start
-of the clause'body, but must jump to the guards'code!
+of the clause'body, but must jump to the guards'code. Additionally, when a match
+is unsuccessful, execution has to jump to the next test.
 
 Here is an example of a case instruction having clauses with guards:
 \begin{lstlisting}
@@ -4043,14 +4139,14 @@ lbl(6)    move(k(nomatch) x(0))
 lbl(3)    return
 \end{lstlisting}
 \lstset{numbers=none}
-We see that the \lstinline!patternMatch! instruction is built the same way, but
-that it now jumps to the guards'code at \lstinline!lbl(8)! in case of
+The \lstinline!patternMatch! instruction is built the same way, but
+it now jumps to the guards'code at \lstinline!lbl(8)! in case of
 success. 
 
 The guards'code, which here only consists of line 3, is immediately
 followed by the code of a conditional jump (lines 4 and 5) to the next test or, if as here it is the guards
-of the last clause, to the else code (with label 6). The \lstinline!condBranch!
-also takes a label for error code, which in this case is label 4.
+of the last clause, to the else code (\lstinline!lbl(6)!). The \lstinline!condBranch!
+also takes a label for error code, which in this case is label \lstinline!4!.
 
 The code of the clause is on line 6 and 7, followed by the unconditional jump to
 the end label, here \lstinline!lbl(3)!.
@@ -4344,8 +4440,25 @@ Adding a test is very simple:
   \item put the expected error output in a file with same name but with extension .err
 \end{enumerate}
 Once this is done, the new test will be included in the next run.
-It is also possible to run one individual test. In this case, the test is run
+
+All tests are run with 
+\begin{lstlisting}
+   make tests
+\end{lstlisting}
+It is also possible to run one individual test with
+\begin{lstlisting}
+   make test test=$testnumber
+\end{lstlisting}
+In this case, the test is run
 even if it is marked as to be skipped when running the full test suite. This helps writing tests for cases needed to be supported in the future, but that should not make the full test suite fail.
+
+As the virtual machine is still in development, it is possible to restart a
+tests run from a specific test. This avoids to re-run all passed tests in case
+of a hanging run:
+\begin{lstlisting}
+   make testsfrom from=$testnumber
+\end{lstlisting}
+
 \section{Performance}
 Possibly include some measure?
 

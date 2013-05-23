@@ -1,4 +1,4 @@
-% case with only constant tests, i.e. no capture
+% Case with only constant tests, i.e. no capture
 
 local
    A=2

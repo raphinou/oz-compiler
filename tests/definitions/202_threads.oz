@@ -1,5 +1,4 @@
 % Function calls in thread expressions
-% Needs recursive functions support
 local
    P1 P2
    R

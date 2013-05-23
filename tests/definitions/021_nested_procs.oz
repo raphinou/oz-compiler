@@ -1,5 +1,6 @@
-% Procedure definition and call, with unification done in declaration of A used
-% as argument of the call.
+% Global in proc
+ % Procedure definition and call, with unification done in declaration of A used
+ % as argument of the call.
 
 local
    A=5 P B C

@@ -241,6 +241,7 @@ define
                % Same procId, so keep it!
                AST
             end
+         %FIXME add error for fInt, fFloat
          %-------------
          [] fVar(_ _) then
          %-------------

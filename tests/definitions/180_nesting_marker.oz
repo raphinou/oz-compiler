@@ -1,4 +1,4 @@
-% nesting marker in proc argument, and in if statement
+% Nesting marker in proc argument, and in if statement
 local
    P PB X0 X1 X2 Y
 in

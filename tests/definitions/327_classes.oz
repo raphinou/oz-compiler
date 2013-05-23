@@ -1,4 +1,4 @@
-% locking property
+% Locking property
 local
    C I
    T1 T2

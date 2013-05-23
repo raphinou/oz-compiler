@@ -1,4 +1,4 @@
-% constant records
+% Constant records
 local
    R = rec(f1 b:f2 c:f3 r:rec(1 2 3))
 in

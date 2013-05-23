@@ -1,4 +1,4 @@
-% case expression with no else
+% Case expression with no else
 local
    R1=lab(1:a)
    R2=lab(1:a 2:b 3:c)

@@ -1,4 +1,4 @@
-% if statements with no else
+% If statements with no else
 local
    A=1 B=2 C=3
 in

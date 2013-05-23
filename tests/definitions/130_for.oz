@@ -1,4 +1,4 @@
-% for over lists
+% Loop 'for' over lists
 local
    L=[1 2 3 4]
 in

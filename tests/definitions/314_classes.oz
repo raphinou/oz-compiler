@@ -1,4 +1,4 @@
-% method calls as expression
+% Method calls as expression
 local
    C I
 in

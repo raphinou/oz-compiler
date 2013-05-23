@@ -1,4 +1,4 @@
-% for statement over integers
+% Statement 'for' over integers
 for I in 1..5 do {Show I} end
 for I in 1..5;1 do {Show I} end
 for I in 1..5;2 do {Show I} end

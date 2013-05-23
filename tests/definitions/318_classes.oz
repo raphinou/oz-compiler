@@ -1,5 +1,6 @@
-%Generic classes, from http://www.mozart-oz.org/home/doc/tutorial/node10.html#section.classes.parametrized
-% See also CTMCP 7.4.3
+%Generic classes
+  % from http://www.mozart-oz.org/home/doc/tutorial/node10.html#section.classes.parametrized
+  % See also CTMCP 7.4.3
 local
    SortClass Int Rat ListC
 in

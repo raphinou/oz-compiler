@@ -1,4 +1,4 @@
-% unification expressions
+% Unification expressions
 local
    fun {F ?V}
       V=5

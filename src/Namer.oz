@@ -717,7 +717,10 @@ functor
                   fCatch( {List.map Clauses  fun {$ fCaseClause(Val Body)}
                      NewVal NewBody
                   in
+                     % Create a specifiic environment for each clause.
                      {NewParams.env backup()}
+                     % NamerForCaptures collects the captures which will then be declaread
+                     % but the code below
                      NewVal={NamerForCaptures Val NewParams}
                      NewBody={NamerForBody Body NewParams}
                      {NewParams.env restore()}

@@ -1,3 +1,4 @@
+% Case with missing else
 local
    R1=3
 in

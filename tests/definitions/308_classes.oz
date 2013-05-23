@@ -1,5 +1,5 @@
 % Inheritance and features
-% From http://www.mozart-oz.org/home/doc/tutorial/node10.html#label56
+  % From http://www.mozart-oz.org/home/doc/tutorial/node10.html#label56
 local
    ApartmentC AptC MyAptC1 Apt1 Apt2 Apt3 Apt4
 in

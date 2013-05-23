@@ -1,4 +1,4 @@
-% logic gates simulations
+% Logic gates simulations
 local
    Inc
    WaitList

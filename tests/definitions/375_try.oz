@@ -1,4 +1,4 @@
-% naming variables in catch clauses
+% Naming variables in catch clauses
 local
    F R
 in

@@ -1,4 +1,4 @@
-% dotAssign expressions
+% Test dotAssign expressions
 local
    proc {Exchange Heap N M}
       X
