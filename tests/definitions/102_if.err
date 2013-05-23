@@ -1,0 +1,13 @@
+
+%****************************************************************
+%**
+%** Error: unhandled exception
+%**
+%** error(1:badBooleanInIf debug:d(info:unit stack:[entry( column:-1 data:<P/1 Exception.raiseError> file:'' kind:call line:unit) entry( column:1 data:<P/2> file:'tests/TestRunner.oz' kind:call line:1) entry( column:7 data:<P/4 RootManager,Pickle/fast> file:'/home/sjrd/documents/projets/mozart2/lib/main/init/Module.oz' kind:call line:244) entry( column:22 data:<P/0> file:'/home/sjrd/documents/projets/mozart2/lib/main/base/Base.oz' kind:call line:82)]))
+%**
+%** Call Stack:
+%** procedure 'Exception.raiseError' in 
+%** procedure in file "tests/TestRunner.oz", line 1, column 1, 
+%** procedure 'RootManager,Pickle/fast' in file "/home/sjrd/documents/projets/mozart2/lib/main/init/Module.oz", line 244, column 7, 
+%** procedure in file "/home/sjrd/documents/projets/mozart2/lib/main/base/Base.oz", line 82, column 22, 
+%**--------------------------------------------------------------

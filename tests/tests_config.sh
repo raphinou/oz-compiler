@@ -42,7 +42,7 @@ function run_test()
     ozengine TestRunner.ozf $f 2> $dest.err | tee $dest.debug | sed -e '1,/^--END DEBUG--$/d' > $dest.out
     # remove non constant stuff from the error file. 
     # Currently: program counter
-    sed -i -e 's/PC = [[:digit:]]\+//g' $dest.err
+    sed -i -e "s/'PC':[[:digit:]]\+//g" -e 's/PC = [[:digit:]]\+//g' $dest.err
 
     extensions="err out"
     for ext in $extensions; do 
