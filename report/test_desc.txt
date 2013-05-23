@@ -1,0 +1,323 @@
+001 nested locals:
+ Nested locals, with one unification done in the declaration of B.
+002 nested locals:
+ The top local declared and initialises variables A and B.
+ The nested local redeclares B and initialises it with another value.
+ In the nested local, we then show both A and B.
+ In the outer local, we show A and B to check it has the top level value.
+003 nested locals:
+ Three levels deep nested locals, with redeclaration and new variable at each
+ level.
+005 declarations:
+ Declarations in records (PVS and PVE)
+015 procs:
+ Wildcard in formal parameters
+020 nested procs:
+ Nested proc accessing var 1 and 2 levels higher
+021 nested procs:
+ Global in proc
+022 nested procs:
+ Use of a variable after nested proc definition using it also
+023 nested procs:
+ Variable used before a nested proc also uses it
+024 nested proc siblings:
+ Two nested proc definitions (T and W)  at the same level use the same variable
+ (A) which is also a new local to the outer proc (P), which is used after the
+ nested procs definitions.
+025 nested proc siblings:
+ Two nested proc definitions (T and W)  at the same level use the same variable
+ (A) which is also a new local to the outer proc (P), which is used *before*
+ the nested procs definitions.
+026 nested proc siblings:
+ Two nested proc definitions (T and W)  at the same level use the same variable
+ (A), but T redeclares it and W uses the global. The outer proc uses
+ A before its children proc definitions.
+027 nested proc siblings:
+ Two nested proc definitions (T and W)  at the same level use the same variable
+ (A), but T redeclares it and W uses the global. The outer proc uses A *after*
+ its children proc definitions.
+028 nested proc:
+ Locally vars overriding globals
+029 globaliser:
+ Is environment restored avec proc definition?
+050 desugar unnester:
+ Simple desugar of + - * / and unnesting of that operation's result assignment
+ Uses a negative number too
+051 desugar unnester:
+ Simple desugar a function
+052 desugar unnester:
+ Desugar of functions returning functions.
+ All called functions return a function without argument that itself has to be
+ called, hence the double {{ }}
+053 desugar unnester:
+ Cell creation, assignment, access, exchange, cell in cell
+054 desugar unnester:
+ Wildcard   for argument set by procedure.
+055 desugar unnester:
+ Functional procedure definitions (nesting marker in arguments list)
+056 desugar unnester:
+ Unification expressions
+060 unnester:
+ Unnesting of variable assignment in declarations of a local and in proc
+ argument
+061 unnester:
+ Unnesting of variable assignment in declarations of a local and in proc
+ argument
+062 unnester:
+ Unnesting of variable assignment with variable being the RHS and in proc
+ argument
+063 unnester:
+ Unnesting of variable assignment with variable being the RHS and in proc
+ argument
+064 unnester:
+ Unnesting of locals in unification
+065 unnester:
+ Unnesting of locals in unification and arithmetic
+066 unnester:
+ Unnesting of binding with LHS and RHS both non-elementary
+067 unnester:
+ Unnest the taget of a call
+068 unnester:
+ Dollar present in a record argument of a procedure
+069 unnester:
+ Unnest case values
+100 if:
+ Simple if statement tests
+101 if:
+ Complex if statements and expressions, with condition and branches
+ non-elementary. Also tests comparators < =< > >=
+102 if:
+ Test if non-boolean are treated correctly
+103 if:
+ Elseif test.
+105 if:
+ If statements with no else
+110 lists:
+ Simple access to list elements
+130 for:
+ Loop 'for' over lists
+131 for:
+ Statement 'for' over lists with pattern matching
+132 for:
+ Statement 'for' over integers
+133 for:
+ For loop over multiple lists
+ Skipping until I fix the multiple list behaviour
+150 records:
+ Simple record creation and access
+151 records:
+ Auto number features of records if necessary (desugar step)
+152 records:
+ Constant records
+153 records:
+ Records where values are not constants
+154 records:
+ Records where values are results of function call
+155 records:
+ Records where the label is not constant
+156 records:
+ Records with all parts (label, features, values) specified by a the value of a
+ variable.
+157 records:
+ Records on LHS of unification, both const and not const
+158 records:
+ Record with value result of an if expression
+159 records:
+ Unification of record to assign value by 'pattern matching'
+160 records:
+ Create Cons
+180 nesting marker:
+ Nesting marker in proc argument, and in if statement
+190 dotassign:
+ Test dotAssign expressions
+200 threads:
+ Unification of a variable in a thread, depending on variables initialised
+ later.
+201 threads:
+ Thread as expression, at the 2 sides of unification
+202 threads:
+ Function calls in thread expressions
+203 threads:
+ Wait instruction, waiting for variable bound in thread.
+220 lazy functions:
+ Lazy functions. Result variables used in opposite order than unification, and
+ one result unused.
+230 streams:
+ List with unbounded tail filled at one second interval
+231 streams:
+ List with unbounded tail filled at one second interval
+250 locks:
+ Locks
+260 case:
+ Records and OpenRecord matches
+261 case:
+ Case with missing else
+262 case:
+ Case expression
+263 case:
+ Case expression with no else
+264 case:
+ Case with only constant tests, i.e. no capture
+265 case:
+ Cases with captures and guards
+266 case:
+ Wildcards in record and openrecords patterns
+267 case:
+ Test !Vars in patterns
+268 case:
+ Pattern conjunction
+269 case:
+ Pattern matching in function and proc arguments
+270 case:
+ Pattern arguments, proc and fun
+271 case:
+ Pattern conjunctions open records and escaped variables in function arguments
+272 case:
+ Parameter arguments test for open record with atom features and not integers
+300 classes:
+ Simple class instanciation and object method call
+301 class:
+ Key arguments in class methods
+302 classes:
+ Default values for method arguments
+303 classes:
+ Attribute access, including with cell values + accessing non-attribute cells
+ in a method.  Also access attribute which name is accessed via a variable.
+304 classes:
+ Exchange operation on attribute, and assigning to an attribute with no default
+ value.
+305 classes:
+ Class feature access
+306 classes:
+ Method with no argument and class with not feat or attr.
+307 classes:
+ Simple class inheritance
+308 classes:
+ Inheritance and features
+309 classes:
+ Wildcard in feature
+310 classes:
+ Anonymous class
+311 classes:
+ Call a method on self
+312 classes:
+ Attribute assignation with <-
+313 classes:
+ Static calls
+314 classes:
+ Method calls as expression
+315 classes:
+ Static call with nesting marker
+316 classes:
+ Functional methods
+317 classes:
+ Test of pattern variable function for classes
+318 classes:
+Generic classes
+319 classes:
+ Open record method definitions
+320 classes:
+ Private and dynamic method labels
+ also tests otherwise method
+321 classes:
+ Private method which has same name has its containing class
+322 classes:
+ Method head reference
+323 classes:
+ Method head captures with same name
+324 classes:
+ Dynamic attribute access
+325 classes:
+ Private method with same variable name as class
+326 classes:
+ Method head capture for method with no argument
+327 classes:
+ Locking property
+328 classes:
+ Inherintance from a final class
+350 raise:
+ Exception raised
+370 try:
+ Simple try catch statement
+371 try:
+ Simple try catch expression
+372 try:
+ Corner case illustrating the need of temp var when desugaring try expression
+373 try:
+ try..finally statement
+ Exception raised
+374 try:
+ try-finally expressions
+ Exception raised
+375 try:
+ Naming variables in catch clauses
+376 try:
+ Naming variables of catch clauses
+377 try:
+ Unhandled exception
+378 try:
+ Try with multiple catch clauses
+379 try:
+ try-finally without catch
+400 functors:
+ Check prepare is executed when functor is applied
+401 functors:
+ Check prepare declarations are availeble in define code
+402 functors:
+ Location of import + use imported functions
+403 functors:
+ Default esport name
+404 functors:
+ Named functor
+405 functors:
+ Functor without prepare
+406 functors:
+ Functor without import
+407 functors:
+ Named functor with require
+408 functors:
+ Named functor with require
+700 tofix:
+ Pattern matching on procedure arguments when record is handled by Boot
+ Record.makeDynamic
+800 quicksort:
+ Quicksort from the book CTMCP, lazy and eager versions
+801 lazy pascal:
+ Lazy computation of Pascal triangle
+802 scie:
+ Scie test
+803 transactions:
+ Transaction Manager
+804 lift:
+ Lift simulation. Added determinism with controlled delays and lifts called
+805 tuplespace:
+ Tuplespace and queues
+806 bounded buffer:
+ Bounded buffer, also using monitor
+807 lisser:
+ Lisser code
+808 wrapper:
+ Secure data storage wrapper
+809 elaguer:
+ Numbers list manipulation
+810 exprcode:
+ Pattern matchin, recursive calls, guards,...
+811 minimal:
+ Computes the K minimal elements of a list.  This program compares
+ eager algorithms with a simple lazy algorithm.
+812 server:
+ Server with port object
+813 josephus decl:
+ Josephus problem with streams
+814 lazymergesort:
+ Lazy merge sort
+815 barrier:
+ Variations on barrier synchronization
+816 logicgates:
+ Logic gates simulations
+817 memoisation:
+ Declarative memoization in Oz
+998 legacy:
+ Legacy namer test
+999 legacy:
+ Legacy namer test
