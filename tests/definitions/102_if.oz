@@ -1,6 +1,5 @@
 % Test if non-boolean are treated correctly
   % need to add try - catch
-% --SKIP TEST--
 local
    A
 in
