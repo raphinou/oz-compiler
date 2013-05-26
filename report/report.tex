@@ -226,6 +226,9 @@ X registers are work registers, and if a value in a X register needs to be acces
 %FIXME: what kind of registers can be unified. Does it make sense to unify X regs?
 Unification is supported with the instruction \lstinline!unify(LHS RHS)! where
 both \lstinline!LHS! and \lstinline!RHS! are registers.
+\subsection{Variables}\label{sec:opcode:variables}
+The opcode \lstinline!createVar(R)! assigns to register \lstinline!R!, which is
+of type X or Y, a new unbound variable.
 
 \subsection{Jumps}\label{sec:opcode:jumps}
 Code positions can be identified by labels, which need to be atoms or names. A label \lstinline!L! will appear in the code in a record \lstinline!lbl(L)!. 
@@ -294,6 +297,9 @@ execution. It has the exact same arguments as the call instruction, only the
 name of the instruction differs: \lstinline!tailCall(Callee Args)!. It is
 equivalent to a \lstinline!call! followed by a \lstinline!return!, with the
 additional guarantee that the frame is deallocated \emph{before} the call.
+
+A builtin is called with \lstinline!callBuiltin(k(BI) Args)!, where
+\lstinline!BI! must be a builtin (i.e. \lstinline!{IsBuiltin BI}== true!).
 
 \subsection{Records}\label{sec:opcode:records}
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
@@ -461,6 +467,94 @@ Section \ref{sec:arch:codegen:exceptions}.
 \caption{Opcodes handling exceptions}
 \label{fig:opcodes:exception:result}
 \end{figure}
+
+
+\subsection{Skip}
+\lstinline!skip! is a no-op opcode, that is actually dropped by the assembler.
+It is however available to ease the generation of the opcodes having some parts
+optional. Rather than testing if the opcodes sublist is empty before including
+it in the whole program's opcodes list, it is possible to generate it in every
+case: for the situation in which no operation is needed, a \lstinline!skip! opcode will be
+issued.
+
+\subsection{Assembler}
+
+The previous section gave an overview of the target language of the compiler.
+This section will take a closer look to the language as an interface to the
+virtual machine. The opcodes of our target language is actually further transformed by
+the assembler before it gets its definitive form and is fed to the virtual
+machine.
+
+The core of the virtual machine is the loop traversing the list of
+assembler-generated opcodes of the running program. This loop is found in the file
+\lstinline!emulate.cc! of the virtual
+machine\footnote{See
+https://github.com/mozart/mozart2/blob/master/vm/vm/main/emulate.cc\#L303}.
+
+If the loop encounters a \lstinline!skip! opcode, it does nothing and goes to
+the next opcode.
+
+Previous sections talked about the \lstinline!move! opcode, which is actually
+specialised according to the source and destination register types. Source
+register can be of the type X, Y, G or K. Destination registers can be of the
+type X or Y. As a consequence, \lstinline!move! is actually translated into
+8 specialised operations. The resolution is done by the
+assembler with a function
+\lstinline!ResolveOverload!\footnote{https://github.com/mozart/mozart2/blob/master/lib/compiler/NewAssembler.oz\#L165} 
+which will actually resolve all overloaded opcodes that will be covered in this section.
+
+Two consecutive \lstinline!move! operations on registers X and/or Y registers are transformed by the assembler in
+a \lstinline!moveMove! operation, transforming \lstinline!move(s1 d1) move(s2 d2)! into
+\lstinline!moveMove(s1 d1 s2 d2)!. Four different situations can occur as both
+source and destination registers can be of type X or Y. This
+\lstinline!moveMove! operation is thus further translated by \lstinline!ResolveOverload! into one of the 4 base operations
+\lstinline!moveMoveXYXY!, \lstinline!moveMoveYXYX!, \lstinline!moveMoveYXXY!,
+\lstinline!moveMoveXYYX!.
+
+\lstinline!createVar! is also specialised by \lstinline!ResolveOverload! in an
+operation specific to X registers (\lstinline!createVarX!) or Y
+registers(\lstinline!createVarY!).
+\lstinline!createVarMove(r(i) x(j))! is an opcode that will assign an unbound variable to
+register \lstinline!r(i)! (of type X or Y), immediately followed by a
+\lstinline!move! to register \lstinline!x(j)! (always of type X). This is very
+handy when an unbound variable is passed as argument to a procedure, to be
+reused after the call, as in
+
+\begin{lstlisting}
+   {MyProc ?R}
+   {Show R}
+\end{lstlisting}
+
+The variable \lstinline!R! has to be in a Y register to be reused after the
+call, but it has to be passed as argument to the call in a register of type X.
+\lstinline!createVarMove! does both operations in one opcode.
+Again, \lstinline!createVarMove! is actually specialised in
+\lstinline!createVarMoveX! or \lstinline!createVarMoveY! if the type of the
+first register is respectively X or Y.
+
+\lstinline!call! is also specialised according to the type of register in which
+the callee is stored, resulting in 4 specialised opcodes: \lstinline!callX!,
+ \lstinline!callY!,\lstinline!callG!,\lstinline!callK!.
+Similarly, \lstinline!tailCall! has 4 specialised opcodes.
+\lstinline!call! starts by creating a new from on the stack with the currently
+running abstraction/code area, the program counter, and the Y registers.
+\lstinline!tailCall! just frees the Y registers.
+After that, the current abstraction and its code area are replaced by the callee
+and its code area.
+
+
+\lstinline!callBuiltin! alwyas takes the builtin to call in a register of type
+K, but it is nonetheless specialised in different operations with 0 to 5
+arguments or with an arbitrary number of arguments N. These are called
+lstinline!callBuiltinX! where X is one of \lstinline!0 1 2 3 4 5 N!.
+
+
+
+
+
+
+
+
 
 
 \section{Compiler input}\label{section:compilerinput}
