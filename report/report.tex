@@ -6,6 +6,7 @@
 \usepackage[margin=false,inline=true]{fixme}
 \usepackage{multicol}
 \usepackage{verbatim}
+\usepackage{longtable}
 \usepackage{listings} % DO NOT USE DRAFT DOCUMENT AS IT WILL NOT DISPLAY THE CODE
 \usepackage{tikz}
 \usepackage{float}
@@ -202,8 +203,34 @@ in the virtual machine.
 
 
 \section{Target Language}
-The compiler generates code that can be passed to the assembler targeting the virtual machine. This assembler language has solid support for the virtual machine concepts as we'll see.
-The assembler accepts an Oz list of instructions that are Oz records. 
+The compiler generates code that can be passed to the assembler targeting the
+virtual machine. This assembler language has solid support for the virtual
+machine concepts as we'll see. Appendix~\ref{appendix:opcodes} gives a reference list of
+the opcodes available.
+
+The core of the virtual machine is the loop traversing the list of
+assembler-generated opcodes of the running program. This loop is found in the file
+\lstinline!emulate.cc! of the virtual
+machine\footnote{See
+https://github.com/mozart/mozart2/blob/master/vm/vm/main/emulate.cc\#L303}.
+
+The assembler accepts an Oz list of instructions that are Oz records. This list
+of opcodes is actually further transformed by
+the assembler before it gets its definitive form and is fed to the virtual
+machine.                                             
+
+One transformation applied by the assembler is to translate generic operations
+on register to operations specific to the type of the registers manipulated. 
+
+For example, we will present the \lstinline!move(src dst)! opcode taking a
+source register and a destination register. This opcode is actually
+specialised according to the source and destination register types. Source
+register can be of the type X, Y, G or K. Destination registers can be of the
+type X or Y. As a consequence, \lstinline!move! is actually translated into
+8 specialised operations. The resolution is done by the
+assembler with a function
+\lstinline!ResolveOverload!\footnote{https://github.com/mozart/mozart2/blob/master/lib/compiler/NewAssembler.oz\#L165} 
+which will actually resolve all overloaded opcodes that will be covered in this section. 
 
 \subsection{Register Operations}\label{sec:intro:opcode:registers}
 Registers access instructions are proper to each type. To access the nth G X Y
@@ -222,13 +249,49 @@ The deallocation of the Y registers occurs when a \lstinline!return! or
 \lstinline!tailCall! instruction is executed.
 
 X registers are work registers, and if a value in a X register needs to be accessed several time across calls, it has to be saved in a Y register. This is done with a move instruction: \lstinline!move(source_reg destination_reg)!.
+As mentioned earlier, source
+register can be of the type X, Y, G or K. Destination registers can be of the
+type X or Y.
 
 %FIXME: what kind of registers can be unified. Does it make sense to unify X regs?
 Unification is supported with the instruction \lstinline!unify(LHS RHS)! where
-both \lstinline!LHS! and \lstinline!RHS! are registers.
+\lstinline!LHS! and \lstinline!RHS! are registers of type X, Y, G, or K.
+Internally, and because unification is commutative, this does not result in 16 but 10 specialised opcodes. For example,
+\lstinline!moveXY! is defined, but not its mirror operator \lstinline!moveYX!.
+It is the assembler's \lstinline!ResolveOverload! function that will pick the
+available specialised operator and possibly switch the arguments order.
+
+Two consecutive \lstinline!move! operations on registers X and/or Y registers are transformed by the assembler in
+a \lstinline!moveMove! operation, transforming \lstinline!move(s1 d1) move(s2 d2)! into
+\lstinline!moveMove(s1 d1 s2 d2)!. Four different situations can occur as both
+source and destination registers can be of type X or Y resulting in 4
+specialised operations \lstinline!moveMoveXYXY!, \lstinline!moveMoveYXYX!, \lstinline!moveMoveYXXY!,
+\lstinline!moveMoveXYYX!.
+
+
 \subsection{Variables}\label{sec:opcode:variables}
 The opcode \lstinline!createVar(R)! assigns to register \lstinline!R!, which is
-of type X or Y, a new unbound variable.
+of type X or Y, a new unbound variable. The assembler also translates it to
+\lstinline!createVarX! and \lstinline!createVarY!.
+
+\lstinline!createVarMove(r(i) x(j))! is an opcode that will assign an unbound variable to
+register \lstinline!r(i)! (of type X or Y), immediately followed by a
+\lstinline!move! to register \lstinline!x(j)! (always of type X). This is very
+handy when an unbound variable is passed as argument to a procedure, to be
+reused after the call, as in
+
+\begin{lstlisting}
+   {MyProc ?R}
+   {Show R}
+\end{lstlisting}
+
+The variable \lstinline!R! has to be in a Y register to be reused after the
+call, but it has to be passed as argument to the call in a register of type X.
+\lstinline!createVarMove! does both operations in one opcode.
+Again, \lstinline!createVarMove! is actually specialised in
+\lstinline!createVarMoveX! or \lstinline!createVarMoveY! if the type of the
+first register is respectively X or Y.
+
 
 \subsection{Jumps}\label{sec:opcode:jumps}
 Code positions can be identified by labels, which need to be atoms or names. A label \lstinline!L! will appear in the code in a record \lstinline!lbl(L)!. 
@@ -270,7 +333,8 @@ lbl(3)          return
 
 \subsection{Calls}\label{sec:opcode:calls}
 %FIXME: can only call procedures and builtins?
-Calls can be made with \lstinline!call(R Args)!, where R is a register
+Calls can be made with \lstinline!call(R Args)!, where R is a register of type
+X, Y, G or K
 identifying what to call (procedure or builtin) and Args is the number of
 arguments passed to the callee. The arguments of the call are not directly
 passed to the call instruction, but have to be placed in the X registers from 0
@@ -293,26 +357,40 @@ Figure~\ref{fig:opcodes:callexample}.
 
 A call done as last instruction of an abstraction should be made with the
 \lstinline!tailCall! instruction, as this lets the virtual machine optimise the
-execution. It has the exact same arguments as the call instruction, only the
-name of the instruction differs: \lstinline!tailCall(Callee Args)!. It is
-equivalent to a \lstinline!call! followed by a \lstinline!return!, with the
-additional guarantee that the frame is deallocated \emph{before} the call.
+execution (see below). It has the exact same arguments as the call instruction, only the
+name of the instruction differs: \lstinline!tailCall(Callee Args)!.
+
+\lstinline!call! starts by creating a new from on the stack with the currently
+running abstraction/code area, the program counter, and the Y registers.
+\lstinline!tailCall! just frees the Y registers.
+After that, the current abstraction and its code area are replaced by the callee
+and its code area.
+
 
 A builtin is called with \lstinline!callBuiltin(k(BI) Args)!, where
 \lstinline!BI! must be a builtin (i.e. \lstinline!{IsBuiltin BI}== true!).
 
+\lstinline!callBuiltin! always takes the builtin to call in a register of type
+K, but it is nonetheless specialised in different operations with 0 to 5
+arguments or with an arbitrary number of arguments N. These are called
+lstinline!callBuiltinX! where X is one of \lstinline!0 1 2 3 4 5 N!.
+
+\lstinline!return! cleans the Y registers and pops the top frame on the stack.
+
+
 \subsection{Records}\label{sec:opcode:records}
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
-A record of arity Arity, with NumberOfFeatures features is unified with register DestinationReg with this instruction:
+A record of arity Arity, with NumberOfFeatures features is unified with register
+DestinationReg of type X, Y, G or K with this instruction:
 \lstinline!createRecordUnify(k(Arity) NumberOfFeatures DestinationReg)!. which has to be followed by instructions to fill the features with their respective values:
 \lstinline!arrayFill(Reg)! where Reg is the register corresponding to the feature's value.
 The arity is supported by the virtual machine and includes the label and features without their respective values.
 
 There are two special cases of records that are handled specifically by the virtual machine.
-A con is a record with label \lstinline!'|'! and with only 2 features numbers 1
+A cons is a record with label \lstinline!'|'! and with only 2 features numbers 1
 and 2 and is initialised by:
 \begin{lstlisting}
-createConsUnify(DestinationReg)
+   createConsUnify(DestinationReg)
 \end{lstlisting}
 Again, this instruction has to be
 followed by \lstinline!arrayFill! instructions, two in this particular case.
@@ -321,6 +399,12 @@ A tuple is a record with all successive numeric features from 1. It is initialis
    createTupleUnify(k(Label) NumberOfFeatures DestinationReg)
 \end{lstlisting}
 and followed by \lstinline!arrayFill! instructions.
+
+Each of these instructions have a \lstinline!Store! version (for example
+\lstinline!createConsStore!) with the same arguments. This opcode stores the
+record created in the destination register which in this case must be of type X
+or Y.
+
 \subsection{Procedures}\label{sec:opcode:procedures}
 A procedure is represented by what is called an abstraction (see Section
 \ref{sec:vm:abstractions}), which is created and stored in register
@@ -377,12 +461,15 @@ to the assembler.
 \label{fig:opcodes:procedures:result}
 \end{figure}
 
+\lstinline!createAbstractionStore! is used similarly to the records'
+\lstinline!Store! instructions.
+
 \subsection{Pattern Matching}
 The target language supports pattern matching with the instruction
 \begin{lstlisting}
-  patternMatch(XReg PatternMatchRecord)
+  patternMatch(Reg PatternMatchRecord)
 \end{lstlisting}
-where \lstinline!XReg! is the X register containing the value to test, and
+where \lstinline!Reg! is the register of type X, Y or G containing the value to test, and
 \lstinline!PatternMatchRecord! is a record specifying the patterns and their
 respective jump address in case of a match.
 Figure~\ref{fig:target:ozcase} gives a simple Oz case instruction, and Figure~\ref{fig:target:case} lists the generated opcodes.
@@ -476,77 +563,13 @@ optional. Rather than testing if the opcodes sublist is empty before including
 it in the whole program's opcodes list, it is possible to generate it in every
 case: for the situation in which no operation is needed, a \lstinline!skip! opcode will be
 issued.
+If the vm loop encounters a \lstinline!skip! opcode, it does nothing and goes to the next opcode.
 
 \subsection{Assembler}
 
-The previous section gave an overview of the target language of the compiler.
-This section will take a closer look to the language as an interface to the
-virtual machine. The opcodes of our target language is actually further transformed by
-the assembler before it gets its definitive form and is fed to the virtual
-machine.
-
-The core of the virtual machine is the loop traversing the list of
-assembler-generated opcodes of the running program. This loop is found in the file
-\lstinline!emulate.cc! of the virtual
-machine\footnote{See
-https://github.com/mozart/mozart2/blob/master/vm/vm/main/emulate.cc\#L303}.
-
-If the loop encounters a \lstinline!skip! opcode, it does nothing and goes to
-the next opcode.
-
-Previous sections talked about the \lstinline!move! opcode, which is actually
-specialised according to the source and destination register types. Source
-register can be of the type X, Y, G or K. Destination registers can be of the
-type X or Y. As a consequence, \lstinline!move! is actually translated into
-8 specialised operations. The resolution is done by the
-assembler with a function
-\lstinline!ResolveOverload!\footnote{https://github.com/mozart/mozart2/blob/master/lib/compiler/NewAssembler.oz\#L165} 
-which will actually resolve all overloaded opcodes that will be covered in this section.
-
-Two consecutive \lstinline!move! operations on registers X and/or Y registers are transformed by the assembler in
-a \lstinline!moveMove! operation, transforming \lstinline!move(s1 d1) move(s2 d2)! into
-\lstinline!moveMove(s1 d1 s2 d2)!. Four different situations can occur as both
-source and destination registers can be of type X or Y. This
-\lstinline!moveMove! operation is thus further translated by \lstinline!ResolveOverload! into one of the 4 base operations
-\lstinline!moveMoveXYXY!, \lstinline!moveMoveYXYX!, \lstinline!moveMoveYXXY!,
-\lstinline!moveMoveXYYX!.
-
-\lstinline!createVar! is also specialised by \lstinline!ResolveOverload! in an
-operation specific to X registers (\lstinline!createVarX!) or Y
-registers(\lstinline!createVarY!).
-\lstinline!createVarMove(r(i) x(j))! is an opcode that will assign an unbound variable to
-register \lstinline!r(i)! (of type X or Y), immediately followed by a
-\lstinline!move! to register \lstinline!x(j)! (always of type X). This is very
-handy when an unbound variable is passed as argument to a procedure, to be
-reused after the call, as in
-
-\begin{lstlisting}
-   {MyProc ?R}
-   {Show R}
-\end{lstlisting}
-
-The variable \lstinline!R! has to be in a Y register to be reused after the
-call, but it has to be passed as argument to the call in a register of type X.
-\lstinline!createVarMove! does both operations in one opcode.
-Again, \lstinline!createVarMove! is actually specialised in
-\lstinline!createVarMoveX! or \lstinline!createVarMoveY! if the type of the
-first register is respectively X or Y.
-
-\lstinline!call! is also specialised according to the type of register in which
-the callee is stored, resulting in 4 specialised opcodes: \lstinline!callX!,
- \lstinline!callY!,\lstinline!callG!,\lstinline!callK!.
-Similarly, \lstinline!tailCall! has 4 specialised opcodes.
-\lstinline!call! starts by creating a new from on the stack with the currently
-running abstraction/code area, the program counter, and the Y registers.
-\lstinline!tailCall! just frees the Y registers.
-After that, the current abstraction and its code area are replaced by the callee
-and its code area.
 
 
-\lstinline!callBuiltin! alwyas takes the builtin to call in a register of type
-K, but it is nonetheless specialised in different operations with 0 to 5
-arguments or with an arbitrary number of arguments N. These are called
-lstinline!callBuiltinX! where X is one of \lstinline!0 1 2 3 4 5 N!.
+
 
 
 
@@ -4748,6 +4771,308 @@ code generated by the Mozart1 compiler.
 
 % Open subsequent chapter on any page
 \openany
+
+\chapter{OpCodes}\label{appendix:opcodes}
+
+\begin{tabular} {p{4cm}p{4cm}p{5cm}}
+Opcode & Arguments& Notes \\
+\hline
+\lstinline!skip! & & No-op, does nothing\\
+
+\hline 
+%---------------------------------------------------------
+\lstinline!move(r s)! & 
+
+\parbox[t][][t]{4cm}{
+\lstinline!r!: register X, Y, G or K\\
+\lstinline!s!: register X or Y
+}
+
+&
+
+Copies the value of \lstinline!r(i)! in \lstinline!s(j)!.
+\\
+\hline
+%---------------------------------------------------------
+\lstinline!moveMove(r s t u)! &
+
+\parbox[t][][t]{4cm}{
+\lstinline!r!, \lstinline!t!: register X, Y, G or K\\
+\lstinline!s!, \lstinline!u!: register X or Y
+}
+
+&
+
+Automatically generated by the assembler when encountering two consecutive
+\lstinline!move! operations. Equivalent to \lstinline!move(r s) move(t u)!.\\
+%---------------------------------------------------------
+\hline
+
+\lstinline!allocateY(N)! &
+\lstinline!N!: integer$>$0 &
+allocates \lstinline!N! Y registers in current frame. Can only be called once
+per frame. \\
+
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!createVar(r)! &
+\lstinline!r!: register X or Y &
+Assigns a new unbound variable to register \lstinline!r! \\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!createVarMove(r x)! &
+\lstinline!r!: register X or Y &
+equivalent to \lstinline!createVar(r) move(r x)! \\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!setupExceptionHandler(l)!&
+\lstinline!l!: label &
+sets up an exception handler, and execution jumps to label \lstinline!l!\\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!popExceptionHandler()! &
+&
+removes the exception handler currently setup. Should not be called when an
+exception was raised, as the virtual machine pops it in that case \\
+
+%---------------------------------------------------------
+\hline
+
+\parbox[t][][t]{4cm}{
+\lstinline!callBuiltin(k(BI) Args)!  \\
+\lstinline!callBuiltin0(k(BI))!  \\
+\lstinline[mathescape]!callBuiltin1(k(BI) x$_1$))! \\
+..
+\lstinline[mathescape]!callBuiltin5(k(BI) x$_1$ .. x$_5$)! \\
+\lstinline[mathescape]!callBuiltinN(k(BI) N x$_1$ .. x$_N$)!  \\
+} &
+builtin in a K register, all others are X registers &
+The assembler produces the right specialised version from the generic
+\lstinline!callBuiltin! \\
+%---------------------------------------------------------
+\hline
+
+\parbox[t][][t]{4cm}{
+\lstinline!call(r N)!\\ 
+\lstinline!tailCall(r N)! 
+}&                    
+\parbox[t][][t]{4cm}{
+\lstinline!r!: register X, Y, G, K \\
+\lstinline!N!: number of arguments of the call
+}&
+The \lstinline!N! arguments needs to be passed in registers X from \lstinline!x(0)! to
+\lstinline!x(N-1)!\\
+%---------------------------------------------------------
+\hline
+
+\end{tabular}
+
+
+\begin{tabular} {p{4cm}p{4cm}p{5cm}}
+Opcode & Arguments& Notes \\
+\hline
+
+\parbox[t][][t]{4cm}{
+\lstinline!sendMsg(r k(L) N)!\\
+\lstinline!tailSendMsg(r k(L) N)!
+}&
+\parbox[t][][t]{4cm}{
+\lstinline!r!: register X, Y, G, K \\
+\lstinline!L!: record label \\
+\lstinline!N!: number of features of message
+}&
+Equivalent to \lstinline!{r M}! in Oz notation, where \lstinline!M! is a tuple
+of label \lstinline!L! with \lstinline!N! features, whose values are found in
+registers \lstinline!x(0)! to \lstinline!x(N-1)!. Optimises method call on
+objects by avoiding building the message tuple then issuing a \lstinline!call!
+\\
+%---------------------------------------------------------
+\hline
+\lstinline!return()! &
+&
+Frees Y registers, pops the top frame from the stack, and continues execution
+based on the new top frame. \\
+
+
+%---------------------------------------------------------
+\hline
+\lstinline!branch(L)!&
+\lstinline!L!: label &
+moves execution to the label \lstinline!L!\\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!condBranch(x LF LE)! &
+\parbox[t][][t]{4cm}{
+\lstinline!LF!: label identifying the ``false'' branch \\
+\lstinline!LE!: label identifying the error handling code \\
+} &
+if \lstinline!x==true! then does nothing. 
+if \lstinline!x==false! then jumps to label \lstinline!LF!.
+In other cases, jumps to label \lstinline!LE!. \\
+
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!patternMatch(r k(H))!&
+\parbox[t][][t]{4cm}{
+\lstinline!r!: register X, Y, G\\
+\lstinline!H!: see Section~\ref{sec:arch:codegen:case}\\
+}&
+\\
+%---------------------------------------------------------
+\hline
+
+\lstinline!unify(r s)!&
+\lstinline!r! and \lstinline!s!: register X, Y, G, K &
+Unifies the content of registers \lstinline!r! and \lstinline!s!\\
+
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!createAbstractionUnify(k(CA) N r)!&
+\parbox[t][][t]{4cm}{
+\vspace{2mm}
+\lstinline!CA!: CodeArea
+\lstinline!N!: number of globals
+\lstinline!r!: register X, Y, G, K
+}&
+Must be followed by \lstinline!N! \lstinline!arrayFill! instructions to
+initialise the globals
+\\
+%---------------------------------------------------------
+\hline
+
+\lstinline!createAbstractionStore(k(CA) N r)!&
+\parbox[t][][t]{4cm}{
+\vspace{2mm}
+\lstinline!CA!: CodeArea \\
+\lstinline!N!: number of globals \\
+\lstinline!r!: register X, Y \\
+}&
+Must be followed by \lstinline!N! \lstinline!arrayFill! instructions to
+initialise the globals
+\\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!createRecordUnify(k(A) N r)!&
+\parbox[t][][t]{4cm}{
+\vspace{2mm}
+\lstinline!A!: Arity, i.e. label and features of the record
+\lstinline!N!: number of features
+\lstinline!r!: register X, Y, G, K
+}&
+Must be followed by \lstinline!N! calls to \lstinline!arrayFill! to
+set the value corresponding to each feature, in the same order as the features
+in Arity.
+\\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!createRecordStore(k(A) N r)!&
+\parbox[t][][t]{4cm}{
+\vspace{2mm}
+\lstinline!A!: Arity, i.e. label and features of the record
+\lstinline!N!: number of features
+\lstinline!r!: register X, Y
+}&
+Must be followed by \lstinline!N! calls to \lstinline!arrayFill! to
+set the value corresponding to each feature, in the same order as the features
+in Arity.
+\\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!createTupleUnify(k(L) N r)!&
+\parbox[t][][t]{4cm}{
+\lstinline!L!: label of the tuple
+\lstinline!N!: number of features
+\lstinline!r!: register X, Y, G, K
+}&
+Must be followed by \lstinline!N! calls to \lstinline!arrayFill! to set values
+corresponding to each feature. Features of a tuple are all subsequent integer
+from 1.
+\\
+
+%---------------------------------------------------------
+\hline
+\lstinline!createTupleStore(k(L) N r)!&
+\parbox[t][][t]{4cm}{
+\lstinline!L!: label of the tuple
+\lstinline!N!: number of features
+\lstinline!r!: register X, Y
+}&
+Must be followed by \lstinline!N! calls to \lstinline!arrayFill! to set values
+corresponding to each feature. Features of a tuple are all subsequent integer
+from 1.
+\\
+
+%---------------------------------------------------------
+\hline
+
+
+
+\lstinline!createConsUnify(r)!&
+\parbox[t][][t]{4cm}{
+\lstinline!r!: register X, Y, G, K
+}&
+Must be followed by two calls \lstinline!arrayFill! to set the values of
+features \lstinline!1! and \lstinline!2!, the only two features of a cons.
+\\
+
+%---------------------------------------------------------
+\hline
+
+\lstinline!createConsStore(r)!&
+\parbox[t][][t]{4cm}{
+\lstinline!r!: register X, Y
+}&
+Must be followed by two calls \lstinline!arrayFill! to set the values of
+features \lstinline!1! and \lstinline!2!, the only two features of a cons.
+\\
+%---------------------------------------------------------
+\hline
+\end{tabular}
+
+\begin{tabular} {p{4cm}p{4cm}p{5cm}}
+Opcode & Arguments& Notes \\
+\hline
+
+\lstinline!arrayFill(r)! &
+\lstinline!r!:register X, Y, G, K &
+the ith call to \lstinline!arrayFill! will fill the ith placeholder
+of the preceding \lstinline!create...! instruction \\
+%---------------------------------------------------------
+\hline
+
+\lstinline!arrayFillNewVar(r)!&
+\lstinline!r!: register X,Y&
+creates a new unbound variable in \lstinline!r! and puts it in the placeholder
+corresponding to the \lstinline!arrayFill! call.\\
+%---------------------------------------------------------
+\hline
+\lstinline!arrayFillNewVars(N)!&
+\lstinline!N!: integer $>$0 &
+requivalent to \lstinline!N! subsequent calls to \lstinline!arrayFill!, putting
+an distinct unbound variable in each placeholder \\
+\hline
+
+\end{tabular}
 
 \chapter{Symbol Description}\label{appendix:symbol}
 A symbol instance holds information about the variable it replaced in the AST. Symbols introduced by the compiler are called synthetic symbols.
