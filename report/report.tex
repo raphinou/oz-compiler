@@ -3110,8 +3110,7 @@ taking three arguments:
     %FIXME: validate the formulation of statis analysis with sebastien
   \item[ExportRecord] is a record with label \lstinline!'export'!. Its features are the
     exported keys, and the values of each feature is the atom \lstinline!value!.
-    This tells the virtual machine that the value corresponding to this can can
-    have any type. With static analysis, it would be possible to restrict the
+     With static analysis, it would be possible to restrict the
     type more. An example of an ExportRecord is given in Figure~\ref{fig:desugar:export_record}.
   \item[ApplyFun] is a function taking one parameter, as shown in
     Figure~\ref{fig:desugar:apply_fun}. When a functor is applied, this function is called
@@ -3123,8 +3122,8 @@ taking three arguments:
 
 \begin{figure}[ht]
 \begin{lstlisting}
-  import(ModName(info(type:AliasesAtomsList 
-                 from:``x-oz://system/''#ModName#``.ozf''))) 
+  import(ModName:info(type:AliasesAtomsList 
+                 from:``x-oz://system/''#ModName#``.ozf'')) 
 \end{lstlisting}
 \caption{\lstinline!ImportRecord! argument of \lstinline!NewFunctor! call}
 \label{fig:desugar:import_record}
@@ -3141,7 +3140,7 @@ taking three arguments:
 µ
 {\fontfamily{ppl}\selectfont will result in this import record definition:}
 µ
-   import('DumpAST'(info(type:[dumpAST] from:'../lib/DumpAST.ozf')))
+   import('DumpAST':info(type:[dumpAST] from:'../lib/DumpAST.ozf'))
 \end{lstlisting}
 \caption{\lstinline!ImportRecord! example}
 \label{fig:desugar:import_record_example}
@@ -3209,11 +3208,13 @@ Figure~\ref{fig:desugar:desugared_computed_functor_example}.
       import <req>
       export inner:Inner
       define
+         <prepareDecls>
+      in
          functor Inner
          import <imp>
          export <exp>
          define
-            <defDecls><prepareDecls>
+            <defDecls>
          in
             <defStats>
          end
@@ -4564,6 +4565,15 @@ Code:=@Code|
 \end{lstlisting}
 
 
+\section{Compiling to a file}
+
+The functor in \ref{fig:desugar:computed_functor_example} is clearly an
+expression, but the virtual machine can only execute statements. So the question
+arises: how can a expression be compiled and saved to a file? Well, the compiler 
+applies a trick. When compiling an expression, the compiler unifies the
+expression with a variable \lstinline!Result! and executes that statement.
+It then write the value of \lstinline!Result! to the output file
+
 \section{Tests}
 \subsection{Helper functions tests}
 Some helper functions are tested specifically by Oz code, checking that the result returned by the function is correct. This is simply done by calling the function in Figure~\ref{fig:helperstestsfunction} with the first argument the function call we want to test, and the expected result as second argument as illustrated in Figure~\ref{fig:helperstestsexample} where the function UnWrapFAnd is tested.
@@ -4804,12 +4814,89 @@ Support for three Oz language features have to be added:
   \item record pattern arguments having non-constant features
 \end{itemize}
 
-Support for logic programming features of Oz also have to be added, though this not yet supported by the new virtual machine.
+Support for logic programming features of Oz also have to be added.
 Integration in the Mozart development environment also has to be started.
 
+A more efficient transformation can be implemented for \lstinline!try-finally!, 
+transforming the statement
+\begin{lstlisting}
+   try <Body> finally <Finally> end
+\end{lstlisting}
+into
+\begin{lstlisting}
+   local Test in
+      try
+         <Body>
+         Test = unit
+      catch E then
+         Test = {Value.failed E}
+      end
+      <Finally>
+      {Wait Test}
+   end
+\end{lstlisting}
+
+For an expression, the result of the transformation should be
+\begin{lstlisting}
+   local Y Test in
+      try
+         Y = <Body>
+         Test = unit
+      catch E then
+         Test = {Value.failed E}
+      end
+      <Finally>
+      {Wait Test}
+      Y
+   end
+\end{lstlisting}
+This transformation takes advantage of the fact that if the variable waited for
+gets bound to a failed value, \lstinline!Wait! will re-raise its encapsulated
+exception. 
+It is more efficient that the currently implemented solution presented in Section~\ref{sec:arch:desugar:exceptions} because
+there's no pattern matching involved,
+there's no wrapping of the value of the expression if the code executes successfully, and everything is done in C++.
 
 
+The call to builtins can also be improved. Currently, every call is translated in a \lstinline!call! opcode. Calls to builtins should
+be translated by the opcode \lstinline!callBuiltin!. Determining if the callee is a builtin can be done with 
+\begin{lstlisting}
+   {CompilerSupport.isBuiltin Callee}
+\end{lstlisting}
 
+Information about the builtin's parameters can be obtained by a call
+\begin{lstlisting}
+   BuiltinInfo = {CompilerSupport.getBuiltinInfo Callee}
+\end{lstlisting}
+yielding a record of the form
+\begin{lstlisting}
+   builtin(arity:N name:Name params:Params ...)
+\end{lstlisting}
+where \lstinline!Params! is a list of \lstinline!param(kind:InOut ...)!,
+\lstinline!InOut! having value \lstinline!in! for input parameters,
+\lstinline!out! for output parameters.
+\lstinline!N! is the number of parameters if the builtin, and should be used to 
+validate the number of arguments found in the call. If all is correct, opcodes can be generated.
+The \lstinline!in! parameters are \lstinline!move!d to X registers before the \lstinline!callBuiltin!, and out parameters are
+extracted by unification of their register with the result register. 
+Here is an example for the builtin \lstinline!Number.'+'!, taking 2 parameters
+\lstinline!in! and one \lstinline!out!. This AST for the call
+\begin{lstlisting}
+   fApply( fConst(Number.'+') 
+           [y(3) y(1) y(6)] 
+           pos)
+\end{lstlisting}
+should result in these opcodes:
+\begin{lstlisting}
+   move(y(3) x(0))
+   move(y(1) x(1))
+   callBuiltin(k(Callee) [x(0) x(1) x(2)])
+   unify(x(2) y(6))
+\end{lstlisting}
+
+
+Further limiting the use of cells and striving for a totally functional code-base should also help 
+performance and modularity.
 
 \begin{appendices} 
 
@@ -5173,15 +5260,6 @@ The attributes of the class \lstinline!Symbol! are:
     of a specific class for localised symbols, like for synthetic symbols.
     However, I preferred to postpone this to the optimising step. \lstinline!ref! references a symbol local to the enclosing procedure, building a chain that will eventually lead to a symbol of type localProcId enabling the resolution of global variables. %FIXME: improve description..
 \end{description}
-
-\chapter{Compiling to a file}
-
-The functor in \ref{fig:desugar:computed_functor_example} is clearly an
-expression, but the virtual machine can only execute statements. So the question
-arises: how can a expression be compiled and saved to a file? Well, the compiler 
-applies a trick. When compiling an expression, the compiler unifies the
-expression with a variable \lstinline!Result! and executes that statement.
-It then write the value of \lstinline!Result! to the output file
 
 \chapter{Tests list}
 Here is a description extracted from the tests written (\lstinline!make desc!
