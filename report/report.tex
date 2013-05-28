@@ -132,12 +132,13 @@ There were four goals set for the compiler:
 Although the code is extensively commented, this report contributes to the third goal.
 
 \section{Contributions of this work}
-This works lays a solid foundation for future developments.
-Nearly all the Oz language is supported, and the code is clearly structured and fully documented.
-The AST transformations do exploit the new virtual machine's capabilities as well as possible.
+This work has the ambition to lay a solid foundation for future developments.
+Nearly all the Oz language is supported by the compiler, and the code is clearly structured and fully documented.
+The AST transformations do exploit the new virtual machine's capabilities as much as possible.
 A flexible and easy to use test infrastructure has been put in place. This test infrastructure has been used
 to write 439 tests scripts, performing more than 1000 output checks.
 An Oz script runner is also included, compiling the Oz source file and outputting AST as each transformation step for easy debug.
+Compiling a file to a \lstinline!.ozf! is also possible.
 All these functionalities are easily usable thanks to a Makefile, as detailed in the README file included in Appendix~\ref{appendix:readme}. 
 
 \chapter{Infrastructure}
@@ -4915,7 +4916,6 @@ Support for three Oz language features have to be added:
 \end{itemize}
 
 Support for logic programming features of Oz also have to be added.
-Integration in the Mozart development environment also has to be started.
 
 A more efficient transformation can be implemented for \lstinline!try-finally!, 
 transforming the statement
@@ -4994,9 +4994,14 @@ should result in these opcodes:
    unify(x(2) y(6))
 \end{lstlisting}
 
+Another area of improvement is the \lstinline!CodeGen! function, both its inner working and its output should be improved.
+Its inner working because it currently generates nested lists that needs to be flattened at the end. Its output can greatly be improved, 
+notably in the register allocation, which is currently not optimised.
 
 Further limiting the use of cells and striving for a totally functional code-base should also help 
 performance and modularity.
+
+Furthermore, integration in the Mozart development environment also has to be started and some debug output is still generated.
 
 \begin{appendices} 
 

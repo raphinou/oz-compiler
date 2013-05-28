@@ -10,7 +10,9 @@ import
    Debug at 'x-oz://boot/Debug'
    Compile at './Compile.ozf'
    Pickle
+   Application
 define
+   DestinationFile
    Result
    proc {BindResult Value}
         Result = Value
@@ -20,6 +22,7 @@ define
   % Boilerplate code for the parser
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
    Result
+   AST
    PrivateNarratorO
    NarratorO = {New Narrator.'class' init(?PrivateNarratorO)}
    ListenerO = {New ErrorListener.'class' init(NarratorO)}
@@ -35,23 +38,24 @@ define
   % The code we work on
   %--------------------------------------------------------------------------------
 
-   AST = {Compiler.parseOzFile 'src/run.oz' PrivateNarratorO
-       GetSwitch EnvDictionary}
+   %AST = {Compiler.parseOzFile 'src/run.oz' PrivateNarratorO
+   %    GetSwitch EnvDictionary}
 
+   case {Application.getArgs plain} of [FileName] then
+     DestinationFile=FileName#"f"
+     AST = {Compiler.parseOzFile FileName PrivateNarratorO
+          GetSwitch EnvDictionary}
+   end
 
    {System.showInfo '--------------------------------------------------------------------------------'}
 
-%   _={DumpAST.dumpAST AST.1 }
-%   {System.showInfo '--------------------------------------------------------------------------------'}
-%   {System.showInfo '--------------------------------------------------------------------------------'}
-%    _={DumpAST.dumpAST {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}
-%    _={DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST  {Compile.desugar {DumpAST.dumpAST {Compile.namer {Compile.declsFlattener AST.1} }}}}}}
-
-   OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST {Compile.desugar {DumpAST.dumpAST {Compile.namer {DumpAST.dumpAST {Compile.declsFlattener {DumpAST.dumpAST fApply(fConst(BindResult pos) [ AST.1 ] pos)}} }}}}}}}}} params() }
-   %OpCodes = {Compile.genCode  fEq(fConst(Result pos) {Compile.globaliser  {Compile.unnester  {Compile.desugar  {Compile.namer  {Compile.declsFlattener  fApply(fConst(BindResult pos) [ AST.1 ] pos) }} }}} pos) params() }
-   {System.showInfo '--------------------------------------------------------------------------------'}
-   {Show 'Generate OpCodes:'}
-   {ForAll OpCodes Show}
+   % With AST printed for debug:
+   %OpCodes = {Compile.genCode {DumpAST.dumpAST {Compile.globaliser {DumpAST.dumpAST {Compile.unnester {DumpAST.dumpAST {Compile.desugar {DumpAST.dumpAST {Compile.namer {DumpAST.dumpAST {Compile.declsFlattener {DumpAST.dumpAST fApply(fConst(BindResult pos) [ AST.1 ] pos)}} }}}}}}}}} params() }
+   % No AST printed:
+   OpCodes = {Compile.genCode {Compile.globaliser {Compile.unnester {Compile.desugar {Compile.namer {Compile.declsFlattener fApply(fConst(BindResult pos) [ AST.1 ] pos)} }}}} params() }
+   %{System.showInfo '--------------------------------------------------------------------------------'}
+   %{Show 'Generate OpCodes:'}
+   %{ForAll OpCodes Show}
 
 
    Arity = 0
@@ -62,13 +66,13 @@ define
    CodeArea VS
    {NewAssembler.assemble Arity OpCodes PrintName DebugData Switches ?CodeArea ?VS}
    {Wait VS}
-   {System.showInfo VS}
+   %{System.showInfo VS}
    Abs = {CompilerSupport.newAbstraction CodeArea [6]}
-   {System.showInfo '--END DEBUG--'}
+   %{System.showInfo '--END DEBUG--'}
    {Abs}
-   {Pickle.save Result '/tmp/run.ozf'}
+   {Pickle.save Result DestinationFile}
 
-   {System.showInfo '################################################################################'}
+   %{System.showInfo '################################################################################'}
 
 end
 

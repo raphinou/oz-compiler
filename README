@@ -41,3 +41,6 @@ A Makefile is located in the root directory, giving access to these commands:
 
 - make report
   generates the PDF report from Latex sources. Result file is report/report.pdf
+
+- make compile src=path/to_file.oz
+  compiles the file path/to_file.oz to path/to_file.ozf

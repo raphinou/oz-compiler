@@ -114,9 +114,9 @@ define
             ArrayFills
          in
             %
-            {Show '##############'}
-            {System.showInfo 'Procedure '#{Sym get(name $)} }
-            {Show '##############'}
+            %{Show '##############'}
+            %{System.showInfo 'Procedure '#{Sym get(name $)} }
+            %{Show '##############'}
             {GenAndAssemble Body Args {Sym get(name $)} d(file:Pos.1 line:Pos.2 column:Pos.3) switches ?CA _} %last argument is ?VS, the virtual string is set by GenAndAssemble.
 
 
@@ -124,8 +124,8 @@ define
 
             % arrayfill for globals
             %----------------------
-            {System.showInfo 'Here are the globals for '#{Sym get(name $)}}
-            {ForAll NewLocals proc {$ G} {System.showInfo {G get(name $)}#' '#{G get(type $)}#' '#{G get(procId $)}#' ' } end }
+            %{System.showInfo 'Here are the globals for '#{Sym get(name $)}}
+            %{ForAll NewLocals proc {$ G} {System.showInfo {G get(name $)}#' '#{G get(type $)}#' '#{G get(procId $)}#' ' } end }
             ArrayFills = {List.map NewLocals
                                     fun {$ I}
                                        if {{I get(ref $)} get(type $)}==localised then
@@ -146,10 +146,10 @@ define
                                     end }
             OpCodes:={List.append @OpCodes ArrayFills}
 
-            {System.showInfo {Sym get(name $)}#' Opcode is:'}
-            {ForAll @OpCodes Show}
-            {System.showInfo 'End Procedure '#{Sym get(name $)} }
-            {Show '================================================================================'}
+            %{System.showInfo {Sym get(name $)}#' Opcode is:'}
+            %{ForAll @OpCodes Show}
+            %{System.showInfo 'End Procedure '#{Sym get(name $)} }
+            %{Show '================================================================================'}
 
             @OpCodes
 
@@ -733,8 +733,8 @@ define
                   if {Sym get(yindex $)}==nil then
                      {Sym set(yindex @Counter)}
                      Counter:=@Counter+1
-                     {Show yAssigned}
-                     {DumpAST.dumpAST X _}
+                     %{Show yAssigned}
+                     %{DumpAST.dumpAST X _}
                   end
                else
                   {DefaultPassNoParams X YAssigner _}
@@ -746,22 +746,22 @@ define
          @Counter
       end
    in
-      {Show 'Will assign Ys'}
+      %{Show 'Will assign Ys'}
       YCounter={YAssigner Args}
-      {Show 'Done Assigning Y'}
+      %{Show 'Done Assigning Y'}
       if YCounter>0 then
          % Use List.forAllInd
          {For 0 YCounter-1 1
             proc {$ I}
-            {Show I}
-            {Show {Nth Args I+1}}
+            %{Show I}
+            %{Show {Nth Args I+1}}
               Prefix:={List.append @Prefix [move(x(I) y({{Nth Args I+1}.1 get(yindex $)}) )]}
             end}
       end
-      {Show 'Assigned Ys:'#YCounter}
+      %{Show 'Assigned Ys:'#YCounter}
       OpCodes := {List.append @OpCodes {CodeGen AST params(prefix:@Prefix procassemble:true currentIndex:{NewCell YCounter} )}}
-      {Show 'CodeArea for '#PrintName#'built with this code:'}
-      {ForAll @OpCodes Show}
+      %{Show 'CodeArea for '#PrintName#'built with this code:'}
+      %{ForAll @OpCodes Show}
       {AssembleAST Arity @OpCodes PrintName DebugData Switches ?CodeArea ?VS}
    end
 
