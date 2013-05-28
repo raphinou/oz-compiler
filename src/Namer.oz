@@ -1,7 +1,8 @@
 functor
    import
-      System(showInfo show:Show)
+      System %(showInfo show:Show)
       Module
+      Boot_Time at 'x-oz://boot/Time'
       OS
       DumpAST at '../lib/DumpAST.ozf'
       Helpers( symbol:Symbol
@@ -25,7 +26,7 @@ functor
       Namer
    define
 
-   AugmentedBase={AdjoinAt {AdjoinAt {AdjoinAt Base 'Show' Show} 'OS' OS} 'Module' Module}
+   AugmentedBase={AdjoinAt {AdjoinAt {AdjoinAt {AdjoinAt {AdjoinAt Base 'Show' System.show} 'OS' OS} 'Module' Module} 'System' System} 'Boot_Time' Boot_Time}
 
 
    %################
@@ -869,9 +870,9 @@ functor
       %{Show 'AST received by Namer:'}
       %{DumpAST.dumpAST AST}
       %{Show '--------------------------------------------------------------------------------'}
-      {Show '-------'}
-      {Show 'Namer'}
-      {Show '-------'}
+      {System.show '-------'}
+      {System.show 'Namer'}
+      {System.show '-------'}
       {NamerForBody AST InitialParams}
    end
 
