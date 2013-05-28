@@ -138,7 +138,7 @@ The AST transformations do exploit the new virtual machine's capabilities as wel
 A flexible and easy to use test infrastructure has been put in place. This test infrastructure has been used
 to write 439 tests scripts, performing more than 1000 output checks.
 An Oz script runner is also included, compiling the Oz source file and outputting AST as each transformation step for easy debug.
-All these functionalities are easily usable thanks to a Makefile. 
+All these functionalities are easily usable thanks to a Makefile, as detailed in the README file included in Appendix~\ref{appendix:readme}. 
 
 \chapter{Infrastructure}
 \section{Virtual Machine}
@@ -323,8 +323,16 @@ It is the assembler's \lstinline!ResolveOverload! function that will pick the
 available specialised operator and possibly switch the arguments order.
 
 Two consecutive \lstinline!move! operations on registers X and/or Y registers are transformed by the assembler in
-a \lstinline!moveMove! operation, transforming \lstinline!move(s1 d1) move(s2 d2)! into
-\lstinline!moveMove(s1 d1 s2 d2)!. Four different situations can occur as both
+a \lstinline!moveMove! operation, transforming 
+\begin{lstlisting}
+   move(s1 d1) move(s2 d2)
+\end{lstlisting}
+ into
+ \begin{lstlisting}
+   moveMove(s1 d1 s2 d2)
+ \end{lstlisting}
+
+Four different situations can occur as both
 source and destination registers can be of type X or Y resulting in 4
 specialised operations \lstinline!moveMoveXYXY!, \lstinline!moveMoveYXYX!, \lstinline!moveMoveYXXY!,
 \lstinline!moveMoveXYYX!.
@@ -363,7 +371,10 @@ Conditional jumps will look at the value in a X register, and if this value is
 not true, it will jump to the code at the label it was given. That instruction
 also takes a label locating error handling code. Here is an example of
 conditional jump that will look at the value in X register 0:
-\lstinline!condBranch(x(0) elseLabel errorLabel)|!. If the value in x(0) is
+\begin{lstlisting}
+   condBranch(x(0) elseLabel errorLabel)
+\end{lstlisting}
+If the value in x(0) is
 true, it continues execution. If it is false it jumps to the position in the
 code identified by the label \lstinline!elseLabel!. If an error occurs in the
 test, it jumps to the label \lstinline!errorLabel!. This is illustrated in Figure~\ref{fig:target:condBranch}.
@@ -443,8 +454,14 @@ lstinline!callBuiltinX! where X is one of \lstinline!0 1 2 3 4 5 N!.
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
 A record of arity Arity, with NumberOfFeatures features is unified with register
 DestinationReg of type X, Y, G or K with this instruction:
-\lstinline!createRecordUnify(k(Arity) NumberOfFeatures DestinationReg)!. which has to be followed by instructions to fill the features with their respective values:
-\lstinline!arrayFill(Reg)! where Reg is the register corresponding to the feature's value.
+\begin{lstlisting}
+   createRecordUnify(k(Arity) NumberOfFeatures DestinationReg)
+\end{lstlisting}
+which has to be followed by instructions to fill the features with their respective values:
+\begin{lstlisting}
+   arrayFill(Reg)
+\end{lstlisting}
+ where Reg is the register corresponding to the feature's value.
 The arity is supported by the virtual machine and includes the label and features without their respective values.
 
 There are two special cases of records that are handled specifically by the virtual machine.
@@ -701,7 +718,10 @@ Here is an example of three unifications and the corresponding AST:\\
 
 \subsection{Local}\label{sec:input:flocal}
 \lstinline!local..in..end! are represented in the AST by tuples of the form
-\lstinline!fLocal(Declarations Body Pos)!, where \lstinline!Declarations! and
+\begin{lstlisting}
+   fLocal(Declarations Body Pos)
+\end{lstlisting}
+where \lstinline!Declarations! and
 \lstinline!Body! are both AST subtrees. 
 Figure~\ref{fig:input:decls_oz} shows Oz code declaring the three variables
 \lstinline!A!, \lstinline!B!
@@ -739,7 +759,10 @@ fLocal(
 
 \subsection{Procedures}\label{sec:input:procedures}
 \subsubsection{Definitions}
-Procedures are found in records of the form \lstinline!fProc(Name Arguments Body Flags Pos)!, 
+Procedures are found in records of the form 
+\begin{lstlisting}
+   fProc(Name Arguments Body Flags Pos) 
+\end{lstlisting}
 where the \lstinline!Arguments! and \lstinline!Body! features are AST subtrees. 
 %FIXME: what can be Name? fVar, $. Other possibilities?
 Figure~\ref{fig:input:oz_procedure_def} and Figure~\ref{fig:input:ast_procedure_def} show a small oz procedure definition and its resulting AST.
@@ -812,7 +835,10 @@ The calls of functions are identical to the call of procedures as they are found
 %FIXME: title Operators?
 \subsection{Arithmetic operators}\label{sec:input:operators}
 Arithmetic operators are parsed as records of the form
-\lstinline!fOpApply(Operator Args Pos)!, whose first feature is the operator to
+\begin{lstlisting}
+   fOpApply(Operator Args Pos)
+\end{lstlisting}
+ whose first feature is the operator to
 apply, its second feature being the list of operands. It also has a position
 record as third feature. For example
 \lstinline!5+2! is parsed as:
@@ -833,11 +859,11 @@ marker. This marker is found in the AST as a record \lstinline!fDollar()! with a
 feature: it position.
 The statements that can be transformed in expressions are
 \begin{itemize}
-  \item Function, Procedure, Functor and Class declarations. For example
+  \item Function, Procedure, Functor and Class declarations. \\For example
     \lstinline[mathescape]!X=fun{$\$$ A B} .. end!
   \item In the parameters list of a call to a procedure, in the location of an
     expression. For example \lstinline[mathescape]!{Foo A..$\$$..N}!
-  \item In a pattern position of a parameter of a call. For example
+  \item In a pattern position of a parameter of a call. \\For example
     \lstinline[mathescape]!{Foo bar(A..$\$$..N) baz}!
 \end{itemize}
 % FIXME: formalise pattern position. See with Sebastien
@@ -926,7 +952,11 @@ The \lstinline!if..then..else! construct is put in records:
 The else part is optional in Oz. In this case, ElseCode is a record \lstinline!fNoElse(pos)! in the AST.
 
 \subsection{Short-circuit boolean combinators}\label{sec:input:booleancombinations}
-The boolean conjunction operation in Oz represented by the keyword \lstinline!andthen!. Such a conjunction is present in the AST in the form of a record \lstinline!fAndThen(First Second)!, where first and second must be expressions with a boolean value.
+The boolean conjunction operation in Oz represented by the keyword \lstinline!andthen!. Such a conjunction is present in the AST in the form of a record 
+\begin{lstlisting}
+   fAndThen(First Second)
+\end{lstlisting}
+where first and second must be expressions with a boolean value.
 The boolean disjunction operation is done thanks to the keyword \lstinline!orelse!, present in the AST in the form of a record \lstinline!fOrElse(First Second)!.
 
 \subsection{Case Instruction and Pattern Matching}\label{sec:input:patternmatching}
@@ -942,7 +972,10 @@ The Case instruction in Oz is of the following form where optional parts are enc
      ElseCode]]
    end
 \end{lstlisting}
-This ends up in the AST in a record of the form \lstinline!fCase(Value Clauses ElseCode pos)!.
+This ends up in the AST in a record of the form 
+\begin{lstlisting}
+   fCase(Value Clauses ElseCode pos)
+\end{lstlisting}
 \lstinline!Clauses! is a list of records each representing one clause and containing the clause' pattern, guards and code. We will analyse these further below.
 The else part of the instruction is optional. If no else is provided, then ElseCode in the AST is a record \lstinline!fNoElse(pos)!.
 
@@ -983,7 +1016,10 @@ and its AST representation:
 Records and open records can of course be nested.
 
 A clause with guards is present in the AST in the form of a record
-\lstinline!fSideCondition(Pattern Decls Guards Pos)!, where \lstinline!Pattern!
+\begin{lstlisting}
+   fSideCondition(Pattern Decls Guards Pos)
+\end{lstlisting}
+where \lstinline!Pattern!
 is as above, \lstinline!Decls! is usually skipped
 (\lstinline!fSkip(pos)!)%FIXME: what are decls?? IMPORTANT check with sebastien
 and \lstinline!Guards! is simply the AST of the code of the guard (without the \lstinline!andthen! introducing the guard).
@@ -998,8 +1034,8 @@ Here is an example:
 A=a
 case V
 of rec(A b c) then
-   % matches rec(_ b c), i.e. all records with label rec, second feature value
-   % b, third value c, with A being a new capture variable
+   % matches rec(_ b c), i.e. all records with label rec, second feature 
+   % value b, third value c, with A being a new capture variable
 [] rec(!A b c) then
    % only matches rect(a b c)
 end
@@ -1745,7 +1781,10 @@ Although all passes work exclusively on the AST, the transformations described i
 
 \subsection{Declarations Flattener}\label{sec:arch:declsflattener}
 The Oz language accepts complex instructions in the declaration part of
-\lstinline!local Decls in Body end!. It is thus necessary to decide what variables are declared for each instruction present in the \lstinline!Decls!. 
+\begin{lstlisting}
+   local Decls in Body end
+\end{lstlisting}
+ It is thus necessary to decide what variables are declared for each instruction present in the \lstinline!Decls!. 
 For example, in unifications, only the left hand side variable gets declared,
 and only \lstinline!B! is implicitly declared in the following code snippet:
 \begin{lstlisting}
@@ -1892,11 +1931,18 @@ namer also replaces \lstinline!fEq! tuples of pattern conjunctions by
 \lstinline!fPatMatConjunction! tuples.
 
 Patterns with guards require some additional work. These are present in the AST
-as \lstinline!fSideCondition(Pattern Decls Guards Pos)!. First, a new symbol is
+as 
+\begin{lstlisting}
+   fSideCondition(Pattern Decls Guards Pos)
+\end{lstlisting}
+First, a new symbol is
 introduced and unified with the \lstinline!Guards! expression. The record in the
-AST is replaced by \lstinline!fNamedSideCondition(Pattern Decls GuardsStatement GuardSymbol Pos)! 
+AST is replaced by 
+\begin{lstlisting}
+   fNamedSideCondition(Pattern Decls GuardsStatement GuardSymbol Pos)
+\end{lstlisting}
 where \lstinline!GuardStatement! is the unification of the newly
-introduced symbol \lstinline!GuardSymbol!. The \lstinline!GuardSymbol! is
+introduced symbol \\\lstinline!GuardSymbol!. The \lstinline!GuardSymbol! is
 declared together with capture variables. 
 This transformation cannot be completely represented in Oz code, notably the
 transformation of the guards in statement. It will become clear when looking at
@@ -2163,10 +2209,11 @@ the desugar pass, Section~\ref{sec:arch:desugar:functors}.}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
 These local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
 Notice that \lstinline!NamerForBody! calls \lstinline!NamerForDecls! when a function or procedure is
-defined, and calls \lstinline!NamerForCaptures! for patterns in \lstinline!fCaseClause!s. Here is for
-example the (redacted) code handling a definition in non-declaration part of a
+defined, and calls \lstinline!NamerForCaptures! for patterns in \lstinline!fCaseClause!s. 
+Figure~\ref{fig:namer:ffun} lists the (redacted) code handling a definition in non-declaration part of a
 function with no pattern argument:
 
+\begin{figure}[h]
 \begin{lstlisting}
   %---------------------------------
   [] fFun(Name Args Body Flags Pos) then
@@ -2175,10 +2222,12 @@ function with no pattern argument:
   in
      {Params.env backup()} 
      Res=fFun(
-        % The function's variable has to be declared explicitely in the declaration part.
+        % The function's variable has to be declared explicitely 
+        % in the declaration part.
         % That's why we call NamerForBody on the Name
         {NamerForBody Name Params}
-        % Formal parameters are declarations, that's why we call NameForDecls
+        % Formal parameters are declarations, that's why we 
+        % call NameForDecls
         {List.map Args fun {$ I} {NamerForDecls I Params} end }
         {NamerForBody Body Params}
         Flags
@@ -2187,6 +2236,10 @@ function with no pattern argument:
      {Params.env restore()}
      Res
 \end{lstlisting}
+\caption{Namer transformation of fFun nodes}
+\label{fig:namer:ffun}
+\end{figure}
+
 
 The environment, mapping variable names to their respective symbol, is stored in
 the object available through \lstinline!Params.env!. This object's
@@ -2227,41 +2280,61 @@ only the method labels.
 name the arguments and the body.
 
 Once these functions are defined, the namer's code for classes is quite simple,
-and can be included here to illustrate the different steps:
+and listed in Figure~\ref{fig:namer:classesexample} to illustrate the different steps.
 
+\begin{figure}[H]
 \begin{lstlisting}
-            % Name class, then switch to a new environment when inside the class
-            NamedClass={NamerForBody Var Params}
-            {NewParams.env backup()}
-            % Name method first, so the private methods are available in the methods bodies
-            NamedLabelsMethods={List.map Methods fun {$ I} {NameMethodLabel I NewParams} end }
-            % Name methods arguments and bodies. Remember each method creates
-            % its own environment
-            NewMethods={List.map NamedLabelsMethods fun {$ I} {NameMethod I NewParams} end }
-            % Name attributes, features,..
-            NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
+   % Name class, then switch to a new environment when inside the class
+   NamedClass={NamerForBody Var Params}
+   {NewParams.env backup()}
 
-            % Add initialisation code if needed
-            if @(NewParams.init)\=nil then
-               ClassWithInit={WrapInFAnd {List.append [fClass(NamedClass NewSpecs NewMethods Pos)] @(NewParams.init)}}
-            else
-               ClassWithInit=fClass( NamedClass NewSpecs NewMethods Pos)
-            end
+   % Name method first, so the private methods are available in the 
+   %methods bodies
+   NamedLabelsMethods={List.map Methods 
+                                fun {$ I} 
+                                   {NameMethodLabel I NewParams} 
+                                end }
 
-            % Add declaration code if needed
-            if @(NewParams.decls)\=nil then
-               ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} ClassWithInit Pos)
-            else
-               ClassWithDecls=ClassWithInit
-            end
+   % Name methods arguments and bodies. Remember each method creates
+   % its own environment
+   NewMethods={List.map NamedLabelsMethods 
+                        fun {$ I} 
+                           {NameMethod I NewParams} 
+                        end }
 
-            % Restore previous environment
-            {NewParams.env restore()}
+   % Name attributes, features,..
+   NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
 
-            % Return new AST for class
-            ClassWithDecls
+   % Add initialisation code if needed
+   if @(NewParams.init)\=nil then
+      ClassWithInit={WrapInFAnd 
+                        {List.append 
+                           [fClass(NamedClass NewSpecs NewMethods Pos)] 
+                           @(NewParams.init)}}
+   else
+      ClassWithInit=fClass( NamedClass NewSpecs NewMethods Pos)
+   end
+
+   % Add declaration code if needed
+   if @(NewParams.decls)\=nil then
+      ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} 
+                            ClassWithInit 
+                            Pos)
+   else
+      ClassWithDecls=ClassWithInit
+   end
+
+   % Restore previous environment
+   {NewParams.env restore()}
+
+   % Return new AST for class
+   ClassWithDecls
   
 \end{lstlisting}
+\caption{Namer code for classes}
+\label{fig:namer:classesexample}
+\end{figure}
+
 
 The code traversing \lstinline!catch! patterns makes use of the same
 function used for naming \lstinline!case! clauses, namely
@@ -2545,7 +2618,10 @@ transformation as normal records. Patterns however can only have constant label
 and features.
 \subsubsection{Wildcards}
 Although the programmer is not interested in these values, the compiler will declare and place a new synthetic symbol in each of these locations. In oz code notation, \lstinline!_! is replaced by the expression \lstinline!local NewSymbol in NewSymbol end!.
-Patterns with guards, found in the AST as \lstinline!fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos)! 
+Patterns with guards, found in the AST as 
+\begin{lstlisting}
+   fNamedSideCondition(Pattern Decls Guards GuardSymbol Pos)
+\end{lstlisting}
 have their features handled according their statement/expression character:
 \lstinline!Pattern! is a pattern, \lstinline!Decls! are left as is,
 \lstinline!Guards! is a statement (see the introduction
@@ -2615,11 +2691,15 @@ end
 
 \subsubsection{If then else}
 The condition tested is always an expression.
-The instruction \lstinline!if..then..else..end! can be a statement as in 
-\lstinline!if Cond then {DoTrue} else {DoFalse} end!
-, in which case both code branches are desugared as statement
+The instruction itself can be a statement as in 
+\begin{lstlisting}
+   if Cond then {DoTrue} else {DoFalse} end
+\end{lstlisting}
+in which case both code branches are desugared as statement
 or an expression as in
-\lstinline!X=if Y>Z then bigger else smallerOrEqual end!
+\begin{lstlisting}
+   X=if Y>Z then bigger else smallerOrEqual end
+\end{lstlisting}
 in which case both code branches are desugared as expression.
 A fNoElse record is left as is and will only be useful for the opcode generation function.
 
@@ -2724,7 +2804,9 @@ compiler revolves in desugaring the class definition in a call to
 \lstinline!OoExtensions.'class'!. 
 The AST node \lstinline!fClass(FSym Specs Methods Pos)! gets transformed in 
 \begin{lstlisting}
-   fApply( fConst(OoExtensions.'class' Pos) [ Parents Meths Attrs Feats Props PrintName FSym] Pos)
+   fApply(fConst(OoExtensions.'class' Pos) 
+          [Parents Meths Attrs Feats Props PrintName FSym] 
+          Pos)
 \end{lstlisting}
 
 The \lstinline!Desugar! function just has to correctly build the arguments of
@@ -3102,7 +3184,7 @@ taking three arguments:
     Figure~\ref{fig:desugar:import_record}
     where \lstinline!ModName! is the name
     of the variable identifying this imported module, and
-    \lstinline!AliasesAtomsList! is the list of atoms identifying the imported
+    \lstinline!AliasesAtoms! is the list of atoms identifying the imported
     functions. An example is given in Figure~\ref{fig:desugar:import_record_example}.
     %FIXME: validate the formulation of statis analysis with sebastien
   \item[ExportRecord] is a record with label \lstinline!'export'!. Its features are the
@@ -3119,7 +3201,7 @@ taking three arguments:
 
 \begin{figure}[ht]
 \begin{lstlisting}
-  import(ModName:info(type:AliasesAtomsList 
+  import(ModName:info(type:AliasesAtoms 
                  from:``x-oz://system/''#ModName#``.ozf'')) 
 \end{lstlisting}
 \caption{\lstinline!ImportRecord! argument of \lstinline!NewFunctor! call}
@@ -3264,7 +3346,7 @@ The program itself being a statement, the function Desugar simply call DesugarSt
     in a method's body. It is \lstinline!TransformMethod! that manages all this,
     constructing a list of pair \lstinline!Symbol#InitCode! which is then used
     to inject declaration and initialisation code in the body of the method.
-  \item[TransformAttribute] will set the default value to 
+  \item[TransformAttribute] sets default value  
     \lstinline!{Boot_Name.newUnique 'ooFreeFlag'}! if none was provided.
 \end{description}
 With these functions defined, the code of \lstinline!DesugarClass! is greatly
@@ -3290,8 +3372,15 @@ Considering the elementary character of both sides of the unification, we have t
       \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of fAnd records. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
       \item[Declaration (local)] The value of a \lstinline!local..in..end! in a
         unification is the value of its body. Hence, the unification
-        \lstinline!V = local declarations in body end! is moved in side the
-        \lstinline!local!'s body resulting in the code \lstinline!local declarations in V=body end!. This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
+        \begin{lstlisting}
+          V = local declarations in body end
+        \end{lstlisting}
+        is moved inside the
+        \lstinline!local!'s body resulting in the code 
+        \begin{lstlisting}
+          local declarations in V=body end
+        \end{lstlisting}
+        This clearly requires a recursive call as the body can be a sequence of instructions, which will have to be handled as described previously.
       \item[if then else] The unification is simply moved inside each branch,
         the symbol being unified with the branch body and the resulting code is further unnested. For example, \lstinline!V=if B then Is1 else Is2 end! is transformed in \lstinline!if B then V=Is1 else V=Is2 end!. This needs to be recursively unnested as Is1 and Is2 can be, for example,  sequences of instructions.
       \item[case] Similar to the previous item, the elementary side  unified with the case expression is unified in each
@@ -3301,7 +3390,7 @@ Considering the elementary character of both sides of the unification, we have t
         Section~\ref{sec:arch:unnester:exceptions}.
       \item[Anonymous procedure] The elementary side replaces the fDollar, for
         example
-        \lstinline[mathescape]!P = proc {$\$$ A} Body end! is transformed in
+        \lstinline[mathescape]!P = proc {$\$$ A} Body end! is transformed by replacing \lstinline[mathescape]{$\$$} by \lstinline!P! yielding
         \lstinline[mathescape]!proc {P A} Body end!
     \end{description}
   \item[Both complex] This is unnested by creating a new synthetic symbol, unifying it with the left side then with the right side, and unnesting the resulting code.
@@ -3316,7 +3405,9 @@ a record argument, like in this example:
 \end{lstlisting}
 
 where we suppose that \lstinline!GetAttribute! has the signature 
-\lstinline!fun {GetAttribute Object ?Result}!.
+\begin{lstlisting}
+   fun {GetAttribute Object ?Result}
+\end{lstlisting}
 To handle this case, arguments have to be tested to see if a nesting marker is
 present, and the code needs to descent in the record arguments.
 Once the unified symbol is injected in the arguments list, a recursive call is
@@ -3533,17 +3624,27 @@ The unnesting of the instruction \lstinline!if Cond then Branch1 else Branch2 en
 \begin{itemize}
   \item If \lstinline!Cond! is elementary, the unnesting is done simply by unnesting the two branches.
   \item If \lstinline!Cond! is complex, a new symbol is created and unified with it. This is then followed by the \lstinline!if..then..else! instruction in which the complex condition is replace by the symbol newly introduced:
-    \lstinline!if Cond then Is1 else Is2 end! becomes \lstinline!local S in S=Cond if S then Is1 else Is2 end!.
+    \begin{lstlisting}
+      if Cond then Is1 else Is2 end 
+    \end{lstlisting}
+    becomes 
+    \begin{lstlisting}
+      local 
+         S 
+      in 
+         S=Cond 
+         if S then Is1 else Is2 i
+      end
+    \end{lstlisting}
 \end{itemize}
 Looking at the result of the Desugar pass for the boolean combination example on
 Figure~\ref{fig:desugar:orelse} page \pageref{fig:desugar:orelse}, this code
 \begin{lstlisting}
-if (if A==1 then B==2 else false)
-then
-  true
-else
-  C==3
-end
+   if (if A==1 then B==2 else false) then
+     true
+   else
+     C==3
+   end
 \end{lstlisting}
 
 Will become
@@ -3553,8 +3654,7 @@ local
    Cond
 in
    Cond=(if A==1 then B==2 else false end)
-   if Cond
-   then
+   if Cond then
      true
    else
      C==3
@@ -3567,8 +3667,7 @@ local
    Cond
 in
    if A==1 then Cond=(B==2) else Cond=false end
-   if Cond
-   then
+   if Cond then
      true
    else
      C==3
@@ -3576,8 +3675,8 @@ in
 end
 \end{lstlisting}
 
-There is notation abuse in these last examples, as \lstinline!Cond=(B&=& 2)!
-should have been written \lstinline!{Value.'==' B 2 Cond}! to be exact. This was
+There is notation abuse in these last examples, as \lstinline!Cond=(B==2)!
+should have been written \lstinline!{Value.'==' B 2 Cond}! to be correct. This was
 not done to focus on the transformation at hand.
 
 \subsubsection{Case}
@@ -4192,8 +4291,9 @@ The opcodes generated for this call will be
 Case statements are amongst the most complex instructions to handle in code generation. This is because different pattern types are handled differently. 
 
 
-We'll start by ignoring guards for the moment and look at this code:
+We'll start by ignoring guards for the moment and look at the code in Figure~\ref{fig:clauses}.
 
+\begin{figure}[ht]
 \begin{verbatim}
   case Val
                 -------------------+
@@ -4201,8 +4301,8 @@ We'll start by ignoring guards for the moment and look at this code:
   of Pattern1 then |->1 clause     |
      Body1         |               |
                 ---+               |
-  [] Pattern2 then                 |-> Clauses sequence for Mozart2 VM
-     Body                          |
+  [] Pattern2 then                 |-> Clauses sequence for 
+     Body                          |   Mozart2 VM
   ...                              |
   [] PatternN then                 |
      BodyN                         |
@@ -4212,6 +4312,10 @@ We'll start by ignoring guards for the moment and look at this code:
   end
 
 \end{verbatim}
+\caption{Case clauses sequence}
+\label{fig:clauses}
+\end{figure}
+
 
 The Mozart1 virtual machine allowed the compiler to group in one test instruction subsequent clauses of
 constant patterns (records, integers, atoms, floats,...), but open
@@ -4500,58 +4604,53 @@ of the loop over the clauses:
 included in the invariant as these are only used inside
 each iteration of the loop and reset at the beginning of each clause handling.
 
-With this invariant in place, we can sketch the structure of the code as
-follows:
+With this invariant in place, we can sketch the structure of the code 
+in Figure~\ref{fig:caseloop}.
+\begin{figure}[H]
 \begin{lstlisting}[mathescape]
 {List.forAllInd Clauses proc{$\$$ Ind fCaseClause(Pattern Body)}
    if {IsNewSequence {Label Pattern} @SequenceType} then
-      % close previous sequence, ie update Code with
-      % the sequence' prefix and CodeBuffer
-      % This ensures Code respects the invariant at the end of this iteration
+      % close previous sequence
+      % Ensures Code respects the invariant at the end of this iteration
       % --- code not included ---
 
       % Reset sequence variables, 
-      % This ensures that SequenceType, ThisTestLabel, NextTestLabel respect the 
-      % invariant at the end of this iteration
-      CodeBuffer:=nil
+      % This ensures that SequenceType, ThisTestLabel, NextTestLabel 
+      % respect the invariant at the end of this iteration
+      CodeBuffer:=nil SeqLen:=0
       PatternMatchRecord:='#'()
       SequenceType:={Label Pattern}
-      SeqLen:=0
       ThisTestLabel:=@NextTestLabel
       NextTestLabel:={GenLabel}
    end
+   % Reset clause specific variables 
+   ThisLabel:={GenLabel} UsedSymbols:=nil XIndex={NewCell 0}
 
-  % Reset clause specific variables 
-  ThisLabel:={GenLabel}
-  UsedSymbols:=nil
-  XIndex={NewCell 0}
+   % Build record used in the pattern matching instruction
+   % Ensures PatternMatchRecord respects the invariant at the end 
+   % of this iteration
+   PatternForRecord = {TransformPattern Pattern XIndex UsedSymbols}
+   PatternIndex=@SeqLen+1
+   PatternMatchRecord:={Record.adjoin 
+                          @PatternMatchRecord 
+                          '#'(PatternIndex:PatternForRecord#@ThisLabel)}
 
-  % Build record used in the pattern matching instruction
-  % Ensures PatternMatchRecord respects the invariant at the end of this
-  % iteration
-  PatternForRecord = {TransformPattern Pattern XIndex UsedSymbols}
-  PatternIndex=@SeqLen+1
-  PatternMatchRecord:={Record.adjoin @PatternMatchRecord '#'(PatternIndex:PatternForRecord#@ThisLabel)}
+   % Update CodeBuffer to respect invariant
+   % --- code not included ---
 
-  % Update CodeBuffer to respect invariant
-  % --- code not included ---
-
-  % Restore invariant
-  SeqLen:=@SeqLen+1
-  LastPattern:=Pattern
+   % Restore invariant
+   SeqLen:=@SeqLen+1
+   LastPattern:=Pattern
 end}
-
-% Add last clause, error handling code, the else code and the label identifying
-% the end of the case instruction's code
+% Add last clause, error handling code, the else code and the 
+% label identifying the end of the case instruction's code
 Code:=@Code|
       PrefixOfLastSequence
       @CodeBuffer|
-      %---- error ----
-      lbl(ErrorLabel)|
+      lbl(ErrorLabel)|        %---- error ----
       move(k(errorInCase) x(0))|
       tailCall(k(Exception.raiseError) 1)|
-      % else branch
-      lbl(@NextTestLabel)|
+      lbl(@NextTestLabel)|    %---- else ----
       case Else
       of fNoElse(_) then
          lbl(EndLabel)|nil
@@ -4560,6 +4659,11 @@ Code:=@Code|
          lbl(EndLabel)|nil
       end
 \end{lstlisting}
+\caption{Case loop structure}
+\label{fig:caseloop}
+\end{figure}
+
+
 
 
 \section{Compiling to a file}
@@ -4574,7 +4678,7 @@ It then write the value of \lstinline!Result! to the output file
 \section{Tests}
 \subsection{Helper functions tests}
 Some helper functions are tested specifically by Oz code, checking that the result returned by the function is correct. This is simply done by calling the function in Figure~\ref{fig:helperstestsfunction} with the first argument the function call we want to test, and the expected result as second argument as illustrated in Figure~\ref{fig:helperstestsexample} where the function UnWrapFAnd is tested.
-The only downside to this approach is that helper functions have to be exported for them to be available in the test code..
+The only downside to this approach is that helper functions have to be exported for them to be available in the test code.
 
 \begin{figure}
 \begin{lstlisting}
@@ -4586,8 +4690,8 @@ The only downside to this approach is that helper functions have to be exported 
       {System.printInfo '.'}
    end
 \end{lstlisting}
-\label{fig:helperstestsfunction}
 \caption{HelpersTests function}
+\label{fig:helperstestsfunction}
 \end{figure}
 
 \begin{figure}
@@ -5283,7 +5387,7 @@ checks.
 
 \verbatiminput{test_desc.txt}
 
-\chapter{README}\label{appendix:redame}
+\chapter{README}\label{appendix:readme}
 \verbatiminput{../README}
 \chapter{Performance measures}\label{appendix:performance}
 Here are the measures done on performance of the code generated by the compiler.
