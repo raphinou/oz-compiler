@@ -33,11 +33,13 @@ lib/Run.ozf: src/Run.oz lib/Compile.ozf
 lib/Compilec.ozf: src/Compilec.oz lib/Compile.ozf
 	ozc -c src/Compilec.oz -o lib/Compilec.ozf
 compile: lib/Compilec.ozf
-		ozengine lib/Compilec.ozf
+		ozengine lib/Compilec.ozf ${src}
 run: lib/Run.ozf
 	ozengine lib/Run.ozf	
 clean:
 	rm -f lib/* tests/*ozf
 desc:
 	cd tests && ./describe_tests.sh
-.PHONY : clean run tests desc
+report:
+	cd report && pdflatex report.tex
+.PHONY : clean run tests desc report
