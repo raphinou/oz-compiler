@@ -10,6 +10,7 @@ draft.oz
 *.log
 *.toc
 *.aux
+*.out
 vc.tex
 session.vim
 run.oz
