@@ -1,0 +1,43 @@
+Introduction
+------------
+This is a compiler for the Oz language, written in Oz.
+It has been developed for a master thesis.
+It targets the Mozart2 virtual machine.
+
+Prerequisite
+------------
+Using this compiler requires the Mozart2 virtual machine available
+at http://sourceforge.net/projects/mozart-oz/
+
+Directories:
+------------
+/src ------------------------------> all Oz source code
+/tests/definitions ----------------> test definitions, i.e. oz code and expected output
+/tests/results --------------------> output of last test run
+/report/ --------------------------> Latex code of the report
+
+Makefile:
+---------
+A Makefile is located in the root directory, giving access to these commands:
+
+- make tests
+  run all test suite
+
+- make testsfrom from=$num
+  run all tests with order number higher or equal to $num
+
+- make test test=$num
+  run test with order number $num
+
+- make run
+  compile and run Oz code in the file src/run.oz
+  Gives complete debug output
+
+- make desc
+  prints descriptions of all defined tests
+
+- make clean
+  deletes all compiled files
+
+- make report
+  generates the PDF report from Latex sources. Result file is report/report.pdf
