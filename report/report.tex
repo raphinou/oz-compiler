@@ -2344,7 +2344,7 @@ function used for naming \lstinline!case! clauses, namely
 
 \subsection{Desugar}\label{sec:arch:desugar}
 The desugar pass handles the transformation of syntactic sugar code in its canonical form.
-Oz distinguishes two groups of instructions: statements and expressions. An expression is ``syntactic sugar for a sequence of operations that return a value'' . Statements do not return a value.
+Oz distinguishes two groups of instructions: statements and expressions. An expression is ``syntactic sugar for a sequence of operations that return a value'' \cite{CTMCP}. Statements do not return a value.
 The desugar function handles statements and expression differently, and defines two local functions, one for handling expressions, one for handling statements.
 \subsubsection{On statements and expressions}
 %FIXME: Give references: Concepts, Techniques and Models of Computer Programming, p81.
@@ -2352,7 +2352,7 @@ Handling expressions and statements is often very similar, but sometime require 
 
 It is important that a lot of instructions can be used both as expression and as
 statement. Here is an example.
-In Oz, a cell is a mutable storage element which is created with an initial value (\lstinline!C={NewCell 0}!), it can be given a new value (\lstinline!C:=NewValue!) and its value can be read (\lstinline!@C!). There's also an exchange operation \lstinline!{Exchange C Old New}! which ``atomically binds Old with the old content of the cell, and set New to be the new content''.%FIXME: reference pvr book page 415.
+In Oz, a cell is a mutable storage element which is created with an initial value (\lstinline!C={NewCell 0}!), it can be given a new value (\lstinline!C:=NewValue!) and its value can be read (\lstinline!@C!). There's also an exchange operation \lstinline!{Exchange C Old New}! which ``atomically binds Old with the old content of the cell, and set New to be the new content'' \cite{CTMCP}.%FIXME: page 415.
 Assigning a new value to a cell is usually a statement returning no value, but
 when used as the right hand side of an unification, it becomes an expression,
 whose value is the Old value of the cell.
@@ -2940,7 +2940,7 @@ will be desugared in
 \end{lstlisting}
 which is itself desugared.
 
-\lstinline!PrintName! is an atom which is the name of the class, or '' if it is
+\lstinline!PrintName! is an atom which is the name of the class, or \lstinline!''! if it is
 an anonymous class.
 
 This is all the compiler has to do to support classes. From this point, the AST
@@ -3202,7 +3202,7 @@ taking three arguments:
 \begin{figure}[ht]
 \begin{lstlisting}
   import(ModName:info(type:AliasesAtoms 
-                 from:``x-oz://system/''#ModName#``.ozf'')) 
+                 from:"x-oz://system/"#ModName#".ozf")) 
 \end{lstlisting}
 \caption{\lstinline!ImportRecord! argument of \lstinline!NewFunctor! call}
 \label{fig:desugar:import_record}
