@@ -193,7 +193,7 @@ Capturing the global variables at the abstraction level is what provides
 closures: a procedure captures the environment it was defined in.
 The CodeArea is not stored in the abstraction itself, but is referenced from
 it, simply because the same CodeArea can be referenced from multiple
-abstractions. Let's illustrate this by the example in
+abstractions. Let's illustrate this by the example from \cite{CTMCPFigs} in
 Figure~\ref{fig:code_area_sharing}.
 
 % reference: http://www.info.ucl.ac.be/~pvr/bookfigures/fig3_8.oz
@@ -272,7 +272,7 @@ the opcodes available.
 The core of the virtual machine is the loop traversing the list of
 assembler-generated opcodes of the running program. This loop is found in the file
 \lstinline!emulate.cc! of the virtual
-machine\footnote{See
+machine \cite{Moz2vmsrc} \footnote{See
 https://github.com/mozart/mozart2/blob/master/vm/vm/main/emulate.cc\#L303}.
 
 The assembler accepts an Oz list of instructions that are Oz records. This list
@@ -290,7 +290,7 @@ register can be of the type X, Y, G or K. Destination registers can be of the
 type X or Y. As a consequence, \lstinline!move! is actually translated into
 8 specialised operations. The resolution is done by the
 assembler with a function
-\lstinline!ResolveOverload!\footnote{https://github.com/mozart/mozart2/blob/master/lib/compiler/NewAssembler.oz\#L165} 
+\lstinline!ResolveOverload! \cite{Moz2src}\footnote{https://github.com/mozart/mozart2/blob/master/lib/compiler/NewAssembler.oz\#L165} 
 which will actually resolve all overloaded opcodes that will be covered in this section. 
 
 \subsection{Register Operations}\label{sec:intro:opcode:registers}
@@ -643,10 +643,9 @@ If the vm loop encounters a \lstinline!skip! opcode, it does nothing and goes to
 
 \section{Compiler input}\label{section:compilerinput}
 %FIXME: add index for all record labels in the AST
-The compiler takes as input the AST in the form of Oz records, and generates opcodes sent to the assembler. 
+The compiler takes as input the AST in the form of Oz records \cite{AST}, and generates opcodes sent to the assembler. 
 This section will present and describe the records received from the parser and
 their corresponding Oz form.
-\footnote{An authoritative list is available at \\http://www.mozart-oz.org/home/doc/compiler/node7.html\#appendix.syntax} 
 \subsection{Position in source code}
 Most records have the corresponding position in the source code available in
 their last feature, encoded in a record of the form:
@@ -1488,8 +1487,7 @@ end
 Two important steps are distinguished in the life of a functor: it is first
 evaluated, and then it is applied.
 These two steps bring a distinction between compiled and computed functors
-\footnote{A detailed description is available at
-http://www.mozart-oz.org/home/doc/apptut/node6.html}
+\cite{Func}
 
 A computed functor has its name coming from the fact that some of its code is evaluated
 at evaluation time, resulting in a functor that has been computed, in opposition to
@@ -1503,7 +1501,7 @@ Computed functors are supported in Oz with
 \lstinline!require! and \lstinline!prepare!, which define code parts to be evaluated when
 building the functor. This is better illustrated by an example, in
 Figure~\ref{fig:computed_functor}, coming from the online Oz
-documentation\footnote{Also at http://www.mozart-oz.org/home/doc/apptut/node6.html}.
+documentation \cite{Func}.
 
 \begin{figure}[h]
 \begin{lstlisting}
@@ -1757,7 +1755,7 @@ and only \lstinline!B! is implicitly declared in the following code snippet:
       ...
    end
 \end{lstlisting}
-Fortunately, this has been clearly formalised by the Oz implementers and published on the web\footnote{http://www.mozart-oz.org/documentation/notation/node6.html}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
+Fortunately, this has been clearly formalised by the Oz implementers and published on the web \cite{BaseLang}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
 
 \subsection{Namer}\label{sec:arch:namer}
 %FIXME: add fFOR
@@ -1878,10 +1876,9 @@ its own is the environment of the case instruction, not the environment updated
 by the previous clause. 
 %FIXME: add reference and detailed description of secure storage
 
-%FIXME: add CTMCP to bibliography 
 In addition, the \lstinline!fSym! record corresponding to these capture
 variables are themselves stored in an unforgeable secure structure (as
-described in CTMCP Section~3.7.5) which is itself wrapped in an
+described in \cite{CTMCP} Section~3.7.5) which is itself wrapped in an
 \lstinline!fConst!. The reason of this manipulation is to prevent manipulations
 of those symbols by later compiler passes. Now these will be handled as
 constants in all subsequent compiler passes. Another consequence of this is
@@ -2904,7 +2901,7 @@ Desugaring an \lstinline!fTry! node without \lstinline!finally! code is not much
 more complex.  If the try instruction is an expression (resp. statement), the
 body and the clauses' code are desugared as expressions (resp. statements).
 A \lstinline!case! instruction is introduced, using the very same clauses as the
-catch, transforming\footnote{Illustration code from http://www.mozart-oz.org/documentation/notation/node6.html\#label27}. 
+catch, transforming \cite{BaseLang}
 \begin{lstlisting}
   try SE1 
   catch C1 [] ... [] Cn 
@@ -4802,8 +4799,7 @@ code generated by the Mozart1 compiler.
 \chapter{Conclusion}
 \section{Achievements}
 Most of the goals set when this work was started have been reached.
-%FIXME: change CTMCP
-Although the whole Oz language is not supported (see the next section), a vast majority is, as is demonstrated by the fact that all programs extracted from CTMCP compile and run successfully. The code generated by the compiler, although not optimised, is exploiting the capabilities of the new virtual machine, notably in pattern matching.  During the whole development, attention has been paid to produce code easy to understand and fully documented, which should make it easy for new developers to dive into the code.
+Although the whole Oz language is not supported (see the next section), a vast majority is, as is demonstrated by the fact that all programs extracted from \cite{CTMCP} compile and run successfully. The code generated by the compiler, although not optimised, is exploiting the capabilities of the new virtual machine, notably in pattern matching.  During the whole development, attention has been paid to produce code easy to understand and fully documented, which should make it easy for new developers to dive into the code.
 
 \section{Future work}
 
@@ -4899,6 +4895,24 @@ Further limiting the use of cells and striving for a totally functional code-bas
 performance and modularity.
 
 \begin{appendices} 
+
+
+\begin{thebibliography}{1}
+  \bibitem[CTMCP]{CTMCP}  Peter Van Roy and Seif Haridi.  Concepts, Techniques, and Models of Computer Programming. MIT Press, 2004.
+  \bibitem[Moz1.4]{Moz1.4} Mozart Programming System, version 1.4.0 (www.mozart-oz.org).
+  \bibitem[Moz2vm]{Moz2vm} Yves Jaradin and Sébastien Doeraene. Mozart VM 2.0: Design of the New Virtual Machine of Mozart, an Implementation of Oz. 2012.
+  \bibitem[Aho]{Aho} Aho, A. (2007). Compilers : principles, techniques, \& tools. Boston: Pearson/Addison Wesley
+  \bibitem[BaseLang]{BaseLang} Oz - The Base Language (http://www.mozart-oz.org/documentation/notation/node6.html)
+  \bibitem[AST]{AST} Oz - Syntax Tree Format (http://www.mozart-oz.org/home/doc/compiler/node7.html\#appendix.syntax)
+  \bibitem[CTMCPSup]{CTMCPSup} Supplements for ``Concepts, Techniques, and Models of Computer Programming'' (http://www.info.ucl.ac.be/~pvr/ds/mitbook.html)
+  \bibitem[BootComp]{BootComp} Mozart2 BootCompiler by S\'{e}bastien Doeraene (https://github.com/mozart/mozart2-bootcompiler/tree/master)
+  \bibitem[Moz2vmsrc]{Moz2vmsrc} Mozart2 virtual machine (https://github.com/mozart/mozart2-vm)
+  \bibitem[Moz2src]{Moz2src} Mozart2 source code (https://github.com/mozart/mozart2)
+  \bibitem[Func]{Func} More on Oz Functors (http://www.mozart-oz.org/home/doc/apptut/node6.html\#chapter.mof)
+  \bibitem[FuncCode]{FuncCode} Oz Application Development - Functors (http://www.mozart-oz.org/home/doc/apptut/node3.html\#section.development.functors)
+  \bibitem[CTMCPFigs]{CTMCPFigs} Figures of ``Concepts, Techniques, and Models of Computer Programming'' (http://www.info.ucl.ac.be/~pvr/bookfigures/)
+\end{thebibliography}
+
 
 \chapter{Pattern Variables}\label{appendix:patternvariables}
 %FIXME: arrange layout
@@ -5269,7 +5283,8 @@ checks.
 
 \verbatiminput{test_desc.txt}
 
-\end{appendices}
+\chapter{README}\label{appendix:redame}
+\verbatiminput{../README}
 \chapter{Performance measures}\label{appendix:performance}
 Here are the measures done on performance of the code generated by the compiler.
 The column ``New Compiler'' lists timings of the code generated by the compiler
@@ -5682,6 +5697,9 @@ ratio& 1.3& 3.4 & \\
 
 
 
+
+
+\end{appendices}
 \end{document}
 
 %&& vim: textwidth=80& \\& \\
