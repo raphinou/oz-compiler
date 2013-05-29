@@ -156,8 +156,7 @@ The Mozart2 virtual machine works with four types of registers. The description 
   \item[X registers]X registers are work registers that should not be used to permanently
     store values as their content is undefined after a call. They are thread-specific and caller-saved, meaning it is the
     caller's responsibility to save the value of a X register if it will be
-    reused.  X registers are for example used to pass the arguments to calls. However, the values in these registers are undefined after the call so they should be considered as lost.
-    %FIXME: combien de registres X disponibles,alloues?
+    reused.  X registers are for example used to pass the arguments to calls. However, the values in these registers are undefined after the call so they should be considered as lost. X registers are currently indexed by an unsigned 16 bit integer, but this might change in the future to be indexed by a signed integer.
   \item[Y registers]are specific to the activation frame, and are used as locally persisting registers. They all have to be initialised at once at the start of an abstraction's code, before their use, which requires to know how many Y registers are needed.
   \item[G registers] are holding global variables, i.e. variables that are
     accessed by the abstraction, but that are not locally declared. They are
@@ -675,7 +674,6 @@ If the vm loop encounters a \lstinline!skip! opcode, it does nothing and goes to
 
 
 \section{Compiler input}\label{section:compilerinput}
-%FIXME: add index for all record labels in the AST
 The compiler takes as input the AST in the form of Oz records \cite{AST}, and generates opcodes sent to the assembler. 
 This section will present and describe the records received from the parser and
 their corresponding Oz form.
@@ -780,7 +778,6 @@ Procedures are found in records of the form
    fProc(Name Arguments Body Flags Pos) 
 \end{lstlisting}
 where the \lstinline!Arguments! and \lstinline!Body! features are AST subtrees. 
-%FIXME: what can be Name? fVar, $. Other possibilities?
 Figure~\ref{fig:input:oz_procedure_def} and Figure~\ref{fig:input:ast_procedure_def} show a small oz procedure definition and its resulting AST.
 \begin{figure}[ht]
 \begin{lstlisting}
@@ -869,18 +866,19 @@ record as third feature. For example
 \subsection{Nesting marker \$}\label{sec:input:nestingmarker}
 In Oz, some statements can be transformed in expressions by the use of the
 \lstinline[mathescape]!$\$$!
-marker. This marker is found in the AST as a record \lstinline!fDollar()! with a unique
-feature: it position.
+marker. This marker is found in the AST as a tuple \lstinline!fDollar()! with a unique
+feature: its position.
 The statements that can be transformed in expressions are
 \begin{itemize}
   \item Function, Procedure, Functor and Class declarations. \\For example
     \lstinline[mathescape]!X=fun{$\$$ A B} .. end!
-  \item In the parameters list of a call to a procedure, in the location of an
-    expression. For example \lstinline[mathescape]!{Foo A..$\$$..N}!
-  \item In a pattern position of a parameter of a call. \\For example
-    \lstinline[mathescape]!{Foo bar(A..$\$$..N) baz}!
+  \item A call to a procedure having the nested procedure in one of the pattern positions of its arguments.
 \end{itemize}
-% FIXME: formalise pattern position. See with Sebastien
+The pattern positions \lstinline!PP! of an argument being the union of 
+\begin{itemize}
+  \item the argument itself
+  \item if it is a record of the form \lstinline!l(f1:v1 ... fn:vn)!, $PP(v1) \cup ... \cup PP(vn)$.
+\end{itemize}
 
 \subsection{Cells}\label{sec:input:cells}
 \subsubsection{Assignation}
@@ -1030,11 +1028,25 @@ A clause with guards is present in the AST in the form of a tuple
    fSideCondition(Pattern Decls Guards Pos)
 \end{lstlisting}
 where \lstinline!Pattern!
-is as above, \lstinline!Decls! is usually skipped
-(\lstinline!fSkip(pos)!)%FIXME: what are decls?? IMPORTANT check with sebastien
+is as above,
 and \lstinline!Guards! is simply the AST of the code of the guard (without the \lstinline!andthen! introducing the guard).
 \lstinline!Guards! must be an expression with a boolean value, possibly using
 the short-circuit boolean combinators of section \ref{sec:input:booleancombinations}.
+
+\lstinline!Decls! is the declarations introduced by the guards, as the variable \lstinline!X! in the code of Figure~\ref{fig:guardsdecls}.
+Where there are no declarations, the value is \lstinline!fSkip(pos)!
+
+\begin{figure}[h]
+\begin{lstlisting}
+   case Foo
+   of bar(F) andthen X = F+4 in X > 0 then 
+      {Show X}
+   end
+\end{lstlisting}
+\caption{Guards declarations}
+\label{fig:guardsdecls}
+\end{figure}
+
 
 Variables can also be used in patterns for their value, and not as a new capture
 declaration. This is done by prefixing the variable with an exclamation mark.
@@ -2640,7 +2652,7 @@ in the AST only records with constant label and features.
 \end{lstlisting}
 
 We end up with an AST that only contains records with constant label and features: only the values are not constants.
-%FIXME: why do this transformation? Check with sebastien
+This is required because there is no opcode capable of handling a record with non-constant arity.
 
 \subsubsection{Pattern Matching}
 Records and open records present in a pattern undergo the same desugar
