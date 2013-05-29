@@ -280,7 +280,7 @@ assembler-generated opcodes of the running program. This loop is found in the fi
 machine \cite{Moz2vmsrc} \footnote{See
 https://github.com/mozart/mozart2/blob/master/vm/vm/main/emulate.cc\#L303}.
 
-The assembler accepts an Oz list of instructions that are Oz records. This list
+The assembler accepts an Oz list of instructions that are Oz tuples. This list
 of opcodes is actually further transformed by
 the assembler before it gets its definitive form and is fed to the virtual
 machine.                                             
@@ -367,7 +367,7 @@ first register is respectively X or Y.
 
 
 \subsection{Jumps}\label{sec:opcode:jumps}
-Code positions can be identified by labels, which need to be atoms or names. A label \lstinline!L! will appear in the code in a record \lstinline!lbl(L)!. 
+Code positions can be identified by labels, which need to be atoms or names. A label \lstinline!L! will appear in the code in a tuple \lstinline!lbl(L)!. 
 Labels are required for jumps in the code. 
 Jumps will move the execution to the label they have as argument. For example \lstinline!branch(endLabel)! will jump to the position in the code identified by the label \lstinline!endLabel!.
 
@@ -454,6 +454,19 @@ lstinline!callBuiltinX! where X is one of \lstinline!0 1 2 3 4 5 N!.
 
 
 \subsection{Records}\label{sec:opcode:records}
+Without being exhaustive, here is a reminder of the record concept in Oz. 
+
+A record is defined by \lstinline!Label(F1:V1 F2:V2)! where the label and features
+(\lstinline[mathescape]!$F_i$!) can be an atom or a variable, and the values
+(\lstinline[mathescape]!$V_i$!) can in addition to this be the result of a function call. Features can be left out, in which case they are implicitly assigned increasing values from 1.
+
+The arity of a record is constituted by its label and features.
+A tuple is a record whose features are consecutive integers starting from 1. 
+In an abuse of language and only when no confusion is possible, we will
+sometime refer to a feature's value simply as ``feature''. This simplifies the
+text without adding confusion, especially in the case of tuples where features
+are known to be numeric.
+
 Records, tuples and cons are directly supported by the virtual machine, handling each of these particularly to ensure performance and efficiency.
 A record of arity Arity, with NumberOfFeatures features is unified with register
 DestinationReg of type X, Y, G or K with this instruction:
@@ -878,19 +891,15 @@ The value stored in a cell can be access with the \lstinline!@! operator, as is
 \lstinline!@Cell!, which results in this tuple in the AST: 
 \lstinline!fAt(Cell Pos)!
 \subsection{Records}\label{sec:input:records}
-Without being exhaustive, here is a reminder of the record syntax in Oz code. A
-record is refined by \lstinline!Label(F1:V1 F2:V2)! where the label and features
-(\lstinline[mathescape]!$F_i$!) can be an atom or a variable, and the values
-(\lstinline[mathescape]!$V_i$!) can in addition to this be the result of a function call. Features can be left out, in which case they are implicitly assigned increasing values from 1.
 
 Records are present in the AST as tuple with label \lstinline!fRecord!. Its
-label is the first feature, and the second feature is the list of feature/value
-pairs. If no feature was specified, the entry in the list is simply the value.
-If a feature was specified, the entry in the list is a record fColon, with the
+label is the first feature, and the second feature is the list of feature-value
+pairs. If no explicit feature was specified, the entry in the list is simply the value.
+If an explicit feature was specified, the entry in the list is a tuple \lstinline!fColon!, with the
 first feature being the feature and second feature being the value. All this
 will become much clearer with the following examples.
 
-Here is the AST corresponding to the record definition \lstinline!rec(f1:v1 f2:v2)!. We see that the label (rec) is an atom located in an fAtom record. The pairs of features and their respective values are wrapped in fColon.
+Here is the AST corresponding to the record definition \lstinline!rec(f1:v1 f2:v2)!. We see that the label (rec) is an atom located in an \lstinline!fAtom! tuple. The pairs of features and their respective values are wrapped in fColon.
 
 \begin{lstlisting}
    fRecord(
@@ -918,14 +927,14 @@ When the feature is not explicitly given, the item in the list of features and t
 
 
 \subsection{Wildcards}\label{sec:input:wildcard}
-Oz syntax allows to put a wildcard \lstinline!_! in the location of a value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a record \lstinline!fWildcard(Pos)!.
+Oz syntax allows to put a wildcard \lstinline!_! in the location of a value we want to ignore, for example in calls and records pattern matching. These markers are present in the AST in the form of a tuple \lstinline!fWildcard(Pos)!.
 Ignoring the value returned by a function is thus written \lstinline!_={F N}!. 
 This allows the user to not declare variables he wouldn't use anyway, which would in addition raise a warning about a variable used only once\ldots
 
 Pattern matching is covered extensively in Section \ref{sec:input:patternmatching}.
 
 \subsection{Threads}
-Thread instructions are present in the AST in the form of records with label fThread, and with two features: the body of the thread, and its position in the source code:
+Thread instructions are present in the AST in the form of tuples with label \lstinline!fThread!, and with two features: the body of the thread, and its position in the source code:
 \begin{lstlisting}
    thread Body end
 \end{lstlisting}
@@ -941,24 +950,24 @@ Oz enables the programmer to protect a critical section with a lock previously c
    end
 \end{lstlisting}
 
-This code results in a fLockThen record in the AST, with 3 features: the lock L,
+This code results in a tuple \lstinline!fLockThen! in the AST, with 3 features: the lock L,
 the body of the critical section, and the position in the code:
 \lstinline!fLock(L Body Pos)!.
 
 \subsection{If then else}
-The \lstinline!if..then..else! construct is put in records:
+The \lstinline!if..then..else! construct is put in a tuple:
 \begin{lstlisting}
    fBoolCase( Condition ThenCode ElseCode)
 \end{lstlisting}
-The else part is optional in Oz. In this case, ElseCode is a record \lstinline!fNoElse(pos)! in the AST.
+The else part is optional in Oz. In this case, ElseCode is a tuple \lstinline!fNoElse(pos)! in the AST.
 
 \subsection{Short-circuit boolean combinators}\label{sec:input:booleancombinations}
-The boolean conjunction operation in Oz represented by the keyword \lstinline!andthen!. Such a conjunction is present in the AST in the form of a record 
+The boolean conjunction operation in Oz represented by the keyword \lstinline!andthen!. Such a conjunction is present in the AST in the form of a tuple 
 \begin{lstlisting}
    fAndThen(First Second)
 \end{lstlisting}
 where first and second must be expressions with a boolean value.
-The boolean disjunction operation is done thanks to the keyword \lstinline!orelse!, present in the AST in the form of a record \lstinline!fOrElse(First Second)!.
+The boolean disjunction operation is done thanks to the keyword \lstinline!orelse!, present in the AST in the form of a tuple \lstinline!fOrElse(First Second)!.
 
 \subsection{Case Instruction and Pattern Matching}\label{sec:input:patternmatching}
 The Case instruction in Oz is of the following form where optional parts are enclosed in double square brackets ([[ ]]).
@@ -973,14 +982,14 @@ The Case instruction in Oz is of the following form where optional parts are enc
      ElseCode]]
    end
 \end{lstlisting}
-This ends up in the AST in a record of the form 
+This ends up in the AST in a tuple of the form 
 \begin{lstlisting}
    fCase(Value Clauses ElseCode pos)
 \end{lstlisting}
-\lstinline!Clauses! is a list of records each representing one clause and containing the clause' pattern, guards and code. We will analyse these further below.
-The else part of the instruction is optional. If no else is provided, then ElseCode in the AST is a record \lstinline!fNoElse(pos)!.
+\lstinline!Clauses! is a list of tuples each representing one clause and containing the clause' pattern, guards and code. We will analyse these further below.
+The else part of the instruction is optional. If no else is provided, then ElseCode in the AST is a tuple \lstinline!fNoElse(pos)!.
 
-A clause with no guards is present in the AST in the form of a record \lstinline!fCaseClause(Pattern Body)!. \lstinline!Pattern! can be a constant value (integer, string, record, \ldots), present in the AST as described earlier. It can also be a record where a feature value is not a constant but a variable (in a \lstinline!fVar(Name pos)! record as described in section \ref{sec:input:identifiers}). In case of a match of the constant feature values in the pattern, this declares said variable and assigns the value of the corresponding feature in the value the pattern is tested against. Here is an example:
+A clause with no guards is present in the AST in the form of a tuple \lstinline!fCaseClause(Pattern Body)!. \lstinline!Pattern! can be a constant value (integer, string, record, \ldots), present in the AST as described earlier. It can also be a record where a feature's value is not a constant but a variable (in a \lstinline!fVar(Name pos)! record as described in section \ref{sec:input:identifiers}). In case of a match of the constant feature values in the pattern, this declares said variable and assigns the value of the corresponding feature in the value the pattern is tested against. Here is an example:
 \begin{lstlisting}
   R=lab(a b c d)
   case R
@@ -1016,7 +1025,7 @@ and its AST representation:
 
 Records and open records can of course be nested.
 
-A clause with guards is present in the AST in the form of a record
+A clause with guards is present in the AST in the form of a tuple
 \begin{lstlisting}
    fSideCondition(Pattern Decls Guards Pos)
 \end{lstlisting}
@@ -1058,7 +1067,7 @@ illustrated by an example:
 \end{lstlisting}
 
 In the clause'code, the variable \lstinline!I! will have the value of the inner record.
-These pattern conjunctions are present in the AST in \lstinline!fEq! record just 
+These pattern conjunctions are present in the AST in \lstinline!fEq! tuples just 
 like unification instructions.
 Note that just like unifications (and unlike \lstinline!local..in..end!), the variable implicitly declared can be at the
 left as well as at the right side of the equal sign. So the pattern
@@ -1085,54 +1094,53 @@ which results in this AST:
    fClass(
       fVar('C' pos )
       nil
-      |(
-         fMeth(
-            fAtom(init pos )
-            fSkip(pos )
-            pos)
-         |(
-            fMeth(
-               fRecord(
-                  fAtom(hello pos )
-                  |(
-                     fMethArg(
-                        fVar('A1' pos )
-                        fNoDefault)
-                     nil))
-               fAnd(
-                  fApply(
-                     fVar('Show' pos )
-                     |(
-                        fAtom(hello pos )
-                        nil)
-                     pos)
-                  fApply(
-                     fVar('Show' pos )
-                     |(
-                        fVar('A1' pos )
-                        nil)
-                     pos))
-               pos)
-            nil))
+      [
+        fMeth(
+           fAtom(init pos )
+           fSkip(pos )
+           pos)
+        fMeth(
+           fRecord(
+              fAtom(hello pos )
+              [
+                fMethArg(
+                   fVar('A1' pos )
+                   fNoDefault)
+              ])
+           fAnd(
+              fApply(
+                 fVar('Show' pos )
+                 [
+                    fAtom(hello pos )
+                 ]
+                 pos)
+              fApply(
+                 fVar('Show' pos )
+                 [
+                    fVar('A1' pos )
+                 ]
+                 pos))
+           pos)
+       ]
       pos)
 \end{lstlisting}
 
 Class definitions are found in 
 \lstinline!fClass(ClassVar SpecsList MethodsList Pos)!.
-A method is found in records \lstinline!fMeth(Signature Body Pos)!.
+A method is found in a tuple \lstinline!fMeth(Signature Body Pos)!.
 For methods without argument, \lstinline!Signature! is simply the method name.
 In the example, this is illustrated by the \lstinline!init! method.
-For methods with arguments, \lstinline!Signature! is the AST of a record which label is the method name, and the
+For methods with arguments, \lstinline!Signature! is the AST of a record whose label is the method name, and the
 values in the record are the method arguments found in 
 \lstinline!fMethArg(Var DefaultValue)!, where \lstinline!DefaultValue! is
 \lstinline!fNoDefault! if none was provided.
 This is illustrated by the method \lstinline!hello(A1)!.
 
 The class of this example had no feature, attribute, parent or property defined, hence the empty
-list as second value in the record.
+list as value of the second feature.
 Both attribute and features are placed in this list. Attributes are placed in
-\lstinline!fAttr(AttrsList)! records and features are placed in
-\lstinline!fFeat(FeatsList)! records. Both these records have one feature which
+\lstinline!fAttr(AttrsList)! tuples and features are placed in
+\lstinline!fFeat(FeatsList)! tuples. Both these tuples have one feature whose
 value is a list. Each attribute and feature corresponds to one item in its
 respective list. If the attribute or feature has a default value, its
 corresponding item is a record with label \lstinline!'#'! and two values: the
@@ -1174,7 +1182,7 @@ will have its list of attributes and features looking like this:
 The \lstinline!count! attribute is placed in a '\#' record, but not
 the \lstinline!state! attribute.
 All attributes are placed in one \lstinline!fAttr!
-record, and all features in one \lstinline!fFeat! record.
+tuple, and all features in one \lstinline!fFeat! tuple.
 
 This list also contains more information: the parents of the class, as well as
 the properties of the class. 
@@ -1196,7 +1204,7 @@ and this will result in this element in the list
 \end{lstlisting}
 
 The properties of a class are also present in that list, under \lstinline!fProp!
-records. A class having the locking property would have this \lstinline!fProp! record:
+tuples. A class having the locking property would have this \lstinline!fProp! tuple:
 
 \begin{lstlisting}
            fProp(
@@ -1337,12 +1345,12 @@ The AST of the first \lstinline!for! example is:
       pos)
 \end{lstlisting}
 
-The first value in the \lstinline!fFor! record is the list of patterns, one
-for each list. Each item of this list is a \lstinline!forPattern! record, with
+The first value in the \lstinline!fFor! tuple is the list of patterns, one
+for each list. Each item of this list is a \lstinline!forPattern! tuple, with
 its first value being the variable that will be available in the loop, and the
-second value an \lstinline!fGeneratorList! record referencing the list over which to
+second value an \lstinline!fGeneratorList! tuple referencing the list over which to
 iterate.
-The second value in the \lstinline!fFor! record is the code to be executed for
+The second value in the \lstinline!fFor! tuple is the code to be executed for
 each element of the list.
 
 \subsubsection{Iterating over ranges}
@@ -1373,8 +1381,8 @@ with a step of 2, resulting the execution of the body of the loop for integers 1
 \end{lstlisting}
 
 The AST is very similar to the first loop form, only the
-\lstinline!fGeneratorList! record is replaced by a \lstinline!forGeneratorInt!
-record holding the specification of the range and step to use.
+\lstinline!fGeneratorList! tuple is replaced by a \lstinline!forGeneratorInt!
+tuple holding the specification of the range and step to use.
 
 \subsubsection{C-style for loops}
 Iterating over integers from 1 to 5 with a step of 2 can also be written in the C-style for loop:
@@ -1420,7 +1428,7 @@ fFOR(
   
 \end{lstlisting}
 
-The notable difference is the generator record now being
+The notable difference is the generator tuple now being
 \lstinline!forGeneratorC! holding the three expressions.
 
 \subsection{Exceptions}\label{sec:input:exceptions}
@@ -1469,13 +1477,13 @@ It results in this AST:
 \end{lstlisting}
 
 which exactly mirrors the Oz code: \lstinline!fTry! holds the AST of the body,
-which is code possibly throwing an exception, the \lstinline!fCatch! record containing the list of
+which is code possibly throwing an exception, the \lstinline!fCatch! tuple containing the list of
 clauses, and the \lstinline!finally! code. The \lstinline!finally! may be left
-out of the Oz code, in which case \lstinline!FinalCode! is the record
+out of the Oz code, in which case \lstinline!FinalCode! is the tuple
 \lstinline!fNoFinally!.
 Clauses of a catch are present in the AST in the same form as clauses of a case
 instruction (see Section \ref{sec:input:patternmatching}), i.e. a
-\lstinline!fCaseClause! record holding the pattern and the code to execute if
+\lstinline!fCaseClause! tuple holding the pattern and the code to execute if
 the pattern matches. This similarity will be exploited by the compiler, notably
 in the namer, which is the next transformation to be applied to an
 \lstinline!fTry! node (see Section \ref{sec:arch:namer:exceptions}).
@@ -1577,7 +1585,7 @@ The second value is a list containing all \lstinline!import!,
 \lstinline!require!, \lstinline!prepare!, \lstinline!define! and
 \lstinline!export! information. 
 
-We'll illustrate these records by using the example code in
+We will illustrate the explanations by using the example code in
 Figure~\ref{fig:functor_example_code}.
 \begin{figure}[ht]
 \begin{lstlisting}
@@ -1612,7 +1620,7 @@ The \lstinline!Id! is simply the variable defined for the \lstinline!import!.
 \lstinline!Key!.
 \lstinline!Location! is either \lstinline!fNoImportAt! if no location was given,
 of \lstinline!fImportAt(Path)! specifying the path to the imported file.
-\lstinline!require! is placed in a record \lstinline!fRequire! of exactly the same form, and is not illustrated here.
+\lstinline!require! is placed in a tuple \lstinline!fRequire! of exactly the same form, and is not illustrated here.
 
 \begin{figure}[ht]
 \begin{lstlisting}
@@ -1635,12 +1643,12 @@ of \lstinline!fImportAt(Path)! specifying the path to the imported file.
 \end{figure}
 
 
-The \lstinline!prepare! section is placed in a record 
+The \lstinline!prepare! section is placed in a tuple 
 \lstinline!fPrepare(Decls Stats Pos)!, holding the \lstinline!prepare!'s
 declarations and statements, as illustrated in
 Figure~\ref{fig:functor_example_prepare}.
 Our example contained only declarations, and the statement part is a \lstinline!skip! instruction.
-\lstinline!define! is placed in a record \lstinline!fDefine! of exactly the same form, and is not illustrated here.
+\lstinline!define! is placed in a tuple \lstinline!fDefine! of exactly the same form, and is not illustrated here.
 
 \begin{figure}[ht]
 \begin{lstlisting}
@@ -1798,11 +1806,11 @@ and only \lstinline!B! is implicitly declared in the following code snippet:
 Fortunately, this has been clearly formalised by the Oz implementers and published on the web \cite{BaseLang}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
 
 \subsection{Namer}\label{sec:arch:namer}
-The namer  basically replaces all occurrences of a variable's \lstinline!fVar! by \lstinline!fSym! records holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
+The namer  basically replaces all occurrences of a variable's \lstinline!fVar! by \lstinline!fSym! tuples holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
 
 In declarations, the namer creates a new symbol for the declared variables, in
 other code, it looks at already defined symbols and replaces \lstinline!fVar!s
-by a \lstinline!fSym! record containing the existing symbol for that variable.
+by a \lstinline!fSym! tuple containing the existing symbol for that variable.
 This works because a variable can only be in the subtree whose root is the
 variable declaration's instruction (be it a \lstinline!local Decls in Body end!
 declaring variables in \lstinline!Decls!, a
@@ -1821,7 +1829,7 @@ The set of maps from a variable name to its corresponding symbol is called envir
 Variables can be declared in different ways and instructions.
 One such instruction is of course the explicit declaration instruction
 \lstinline!local Decls in Body end!, present in the AST in the form of
-\lstinline!fLocal! records introduced in section \ref{sec:input:flocal}. At this
+\lstinline!fLocal! tuples introduced in section \ref{sec:input:flocal}. At this
 stage, \lstinline!Decls! only contains simple variables declaration, thanks to
 the declaration flattener (see Section \ref{sec:arch:declsflattener}).
 \lstinline!fLocal! introduces a new environment, in which the variables declared
@@ -1838,7 +1846,7 @@ to which its argument is, and it effectively shows 6.
 
 Another kind of declaration is found in the definition of procedures and
 functions. Indeed, \lstinline!fProc! (Section~\ref{sec:input:procedures}) and
-\lstinline!fFun! (Section~\ref{sec:input:functions}) records also implicitly
+\lstinline!fFun! (Section~\ref{sec:input:functions}) tuples also implicitly
 declare the variables for their formal parameters. % see test 029
 
 Still another kind of declaration happens in pattern matching
@@ -1868,7 +1876,7 @@ end
 
 \subsubsection{Non-declaration code}
 In code not declaring variables, the namer's transformation is much simpler: it will simply
-replace all occurrences of \lstinline!fVar! records by a \lstinline!fSym! record having the corresponding symbol as first feature.
+replace all occurrences of \lstinline!fVar! tuples by a \lstinline!fSym! tuple having the corresponding symbol as first feature.
 
 
 \subsubsection{Case Pattern Matching}\label{sec:arch:namer:patternmatching}
@@ -1914,7 +1922,7 @@ bodies, it will never be the case as the environment on which a clause builds
 its own is the environment of the case instruction, not the environment updated
 by the previous clause. 
 
-In addition, the \lstinline!fSym! record corresponding to these capture
+In addition, the \lstinline!fSym! tuple corresponding to these capture
 variables are themselves stored in an unforgeable secure structure (as
 described in \cite{CTMCP} Section~3.7.5) which is itself wrapped in an
 \lstinline!fConst!. The reason of this manipulation is to prevent manipulations
@@ -1986,7 +1994,7 @@ The namer thus replaces pattern variables by a synthetic symbol, and wraps the b
 
 
 \subsubsection{Classes}\label{sec:arch:namer:classes}
-The work of the namer on classes is in most cases straight-forward. It goes through the record
+The work of the namer on classes is in most cases straight-forward. It goes through the tuple
 \lstinline!fClass(Id Specs Methods Pos)! and names variables as one would expect:
 method arguments are named as declarations i.e. it adds mappings to the
 environment which are then used when traversing the body of the method.
@@ -2384,7 +2392,7 @@ The declaration part of this instruction is always a list of \lstinline!fSym!. T
 also a statement because the whole \lstinline!local...in...end! is a statement. If it were
 an expression , the body
 would have been an expression. In our case, the body is a sequence of
-instructions, resulting in a hierarchy of \lstinline!fAnd! records in the AST. Thus we see that a sequence
+instructions, resulting in a hierarchy of \lstinline!fAnd! tuples in the AST. Thus we see that a sequence
 can be a statement or an expression, in the latter case the value
 of the whole sequence is the value of the last instruction which must be an expression. This illustrates the
 need of distinct functions when statement and expressions must be handled
@@ -2605,19 +2613,16 @@ notably the opcodes generation. This transformation is called constant folding.
 \begin{lstlisting}
       fRecord(
          fAtom(rec pos)
-         |(
+         [
             fColon(
                fInt(1 pos)
                fAtom(a pos)
             )
-            |(
-               fColon(
-                  fInt(2 pos)
-                  fAtom(b pos)
-               )
-               nil
+            fColon(
+               fInt(2 pos)
+               fAtom(b pos)
             )
-         )
+         ]
       )
 \end{lstlisting}
 is transformed in
@@ -2728,7 +2733,7 @@ or an expression as in
    X=if Y>Z then bigger else smallerOrEqual end
 \end{lstlisting}
 in which case both code branches are desugared as expression.
-A fNoElse record is left as is and will only be useful for the opcode generation function.
+A \lstinline!fNoElse! tuple is left as is and will only be useful for the opcode generation function.
 
 \subsubsection{Case}
 The case instruction is very similar to \lstinline!if..then..else..end!.
@@ -2769,7 +2774,7 @@ or an expression as in
 in which case each clause is desugared as an expression.
 
 As for the \lstinline!if..then..else! instruction, the absence of an else clause
-is indicated by a record \lstinline!fNoElse! in the AST. If no else clause was
+is indicated by a tuple \lstinline!fNoElse! in the AST. If no else clause was
 present, the desugar step introduces one which raises an error, transforming
 
 \begin{lstlisting}
@@ -2845,7 +2850,7 @@ Information to build the elements \lstinline!Parents!, \lstinline!Attrs!,
 the \lstinline!fClass! node.
 
 \lstinline!Parents! is simply a list of the parents of the class. The elements
-of the list are simply the \lstinline!fSym! record holding the symbols
+of the list are simply the \lstinline!fSym! tuple holding the symbols
 corresponding identifying the parent classes.
 
 
@@ -3391,7 +3396,7 @@ Considering the elementary character of both sides of the unification, we have t
         which needs to be transformed in the form \lstinline!{P E1...En V}!, i.e. the elementary side is injected as last argument of the call.
         Or it is a call with the nesting marker in a pattern position, of the form \lstinline[mathescape]!V={P E1..$\$$..En}!, which needs to be
         transformed in \lstinline!{P E1..V..En}!.
-      \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of fAnd records. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
+      \item[Sequence of instructions] In the AST, the sequence of instructions is available in a hierarchy of \lstinline!fAnd! tuples. We also know that the value of a sequence of instructions is the value of the last instruction in the sequence. As a consequence, the unnesting of this type of unification is done by moving the unification to the second feature of the fAnd, and recursively unnest the resulting AST.
       \item[Declaration (local)] The value of a \lstinline!local..in..end! in a
         unification is the value of its body. Hence, the unification
         \begin{lstlisting}
@@ -3878,8 +3883,8 @@ The unnester is implemented by a function called \lstinline!Unnester!. The unnes
   \item  \lstinline!UnnestFRecord! is called to unnest records and open records. Its structure is similar to that of \lstinline!UnnestFApply!.
   \item  \lstinline!UnnestFBoolCase! is called to unnest \lstinline!if..then..else! instructions.
 \end{itemize}
-If the unnester encounters a record in the AST for which no specific operation is prescribed, it recursively unnests each feature of the record.
-An improvement to the code would be to explicitly handle every kind of record
+If the unnester encounters a tuples in the AST for which no specific operation is prescribed, it recursively unnests each feature of the record.
+An improvement to the code would be to explicitly handle every kind of tuple
 found in the AST.
 
 The unnester also tracks if an instruction is in tail position or not, simply by
@@ -4280,7 +4285,7 @@ allocated register \lstinline!y(2)!.
 
 
 \subsubsection{Procedures/Abstractions}\label{sec:codegen:procedures}
-At this stage, only procedures are defined, as found in \lstinline!fDefineProc! records (created by the \lstinline!Globaliser!, see Section \ref{sec:arch:globaliser}) of the form:
+At this stage, only procedures are defined, as found in \lstinline!fDefineProc! tuples (created by the \lstinline!Globaliser!, see Section \ref{sec:arch:globaliser}) of the form:
 \begin{lstlisting}
    fDefineProc(fSym(Sym pos) Args Body Flags Pos NewLocals)
 \end{lstlisting}
@@ -4579,7 +4584,7 @@ the current sequence type, held in the variable \lstinline!SequenceType!
 prefix and code buffer must be added to \lstinline!Code!. However, building the
 prefix for a clause with guards requires knowledge of the register in which the
 value of the guards expression is stored. This is found in the fourth features
-of the pattern's \lstinline!fNamedSideCondition! record in the AST, and is why
+of the pattern's \lstinline!fNamedSideCondition! tuple in the AST, and is why
  \lstinline!fNamedSideCondition! has an additional feature compared to
  \lstinline!fSideCondition!.
 The last visited clause'pattern is stored in \lstinline!ThisPattern!. This is
