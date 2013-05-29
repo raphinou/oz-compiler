@@ -68,7 +68,8 @@ June 2013
 
 
 \begin{document}
-\newcommand{\nav}[1]{#1}
+%\newcommand{\nav}[1]{#1}
+\newcommand{\nav}[1]{}
 %\newcommand{\nav}[1]{}
 \renewcommand{\topfraction}{.85}
 \renewcommand{\bottomfraction}{.7}
@@ -106,7 +107,6 @@ escapechar=µ}
 
 \tableofcontents
 
-%FIXME: add reference to next transformation for each node
 %FIXME: add explanations of helper functions, like GetPos
 \mainmatter
 \chapter{Introduction}
@@ -156,7 +156,7 @@ The Mozart2 virtual machine works with four types of registers. The description 
   \item[X registers]X registers are work registers that should not be used to permanently
     store values as their content is undefined after a call. They are thread-specific and caller-saved, meaning it is the
     caller's responsibility to save the value of a X register if it will be
-    reused.  X registers are for example used to pass the arguments to calls. However, the values in these registers are lost after the call.
+    reused.  X registers are for example used to pass the arguments to calls. However, the values in these registers are undefined after the call so they should be considered as lost.
     %FIXME: combien de registres X disponibles,alloues?
   \item[Y registers]are specific to the activation frame, and are used as locally persisting registers. They all have to be initialised at once at the start of an abstraction's code, before their use, which requires to know how many Y registers are needed.
   \item[G registers] are holding global variables, i.e. variables that are
@@ -319,7 +319,6 @@ As mentioned earlier, source
 register can be of the type X, Y, G or K. Destination registers can be of the
 type X or Y.
 
-%FIXME: what kind of registers can be unified. Does it make sense to unify X regs?
 Unification is supported with the instruction \lstinline!unify(LHS RHS)! where
 \lstinline!LHS! and \lstinline!RHS! are registers of type X, Y, G, or K.
 Internally, and because unification is commutative, this does not result in 16 but 10 specialised opcodes. For example,
@@ -409,7 +408,6 @@ lbl(3)          return
 
 
 \subsection{Calls}\label{sec:opcode:calls}
-%FIXME: can only call procedures and builtins?
 Calls can be made with \lstinline!call(R Args)!, where R is a register of type
 X, Y, G or K
 identifying what to call (procedure or builtin) and Args is the number of
@@ -703,7 +701,7 @@ A unification is found in a record \lstinline!fEq(LHS RHS Pos)!.
 \lstinline!fEq(fVar(A pos) fInt(3 pos) pos)!.
 
 \subsection{Instructions sequence}
-A sequence of instructions is wrapped in fAnd records, the first feature being usually one instruction, the second feature being a fAnd if more than one instruction follows,  or a single instruction. The code also handles the case when the two features are fAnd records. %FIXME: is this needed? 
+A sequence of instructions is wrapped in fAnd records, the first feature being usually one instruction, the second feature being a fAnd if more than one instruction follows,  or a single instruction. The code also handles the case when the two features are fAnd records.
 Here is an example of three unifications and the corresponding AST:\\
 \begin{tabular}{ p{0.3\textwidth} p{0.8\textwidth} }
   \begin{lstlisting}
@@ -805,7 +803,6 @@ Figure~\ref{fig:input:oz_procedure_def} and Figure~\ref{fig:input:ast_procedure_
 
 
 \subsubsection{Calls}
-%FIXME: distinguish arguments and parameters?
 Procedure calls are found in records of the form 
 \lstinline!fApply(Proc Arguments Pos)!. 
 Example:
@@ -837,9 +834,8 @@ Function definitions are found in records fFun(Name Arguments Body Flags Pos). T
 \subsubsection{Calls}
 The calls of functions are identical to the call of procedures as they are found in fApply.
 
-%FIXME: title Operators?
-\subsection{Arithmetic operators}\label{sec:input:operators}
-Arithmetic operators are parsed as records of the form
+\subsection{Operators}\label{sec:input:operators}
+Operators are parsed as records of the form
 \begin{lstlisting}
    fOpApply(Operator Args Pos)
 \end{lstlisting}
@@ -876,7 +872,7 @@ The statements that can be transformed in expressions are
 \subsection{Cells}\label{sec:input:cells}
 \subsubsection{Assignation}
 A new value can be stored in a cell with this Oz code: \lstinline!Cell:=Val!. This code will result in 
-this tuple in the AST: \lstinline!fColonEquals(Cell Val Pos)!. %FIXME 
+this tuple in the AST: \lstinline!fColonEquals(Cell Val Pos)!. 
 \subsubsection{Read}
 The value stored in a cell can be access with the \lstinline!@! operator, as is
 \lstinline!@Cell!, which results in this tuple in the AST: 
@@ -1802,7 +1798,6 @@ and only \lstinline!B! is implicitly declared in the following code snippet:
 Fortunately, this has been clearly formalised by the Oz implementers and published on the web \cite{BaseLang}. This information has been included in Appendix \ref{appendix:patternvariables}. The namer simply applies these rules to move all code to the \lstinline!Body! beginning, keeping only simple variable declarations in \lstinline!Decls!.
 
 \subsection{Namer}\label{sec:arch:namer}
-%FIXME: add fFOR
 The namer  basically replaces all occurrences of a variable's \lstinline!fVar! by \lstinline!fSym! records holding a symbol instance representing said variable. All uses of a variables are replaced by the same symbol instance. This symbol holds information about the variable, that will be completed by subsequent compiler passes, such as the type of the symbol, its allocated register,\ldots and is documented in Appendix \ref{appendix:symbol}.
 
 In declarations, the namer creates a new symbol for the declared variables, in
@@ -1918,7 +1913,6 @@ although all capture variables are technically reachable from all clauses'
 bodies, it will never be the case as the environment on which a clause builds
 its own is the environment of the case instruction, not the environment updated
 by the previous clause. 
-%FIXME: add reference and detailed description of secure storage
 
 In addition, the \lstinline!fSym! record corresponding to these capture
 variables are themselves stored in an unforgeable secure structure (as
@@ -1930,7 +1924,6 @@ that the records implicitly declaring variables in a pattern are seen as
 constant records, all features being constants! And these are treated as such,
 notably in the desugaring of records (section \ref{sec:arch:desugar:records}).
 
-%FIXME: explain fPatMatConjunction
 To ease the work of future passes and improve readability of their code, the
 namer also replaces \lstinline!fEq! tuples of pattern conjunctions by
 \lstinline!fPatMatConjunction! tuples.
@@ -1965,7 +1958,6 @@ done in the \lstinline!Namer! because it already traverses and transforms the
 patterns, and all code infrastructure was already in place. Putting this
 transformation in the \lstinline!Desugar! pass would have introduced code duplication.
 
-% FIXME: add example?
 
 \subsubsection{Pattern Arguments}
 Functions and procedures in Oz can be defined with pattern arguments, which
@@ -1989,9 +1981,6 @@ This AST of this function's definition is actually transformed in an AST corresp
 \end{lstlisting}
 
 The namer thus replaces pattern variables by a synthetic symbol, and wraps the body of the function in case instructions (one level of case nesting for each pattern argument). 
-
-%FIXME: add patternmatching in fun/proc args + explain why some fsym are visited
-%twice
 
 
 
@@ -2210,6 +2199,17 @@ in
 the desugar pass, Section~\ref{sec:arch:desugar:functors}.}
 
 
+
+\subsubsection{For loops}
+Loops over a list are transformed in a call to \lstinline!ForAll! which is then
+recursively named. Note that the behaviour of a for loop over multiple lists is not correct with this implementation and
+as a consequence the test number 133 of the test suite does not currently pass. The correction of this code is mentioned in the ``Future work'' section on page \pageref{sec:futurework}.
+
+Loops over an integer range are first transformed in a call
+to \lstinline!for! and then recursively named.
+
+C-like loops are currently not supported.
+
 \subsubsection{Compiler Code Notes}
 The namer is one function unimaginatively named \lstinline!Namer! taking as argument an AST, and returning the resulting AST.
 These local functions are defined: \lstinline!NamerForDecls!,\lstinline!NamerForBody!,\lstinline!NamerForCaptures!.
@@ -2274,7 +2274,6 @@ The function \lstinline!NamerForCaptures! is called on the case patterns, collec
 to be declared in \lstinline!Params.captures!.
 New symbols introduced for for escaped variables are collected in
 \lstinline!Params.guardsSymbols!. 
-%FIXME: is this well explained earlier? why do escaped vars introduce guards with new symbols?
 
 As for the work of the namer in case of classes, it involves several steps as described
 in Section \ref{sec:arch:namer:classes}.
@@ -2352,12 +2351,11 @@ The desugar pass handles the transformation of syntactic sugar code in its canon
 Oz distinguishes two groups of instructions: statements and expressions. An expression is ``syntactic sugar for a sequence of operations that return a value'' \cite{CTMCP}. Statements do not return a value.
 The desugar function handles statements and expression differently, and defines two local functions, one for handling expressions, one for handling statements.
 \subsubsection{On statements and expressions}
-%FIXME: Give references: Concepts, Techniques and Models of Computer Programming, p81.
 Handling expressions and statements is often very similar, but sometime require significant differences of treatment. Hence the use two different local functions in the Desugar pass.
 
 It is important that a lot of instructions can be used both as expression and as
 statement. Here is an example.
-In Oz, a cell is a mutable storage element which is created with an initial value (\lstinline!C={NewCell 0}!), it can be given a new value (\lstinline!C:=NewValue!) and its value can be read (\lstinline!@C!). There's also an exchange operation \lstinline!{Exchange C Old New}! which ``atomically binds Old with the old content of the cell, and set New to be the new content'' \cite{CTMCP}.%FIXME: page 415.
+In Oz, a cell is a mutable storage element which is created with an initial value (\lstinline!C={NewCell 0}!), it can be given a new value (\lstinline!C:=NewValue!) and its value can be read (\lstinline!@C!). There's also an exchange operation \lstinline!{Exchange C Old New}! which ``atomically binds Old with the old content of the cell, and set New to be the new content'' \cite{CTMCP}.%page 415.
 Assigning a new value to a cell is usually a statement returning no value, but
 when used as the right hand side of an unification, it becomes an expression,
 whose value is the Old value of the cell.
@@ -2406,7 +2404,6 @@ instruction's AST as defined in section \ref{section:compilerinput} by following
 these rules of identification, and call \lstinline!FStat! on statements and
 \lstinline!FExpr! on expressions:
 
-%FIXME possibly replace the AST record by the Oz instruction they represent
 \begin{description}
   \item[program] the program is a statement
   \item[fLocal] 
@@ -2443,28 +2440,51 @@ these rules of identification, and call \lstinline!FStat! on statements and
     the \lstinline!fCaseClause!s are patterns, and the guards are expressions.
 \end{description}
 
-%FIXME: do i keep this next paragraph?
 All expressions and statements in the AST will be visited by Desugar. Even if the statement itself is not transformed, as is the case for a unification, its children will be visited and possibly transformed. For example
 \lstinline!X=5+2! will still be a unification after it's been desugared, but its
 children will have been transformed in \lstinline!X={Number.'+' 5 2}!.
 
 
 
-\subsubsection{Arithmetic operators}
-%FIXME: add table of operators
-Infix arithmetic operators are transformed in the call of their respective function.
+\subsubsection{Operators}
+Operators are transformed in the call of their respective function as listed in Figure~\ref{table:operators}.
+
+\begin{figure}[h]
+\begin{center}
+\begin{tabular}{| l l |}
+  \hline
+  Operator & Desugar result \\
+  \hline
+  \lstinline!+! & \lstinline!Number.'+'! \\
+  \lstinline!*! & \lstinline!Number.'*'! \\
+  \lstinline!-! & \lstinline!Number.'-'! \\
+  \lstinline!~! & \lstinline!Number.'~'! \\
+  \lstinline!div! & \lstinline!Int.'div'! \\
+  \lstinline!mod! & \lstinline!Int.'mod'! \\
+  \lstinline!/! & \lstinline!Float.'/'! \\
+  \lstinline!==! & \lstinline!Value.'=='! \\
+  \lstinline!>=! & \lstinline!Value.'>='! \\
+  \lstinline!=<! & \lstinline!Value.'=<'! \\
+  \lstinline!>! & \lstinline!Value.'>'! \\
+  \lstinline!<! & \lstinline!Value.'<'! \\
+  \lstinline!\\=! & \lstinline!Value.'\\='! \\
+  \lstinline!:=! & \lstinline!Value.catExchange! \\
+  \hline
+\end{tabular}
+\end{center}
+\caption{Operators and their desugar result}
+\label{table:operators}
+\end{figure}
+
+
+
 The operators are parsed as \lstinline!fOpApply! tuples as described in section \ref{sec:input:operators}. Building further on the example of that section, the AST coming from the parser
 
 \begin{verbatim}
       fOpApply(
          '+'
-         |(
-            fInt(5 pos)
-            |(
-               fInt(2 pos)
-               
-            )
-         )
+         [ fInt(5 pos)
+           fInt(2 pos) ]
          pos
       )
 \end{verbatim}
@@ -2472,13 +2492,8 @@ will be transformed in:
 \begin{verbatim}
       fApply(
          Number.'+'
-         |(
-            fInt(5 pos)
-            |(
-               fInt(2 pos)
-               
-            )
-         )
+         [ fInt(5 pos)
+           fInt(2 pos) ]
          pos
       )
 \end{verbatim}
@@ -2575,7 +2590,12 @@ As mentioned in the description of records in Section \ref{sec:input:records},
 the features can be left out, and are in that case implicit, with increasing
 integer values starting at 1. The Desugar pass will make these features explicit.
 
-In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in \lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the programmer to avoid conflict, as implicit feature assignment does not check for explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is coherent with Mozart 1, but causes an error. %FIXME: check this is all ok.
+In Oz syntax, it means that \lstinline!rec(a b c)! is transformed in
+\lstinline!rec(1:a 2:b 3:c)!. Of course, attention has to be paid by the
+programmer to avoid conflict, as implicit feature assignment does not check for
+explicit features'values, and conflict can arise. For example \lstinline!rec(a 1:b c)! will be transformed in \lstinline!rec(1:a 1:b 2:c)!. This behaviour is
+consistent with Mozart 1.
+
 Records undergo two additional transformations. First, \lstinline!fRecord! that
 have all label, features and values constant are replaced by a
 \lstinline!fConst! with as value the record reconstructed. This greatly
@@ -2643,7 +2663,6 @@ conjunction's member before it is used by the code generator.
 
 
 \subsubsection{Threads}
-%FIXME: is the following correct?
 A thread expression \lstinline!thread Body end! is desugared in the resulting
 statement 
 \begin{lstlisting}
@@ -2657,7 +2676,10 @@ statement
 
 This statement is then itself desugared.
 
-Transforming a thread statement is more involved, though still quite simple. The transformation consists in the creation of a procedure with no argument which body is the desugared body (which is a statement) of the thread, and then passing this procedure the internal \lstinline!Thread.create! procedure.
+Transforming a thread statement consists in the creation of a procedure with no
+argument whose body is the desugared body (which is a statement) of the thread,
+and then passing this procedure the internal \lstinline!Thread.create!
+procedure.
 In Oz notation, \lstinline!thread Body end! is transformed in 
 \begin{lstlisting}
    local 
@@ -3191,11 +3213,9 @@ taking three arguments:
     of the variable identifying this imported module, and
     \lstinline!AliasesAtoms! is the list of atoms identifying the imported
     functions. An example is given in Figure~\ref{fig:desugar:import_record_example}.
-    %FIXME: validate the formulation of statis analysis with sebastien
   \item[ExportRecord] is a record with label \lstinline!'export'!. Its features are the
-    exported keys, and the values of each feature is the atom \lstinline!value!.
-     With static analysis, it would be possible to restrict the
-    type more. An example of an ExportRecord is given in Figure~\ref{fig:desugar:export_record}.
+    exported keys, and the values of each feature is the atom \lstinline!value!, stating that the values can be of any type. 
+     This information is currently not used further by the compiler. An example of an ExportRecord is given in Figure~\ref{fig:desugar:export_record}.
   \item[ApplyFun] is a function taking one parameter, as shown in
     Figure~\ref{fig:desugar:apply_fun}. When a functor is applied, this function is called
     and it is the record it returns that gives entry points to the module
@@ -3315,7 +3335,6 @@ Figure~\ref{fig:desugar:desugared_computed_functor_example}.
 As the outer functor is immediately applied, its \lstinline!import! and \lstinline!define! sections are evaluated.
 But these are, or include, the original functor's \lstinline!require! and \lstinline!prepare! sections, and this
 construction ensures the behaviour we need.
-%FIXME: improve explanations
 This result is recursively desugared.
 
 \subsubsection{Compiler Code Notes}
@@ -3333,8 +3352,6 @@ The desugar pass is implemented by a function named \lstinline!Desugar!. It defi
 
 The program itself being a statement, the function Desugar simply call DesugarStat on the AST of the whole program. This will trigger further calls to DesugarExpr and DesugarStat that will traverse and transform the whole AST.
 
-%FIXME: do I keep this? Should I add more explanations of other functions, like
-% TransformRecord
 \lstinline!DesugarClass! defines multiple local functions:
 \begin{description}
   \item[TransformMethod] Takes one method signature and an index, and build its
@@ -3785,7 +3802,6 @@ However, if the record \lstinline!V+1|{Fill V+1}! is desugared in
    V2={Fill V+1}
    Ret=V1|V2
 \end{lstlisting}
-%FIXME: explain where Ret comes from
 The record will be accessible only after the statement 
 \lstinline!V2={Fill V+1}!. This means that the consumer will only be able to
 start working only when the producer returns.
@@ -3935,7 +3951,6 @@ variables by a new local symbol of type \lstinline!localised! referencing the
 symbol for this variables in the parent proc which might itself be a
 \lstinline!localised! symbol, and so on until we reach the level where the variables is declared.
 
-%FIXME: add illustration of references to parent proc's variables
 
 In the abstract syntax tree, \lstinline!fProc! is replaced by
 \lstinline!fDefineProc! taking 1 additional argument: the newly created local
@@ -4075,22 +4090,26 @@ Each call of the globaliser takes the AST sub tree and an additional \lstinline!
 \end{itemize}
 
 The globaliser handles the following nodes:
-%FIXME: improve layout if the nest list?
 \begin{description}
    \item[fProc] When handling a \lstinline!fProc!, the globaliser call gets the
      informations from the parent in its \lstinline!Params! argument. Because we
      enter a new level of procedure nesting, a \lstinline!NewParams! is
      initialised to be passed to recursive globaliser calls handling children
      nodes. \lstinline!NewParams! is initialised with a new procId and two empty lists. 
+
       The symbol of the procedure itself gets the procId of its parent, found in \lstinline!Params!. The arguments of the procedure get the procId of the currently handled procedure, found in \lstinline!NewParams!. At that time the globaliser function is called recursively on the children nodes, with \lstinline!NewParams! as additional argument.
+
       Once all children have been traversed, the list of their globals and their
       respective newly created locals is found in \lstinline!NewParams!.  We
       have multiple new locals corresponding to one global in the case of 2
       siblings procedure definitions referring the same global as in
       Figure~\ref{fig:globaliser:examplev}. 
+
       Globals whose procId match the \lstinline!NewParams!' procId are ignored, as those are variables that are declared at this level, and the chain of references must stop here for these variables.
+
       For each remaining global, we look at the list of their locals. 
       If one of these has the procId matching the current level, all other locals are changed to reference this one. This is because this specific symbol has been created by a direct use at this level, and we will use this one as the new localised symbol at this level. Then we push the global on the parent's globals list and add the local symbol to its corresponding list of new locals (those lists are found in \lstinline!Params!)
+
       If none of the locals has the current level's procId, it means the global variables has only been used in nested procedure definitions. We need to create a new local symbol for that variable at the current level that will be referenced by the existing locals. Finally, we push the global and the new local symbol we created to the parent via \lstinline!Params!. 
    \item[fSym] If the symbol in this \lstinline!fSym! has the current procId found in \lstinline!NewParams!, keep it as is, do not change it!  If its procId is different from the current procId, this \lstinline!fSym! represents a global variable for the current level. We look in \lstinline!Params! if a local variable with the current procId has already been created for this global variable. If yes we reuse it, else we define a new symbol, having the current procId and referencing the symbol initially in \lstinline!fSym!. We modify the \lstinline!fSym! to use that newly created symbol. Finally, push the global and its local to the parent.
    \item[fLocal] Simply assign the current procId to the variables declared by the instruction and recursively call the globaliser on the body.
@@ -5000,7 +5019,7 @@ code generated by the Mozart1 compiler.
 Most of the goals set when this work was started have been reached.
 Although the whole Oz language is not supported (see the next section), a vast majority is, as is demonstrated by the fact that all programs extracted from \cite{CTMCP} compile and run successfully. The code generated by the compiler, although not optimised, is exploiting the capabilities of the new virtual machine, notably in pattern matching.  During the whole development, attention has been paid to produce code easy to understand and fully documented, which should make it easy for new developers to dive into the code.
 
-\section{Future work}
+\section{Future work}\label{sec:futurework}
 
 Support for three Oz language features have to be added:
 \begin{itemize}
@@ -5118,7 +5137,6 @@ Furthermore, integration in the Mozart development environment also has to be st
 
 
 \chapter{Pattern Variables}\label{appendix:patternvariables}
-%FIXME: arrange layout
 \section{Statements}
 
 \begin{tabular} {l l}
@@ -5473,9 +5491,7 @@ The attributes of the class \lstinline!Symbol! are:
       \item patternmatch for a symbol representing a capture in a pattern
       \item wildcard for a symbol introduced in the place of a wildcard
     \end{itemize}
-  \item[ref] is only used for localised symbols. This might justify the creation
-    of a specific class for localised symbols, like for synthetic symbols.
-    However, I preferred to postpone this to the optimising step. \lstinline!ref! references a symbol local to the enclosing procedure, building a chain that will eventually lead to a symbol of type localProcId enabling the resolution of global variables. %FIXME: improve description..
+  \item[ref] is only used for localised symbols. \lstinline!ref! references a symbol local to the enclosing procedure, building a chain that will eventually lead to a symbol of type localProcId in the procedure declaring the variable, enabling the resolution of global variables.
 \end{description}
 
 \chapter{Tests list}
