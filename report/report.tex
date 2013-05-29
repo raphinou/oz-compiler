@@ -4756,7 +4756,7 @@ This section will compare the execution time of source code
 \begin{itemize}
   \item compiled by the Mozart1 compiler and running on the mozart1 virtual
     machine 
-  \item compiled by the adapted Mozart1 compiler targetting the new Mozart2 virtual
+  \item compiled by the adapted Mozart1 compiler targeting the new Mozart2 virtual
     machine
   \item compiled by the compiler described in this document, running on the new
     Mozart2 virtual machine
@@ -4766,6 +4766,9 @@ To obtain relevant results, comparable measures needed to be collected under the
 three circumstances.
 To avoid garbage collection penalties, the garbage collector called explicitly before the
 first measure of time with \lstinline!{System.gcDo}!.
+Code was structured as to avoid the static analysis of the Mozart1 compiler to
+optimise the code too extremely (for example in the \lstinline!case! measures), but still
+one test was not possible: the Mozart1 compiler discarded constant record unification with a wildcard.
 
 For the code running on the Mozart1 virtual machine, the timing is done by
 calling 
@@ -4773,18 +4776,33 @@ calling
    {Property.get 'time.total'}
 \end{lstlisting}
 before and after the call to the code of which we want to measure the execution
-time, and computing the difference. Fot the code running on the Mozart2 virtual machine, the timing is done
+time, and computing the difference. The resolution obtained for these measure was 10ms.
+
+For the code running on the Mozart2 virtual machine, the timing is done
 the same way by calling 
 \begin{lstlisting}
    {Boot_Time.getReferenceTime}
 \end{lstlisting}
-The result obtained is the total running time of the code in milliseconds.
+The resolution of the measures was 1ms.
+In both cases, the result obtained is the total running time of the code in milliseconds.
 
-Each measure is done 10 times, and the average and standard deviation is
-computed. Measure tables can be found in \ref{appendix:performance}.
+Most measures were done by executing 100 times one operation in a loop doing $10^5$ iterations.
+The cost of the loop was evaluated by measuring the time taken by $10^7$ iteration of an empty loop, 
+and bringing it back to $10^5$ iterations, to limit the imprecision due to the
+resolution of 10ms of the measures on Mozart1.
+The average cost of the loop doing $10^5$ iterations is about 4ms, 1.9ms and 0.23ms respectively for
+the compiler described in this document, the Mozart1 compiler targeting the
+Mozart2 virtual machine, and the Mozart1 compiler targeting the Mozart1
+virtual machine. These times are negligible compared to the total execution
+times measured, being for example less than 0.4\% in the worst case of the \lstinline!Addition!
+performance test.
+
+
+Each measure is done 20 times, and the average and standard deviation is
+computed. Results can be found in \ref{appendix:performance}.
 
 In all measures, the code running on the Mozart1 virtual machine was the
-fastest, followed by the Mozart1 compiler targetting the Mozart2 virtual
+fastest, followed by the Mozart1 compiler targeting the Mozart2 virtual
 machine, and with the new compiler being the slowest.
 
 We will make two comparisons:
@@ -4803,13 +4821,14 @@ Two reasons for this:
     the virtual machine
 \end{itemize}
 
-A simple addition was run a million times by the function listed in Figure~\ref{fig:perf:add}.
+A simple addition was run by the function listed in Figure~\ref{fig:perf:add}.
 
 \begin{figure}[h]
 \begin{lstlisting}
    proc {Addition N}
       for I in 1..N do
-         _ = 1+1
+         _ = 1+1  % line repeated 100 times
+         ...
       end
    end
 \end{lstlisting}
@@ -4817,16 +4836,16 @@ A simple addition was run a million times by the function listed in Figure~\ref{
 \label{fig:perf:add}
 \end{figure}
 
-The function was called with $10^6$ as argument.
-The Mozart1 compiler targetting the Mozart2 virtual machine was 8 times slower
-than the Mozart1 setup. The new compiler was more than 2 times slower than the
-Mozart1 compiler targetting the Mozart2 virtual machine.
+The function was called with $10^5$ as argument.
+The Mozart1 compiler targeting the Mozart2 virtual machine was 10 times slower
+than the Mozart1 setup. The new compiler was more than 4 times slower than the
+Mozart1 compiler targeting the Mozart2 virtual machine.
 
 
 
 
 A naive Fibonacci function displayed in
-Figure~\ref{fig:perf:fib} was tested. An optimised version of the code yielded unusable results, the measures of time being too small.
+Figure~\ref{fig:perf:fib} was tested.
 
 \begin{figure}[h]
 \begin{lstlisting}
@@ -4843,13 +4862,69 @@ Figure~\ref{fig:perf:fib} was tested. An optimised version of the code yielded u
 \end{figure}
 
 The function was called with \lstinline!30! as argument.
-The Mozart1 compiler targetting the Mozart2 virtual machine was more than 5 times slower
-than the Mozart1 setup. The new compiler was more than 2 times slower than the
-Mozart1 compiler targetting the Mozart2 virtual machine. For further tests we
+The Mozart1 compiler targeting the Mozart2 virtual machine was more than 5 times slower
+than the Mozart1 setup. The compiler described in this document was more than 2 times slower than the
+Mozart1 compiler targeting the Mozart2 virtual machine. For further tests we
 will note this as a slowdown ratio of 5 and 2.
 
+Code writing to cells was tested with the function in Figure~\ref{fig:perf:cellwrite}.
 
-Performance of code using cells was also measured, with the code displayed in
+\begin{figure}[h]
+\begin{lstlisting}
+   proc {CellWrite N}
+      C={NewCell 0}
+   in
+      for I in 1..N do
+         C:=1 %100 times
+         ...
+      end
+   end
+\end{lstlisting}
+\caption{Writing to cells}
+\label{fig:perf:cellwrite}
+\end{figure}
+
+The slowdown ratios were 2.68 and 3.01.
+
+Code reading cell values was tested with the function in Figure~\ref{fig:perf:cellread}.
+
+\begin{figure}[h]
+\begin{lstlisting}
+   proc {CellRead N}
+      C={NewCell 0}
+   in
+      for I in 1..N do
+         _=@C %100 times
+         ...
+      end
+   end
+\end{lstlisting}
+\caption{Code reading cell value}
+\label{fig:perf:cellread}
+\end{figure}
+
+The slowdown ratios were 6.27 and 3.84.
+The code generated by the compiler described in this document is slower to read from cells than to write to them.
+This is because the code generated for reading a cell is not optimal and contains a unification,
+as illustrated in Figure~\ref{fig:perf:cellreadunif}, which has a high cost in
+terms of time. Writing to a cell does not generate a \lstinline!unify!
+operation. 
+
+\begin{figure}[h]
+\begin{lstlisting}
+   createVar(y(1))
+   createVar(y(2))
+   unify(y(1) y(2))
+   moveMove(y(0) x(0) y(1) x(1))
+   tailCall(k(<P/2 Value.catAccess>) 2)
+\end{lstlisting}
+\caption{Opcodes for reading a cell}
+\label{fig:perf:cellreadunif}
+\end{figure}
+
+
+
+Performance of code using cells in both read and write operations was also measured, with the code displayed in
 Figure~\ref{fig:perf:cells}.
 
 \begin{figure}[h]
@@ -4858,7 +4933,8 @@ Figure~\ref{fig:perf:cells}.
       C={NewCell 0}
    in
       for I in 1..N do
-         C:=@C+I
+         C:=@C+I % 100 times
+         ...
       end
    end
 \end{lstlisting}
@@ -4867,27 +4943,9 @@ Figure~\ref{fig:perf:cells}.
 \end{figure}
 
 
-The function was called with $10^6$ as argument.
+The function was called with $10^5$ as argument.
 The slowdown ratio was 2.1 and 2.8.
 
-Code using records was also measured with the function listed in
-Figure~\ref{fig:perf:records}.
-\begin{figure}[h]
-\begin{lstlisting}
-  
-   proc {Rec N}
-      for I in 1..N do
-         _ = rec(a:1 b:2)
-      end
-   end
-\end{lstlisting}
-\caption{Records in code}
-\label{fig:perf:records}
-\end{figure}
-
-
-The function was called with $10^6$ as argument.
-The slow down ratio 6.7 and 2.4
 
 The new compiler is 2 to 3 times slower in average. There is one kind of code
 were it can approach the performance of the old compiler though: pattern
@@ -4897,8 +4955,40 @@ Section~\ref{sec:arch:codegen:case}), it can generate code that
 is more efficient for the pattern matching(though it stays slower due to other parts of the code being more
 inefficient).
 In the favorable case where it is the last clause of a long list of open record
-pattern clauses that matches, the new compiler generates code that is only 30\% slower than the
+pattern clauses that matches, like the function in
+Figure~\ref{fig:perf:openmatch} called with \lstinline!A=rec(f:1 z:3 y:4 x:6)!
+and \lstinline!N=$10^5$! the new compiler generates code that is only 24\% slower than the
 code generated by the Mozart1 compiler.
+
+
+\begin{figure}[h]
+\begin{lstlisting}
+   proc {OpenMatch A N}
+      for I in 1..N do
+         case A     % 100 times
+         of 1 then
+            skip
+         [] rec(a:_ ...) then
+            skip
+         [] rec(b:_ ...) then
+            skip
+         [] rec(c:_ ...) then
+            skip
+         [] rec(d:_ ...) then
+            skip
+         [] rec(e:_ ...) then
+            skip
+         [] rec(f:_ ...) then
+            skip
+         [] 2 then
+            skip
+         end
+      end
+   end
+\end{lstlisting}
+\caption{Function to test \lstinline!case! performance}
+\label{fig:perf:openmatch}
+\end{figure}
 
 
 \chapter{Conclusion}
@@ -4996,7 +5086,7 @@ should result in these opcodes:
 
 Another area of improvement is the \lstinline!CodeGen! function, both its inner working and its output should be improved.
 Its inner working because it currently generates nested lists that needs to be flattened at the end. Its output can greatly be improved, 
-notably in the register allocation, which is currently not optimised.
+notably in the register allocation, which is currently not optimised. The latter should improve the performance of the generated code.
 
 Further limiting the use of cells and striving for a totally functional code-base should also help 
 performance and modularity.
@@ -5395,7 +5485,28 @@ checks.
 \chapter{README}\label{appendix:readme}
 \verbatiminput{../README}
 \chapter{Performance measures}\label{appendix:performance}
-Here are the measures done on performance of the code generated by the compiler.
+Here are the resulsts of performance tests. Only averages and standard deviations are included here.
+Exhaustive results are available in the file \lstinline!perfs/timings.ods!.
+
+The code tested on the new virtual machine is located in the file \lstinline!perfs/timing.oz!, and the
+code tested on the Mozart1 virtual machine is in the file \lstinline!perfs/timing.oz!.
+
+Here is the procedure to repeat the performance tests. First, uncomment the function you want to run and its call.
+Unused functions are commented to speed the compilation. Then, issue the following command from the root directory of the project
+to get the measures of the new compiler:
+\begin{lstlisting}
+   make compile src=perfs/timing.oz && for i in $(seq 20); do  
+                                          ozengine perfs/timing.ozf; done
+\end{lstlisting}
+For measure of the Mozart1 compiler on the Mozart2 virtual machine:
+\begin{lstlisting}
+   ozc -c timing.oz && for i in $(seq 20); do ozengine timing.ozf  ; done 
+\end{lstlisting}
+For measure on the Mozart1 platform on a 64-bit Linux installation:
+\begin{lstlisting}
+   linux32 ozc -c timing1.oz && for i in $(seq 20); do 
+                                     linux32 ozengine timing1.ozf  ; done
+\end{lstlisting}
 The column ``New Compiler'' lists timings of the code generated by the compiler
 described in this document, running on the Mozart2 virtual machine. The column ``Old
 Compiler'' holds the same measurement for code generated by the Mozart1 compiler
@@ -5406,40 +5517,35 @@ The line ``ratio'' show how many times slower the setup of one column is
 compared to the setup of the column at its right.
 
 Each of the following sections list the code of the function called, the
-argument passed, and the table of times measured.
+argument passed, and the table of average and standard deviation of times measured.
 
 \section{Additions}
 
 
-The following code was called with \lstinline!N=1000000!, yielding results in
-the table. The body of the loop is simply one addition operation.
+The following code was called with \lstinline!N=100000!, yielding results in
+the table. The body of the loop is simply 100 addition operations, as displayed in Figure~\ref{fig:app:add}.
 
+\begin{figure}[h]
 \begin{lstlisting}
    proc {Addition N}
       for I in 1..N do
-         _ = 1+1
+         _ = 1+1 % 100 times
       end
    end
 \end{lstlisting}
+\caption{Addition}
+\label{fig:app:add}
+\end{figure}
+
 
 \begin{center}
 \begin{tabular} {| l c c c|}
 \hline
 \multicolumn{4}{|c|}{\textbf{Additions}} \\ \hline
   & New Compiler& Old Compiler & Mozart1 \\
-  &          694& 259& 30 \\
-  &          698& 261& 30 \\
-  &          707& 261& 30 \\
-  &          711& 264& 30 \\
-  &          701& 260& 30 \\
-  &          696& 259& 30 \\
-  &          704& 262& 30 \\
-  &          696& 259& 30 \\
-  &          697& 261& 30 \\
-  &          696& 260& 30 \\ \hline
-average& 700& 260.6& 30\\
-standard deviation& 5.6         &  1.6         &  0 \\
-ratio& 2.7           & 8.7          & \\ 
+average&2775.75&610.7&59.5 \\
+standard deviation&25.48&6.46& 3.94 \\
+ratio& 4.55&  10.26 & \\
 \hline
 \end{tabular}
 \end{center}
@@ -5447,17 +5553,22 @@ ratio& 2.7           & 8.7          & \\
 \section{Cells}
 
 The first test done was combining read and writes. The function
-\lstinline!CellAccess! was called with \lstinline!N=1000000!.
+\lstinline!CellAccess! listed in Figure~\ref{fig:perfs:cellops} was called with \lstinline!N=100000!.
 
+\begin{figure}[h]
 \begin{lstlisting}
    proc {CellAccess N}
       C={NewCell 0}
    in
       for I in 1..N do
-         C:=@C+I
+         C:=@C+I  %100 times
       end
    end
 \end{lstlisting}
+\caption{Cell operations}
+\label{fig:perfs:cellops}
+\end{figure}
+
 
 
 \begin{center}
@@ -5465,56 +5576,42 @@ The first test done was combining read and writes. The function
 \hline
 \multicolumn{4}{|c|}{\textbf{Cell reads and writes}} \\ \hline
   & New Compiler& Old Compiler & Mozart1 \\
-  &         1074&  370& 170\\ 
-  &         1059&  417& 180\\
-  &         1057&  369& 180\\
-  &         1065&  371& 180\\
-  &         1067&  370& 170\\
-  &         1068&  377& 180\\
-  &         1070&  374& 180\\
-  &         1070&  369& 180\\
-  &         1061&  372& 180\\
-  &         1068&  370& 180\\ \hline
-average& 1065.9&  375.9& 178\\
-standard deviation& 5.4& 14.7&  4.2\\
-ratio& 2.8& 2.1 & \\
+average&6267.1&1471.8&1480.5 \\
+standard deviation&47.14&10.85&21.64 \\
+ratio&4.26& 0.99  & \\
 \hline
 \end{tabular}
 \end{center}
 
 
 
-Reads were also tested separately. The function \lstinline!CellRead! was called
-with \lstinline!N=1000000!.
+Reads were also tested separately. The function \lstinline!CellRead! in Figure~\ref{fig:perfs:cellread} was called
+with \lstinline!N=100000!.
 
+\begin{figure}[h]
 \begin{lstlisting}
    proc {CellRead N}
       C={NewCell 0}
    in
       for I in 1..N do
-         _=@C
+         _=@C   % 100 times
       end
    end
 \end{lstlisting}
+\caption{Cell reads}
+\label{fig:perfs:cellread}
+\end{figure}
+
 
 \begin{center}
 \begin{tabular} {| l c c c|}
 \hline
 \multicolumn{4}{|c|}{\textbf{Cell reads}} \\ \hline
   & New Compiler& Old Compiler & Mozart1 \\
-  &         674& 254& 40\\ 
-  &         675& 256& 40\\
-  &         679& 254& 40\\
-  &         676& 263& 40\\
-  &         678& 252& 40\\
-  &         676& 250& 40\\
-  &         689& 254& 40\\
-  &         675& 253& 30\\
-  &         676& 253& 40\\
-  &         679& 253& 40\\ \hline
-average& 677.7& 254.2 & 39\\
-standard deviation&4.3& 3.5 & 3.2\\
-ratio&  2.7& 6.5& \\
+average&2500.25&399.05& 104 \\
+standard deviation&22.18&5.45& 5.03 \\
+ratio&6.27& 3.84  & \\
+
 \hline
 \end{tabular}
 \end{center}
@@ -5522,8 +5619,9 @@ ratio&  2.7& 6.5& \\
 
 
 Finally, write operation were also tested separately. The function
-\lstinline!CellWrite! was called with \lstinline!N=1000000!.
+\lstinline!CellWrite! in Figure~\ref{fig:perfs:cellreads} was called with \lstinline!N=100000!.
 
+\begin{figure}[h]
 \begin{lstlisting}
    proc {CellWrite N}
       C={NewCell 0}
@@ -5533,40 +5631,29 @@ Finally, write operation were also tested separately. The function
       end
    end
 \end{lstlisting}
+\caption{Cell reads}
+\label{fig:perfs:cellreads}
+\end{figure}
+
 
 \begin{center}
 \begin{tabular} {| l c c c|}
 \hline
 \multicolumn{4}{|c|}{\textbf{Cell writes}} \\ \hline
   & New Compiler& Old Compiler & Mozart1 \\
-  &         551& 253& 40\\ 
-  &         547& 252& 50\\
-  &         553& 250& 50\\
-  &         559& 254& 50\\
-  &         556& 253& 50\\
-  &         547& 251& 50\\
-  &         555& 252& 50\\
-  &         557& 254& 50\\
-  &         552& 252& 50\\
-  &         552& 254& 50\\ \hline
-average& 552.9& 252.5 & 49\\
-standard deviation&4.0& 1.4& 3.2\\
-ratio& 2.2& 5.2& \\
+average&1402.5&&466.65  174 \\
+standard deviation&16.55&11.33&5.03 \\
+ratio&3.01& 2.68  & \\
+
 \hline
 \end{tabular}
 \end{center}
 
-In Mozart1, reads are slightly faster. For the Mozart1 compiler targeting the
-Mozart2 virtual machine, reads and writes on cell have nearly the same time
-costs. For the compiler described in this document though, reads are surprisingly slower than
-writes. 
-%FIXME: check why
-
-
 \section{Fibonacci}
 
-A naive Fibonacci was used to computed the 30th Fibonacci number. 
+A naive Fibonacci function, \lstinline!SlowFib! in Figure~\ref{fig:perfs:slowfib}, was used to compute the 30th Fibonacci number. 
 
+\begin{figure}[h]
 \begin{lstlisting}
    fun{SlowFib N}
       if N==0 then 0
@@ -5576,67 +5663,27 @@ A naive Fibonacci was used to computed the 30th Fibonacci number.
       end
    end
 \end{lstlisting}
+\caption{A non-optimised Fibonacci function}
+\label{fig:perfs:slowfib}
+\end{figure}
+
 
 \begin{center}
 \begin{tabular} {| l c c c|}
 \hline
 \multicolumn{4}{|c|}{\textbf{30th Fibonacci}} \\ \hline
   & New Compiler& Old Compiler & Mozart1 \\
-  &         2607&  1023&  180\\ 
-  &         2606&  1026&  180\\
-  &         2606&  1023&  180\\
-  &         2613&  1027&  180\\
-  &         2625&  1024&  180\\
-  &         2640&  1026&  180\\
-  &         2629&  1026&  180\\
-  &         2647&  1026&  180\\
-  &         2664&  1023&  190\\
-  &         2649&  1025&  180\\ \hline
-average& 2628.6&  1024.9&  181\\
-standard deviation& 20.8&  1.5& 3.2\\
-ratio& 2.6& 5.7 & \\
-\hline
-\end{tabular}
-\end{center}
+average&2671.7&&1029.15 183 \\
+standard deviation&7.63& 10.82&4.70 \\
+ratio&2.60& 5.62  & \\
 
-\section{Records}
-
-Constant record use was tested with the function \lstinline!Rec! called with
-\lstinline!N=1000000!.
-
-\begin{lstlisting}
-   proc {Rec N}
-      for I in 1..N do
-         _ = rec(a:1 b:2)
-      end
-   end
-\end{lstlisting}
-
-\begin{center}
-\begin{tabular} {| l c c c|}
-\hline
-\multicolumn{4}{|c|}{\textbf{Record use}} \\ \hline
-  & New Compiler& Old Compiler & Mozart1 \\
-  &         446& 186& 30\\ 
-  &         443& 186& 30\\
-  &         444& 185& 30\\
-  &         445& 188& 20\\
-  &         448& 191& 30\\
-  &         445& 186& 30\\
-  &         444& 187& 20\\
-  &         444& 186& 30\\
-  &         450& 189& 30\\
-  &         446& 185& 30\\ \hline
-average& 445.5& 186.9  & 28\\
-standard deviation& 2.1 & 1.9 & 4.2\\
-ratio &  2.4&  6.7& \\
 \hline
 \end{tabular}
 \end{center}
 
 \section{Pattern Matching}
 
-Pattern matching was tested with the function \lstinline!OpenMatch! taking two
+Pattern matching was tested with the function \lstinline!OpenMatch! in Figure~\ref{fig:perfs:openmatch} taking two
 arguments:
 \begin{itemize}
   \item The value to test against the case clauses. This was done to prevent the
@@ -5650,6 +5697,7 @@ The body of \lstinline!OpenMatch! has a structure advantageous to the new
 virtual machine, which can combine all clauses in one instruction, whereas the
 Mozart1 virtual machine requires one instruction per clause.
 
+\begin{figure}[h]
 \begin{lstlisting}
    proc {OpenMatch A N}
       for I in 1..N do
@@ -5674,127 +5722,23 @@ Mozart1 virtual machine requires one instruction per clause.
       end
    end
 \end{lstlisting}
-
-
-
-\subsection{Constant matching}
-The first run, with \lstinline!A=2!, yields results where the compiler
-described in this document gets better results compared to other tests, being
-only two times slower than the Mozart1 compiler targeting the Mozart2 virtual
-machine.
-\begin{center}
-\begin{tabular} {| l c c c|}
-\hline
-\multicolumn{4}{|c|}{\textbf{Matching 2}} \\ \hline
-  & New Compiler& Old Compiler & Mozart1 \\
-  &         947& 470& 60\\ 
-  &         985& 471& 70\\
-  &         948& 466& 60\\
-  &         943& 471& 60\\
-  &         933& 467& 60\\
-  &         940& 468& 60\\
-  &         939& 467& 60\\
-  &         943& 479& 50\\
-  &         946& 469& 60\\
-  &         928& 469& 60\\ \hline
-average& 945.2& 469.7 & 60\\
-standard deviation&15.3&  3.7 & 4.7\\
-ratio&  2.0& 7.8& \\
-\hline
-\end{tabular}
-\end{center}
-
-
-\subsection{Record matching}
-In matching records, the ratio of our compiler is even better.
-
-\begin{center}
-\begin{tabular} {| l c c c|}
-\hline
-\multicolumn{4}{|c|}{\textbf{Matching rec(d:1 z:3 y:4 x:6)}} \\ \hline
-  & New Compiler& Old Compiler & Mozart1 \\
-  &         1376&  985& 160\\ 
-  &         1382&  975& 160\\
-  &         1382&  982& 160\\
-  &         1386&  992& 160\\
-  &         1388&  975& 160\\
-  &         1390&  996& 160\\
-  &         1394&  977& 160\\
-  &         1384&  974& 160\\
-  &         1401&  970& 160\\
-  &         1386&  975& 160\\ \hline
-average& 1386.9&  980.1& 160\\
-standard deviation& 7.0& 8.5& 0.0\\
-ratio& 1.4& 6.1 & \\
-\hline
-\end{tabular}
-\end{center}
-
-
-A last test was performed, with a function \lstinline!LongOpenMatch! with 26
-clauses with an openrecord pattern and one last clause with a contant pattern, the penultimate clause matching the value tested.
-This extreme case yields even better results, bringing the performance of the
-code generated by our compiler closer to the code generated by the Mozart1
-compiler, with only a 30\% penalty.
-\begin{lstlisting}
-   proc {LongOpenMatch A N}
-      for I in 1..N do
-         case A
-         of 1 then
-            skip
-         [] rec(a:_ ...) then
-            skip
-         [] rec(b:_ ...) then
-            skip
-         [] rec(c:_ ...) then
-            skip
-         [] rec(d:_ ...) then
-            skip
-
-         ...
-
-         [] rec(x:_ ...) then
-            skip
-         [] rec(y:_ ...) then
-            skip
-         [] rec(z:_ ...) then
-            skip
-         [] 2 then
-            skip
-         end
-      end
-   end
-  
-\end{lstlisting}
+\caption{Matching open record patterns}
+\label{fig:perfs:openmatch}
+\end{figure}
 
 
 \begin{center}
 \begin{tabular} {| l c c c|}
 \hline
-\multicolumn{4}{|c|}{\textbf{LongOpenMatch}} \\ \hline
+\multicolumn{4}{|c|}{\textbf{30th Fibonacci}} \\ \hline
   & New Compiler& Old Compiler & Mozart1 \\
-  &         4156&  3178&  930\\ 
-  &         4114&  3053&  920\\
-  &         4137&  3126&  930\\
-  &         4129&  3085&  930\\
-  &         4112&  3107&  930\\
-  &         4185&  3129&  930\\
-  &         4122&  3092&  930\\
-  &         4107&  3154&  930\\
-  &         4151&  3104&  930\\
-  &         4165&  3130&  930\\ \hline
-average& 4137.8&  3115.8&  929\\
-standard deviation& 25.8&  35.7&  3.2\\
-ratio& 1.3& 3.4 & \\
+average&12878.65&&10384.25  2045 \\
+standard deviation&114.83& 114.73& 20.39 \\
+ratio&1.24& 5.08  & \\
+
 \hline
 \end{tabular}
 \end{center}
-
-
-
-
-
-
 
 
 
