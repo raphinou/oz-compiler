@@ -852,7 +852,8 @@ Operators are parsed as records of the form
  whose first feature is the operator to
 apply, its second feature being the list of operands. It also has a position
 record as third feature. For example
-\lstinline!5+2! is parsed as:
+\lstinline!5+2! is parsed as displayed in Figure~\ref{fig:opexample}.
+\begin{figure}[h]
 \begin{lstlisting}
       fOpApply(
          '+'
@@ -863,6 +864,10 @@ record as third feature. For example
          pos
       )
 \end{lstlisting}
+\caption{AST for \lstinline!5+2!}
+\label{fig:opexample}
+\end{figure}
+
 \subsection{Nesting marker \$}\label{sec:input:nestingmarker}
 In Oz, some statements can be transformed in expressions by the use of the
 \lstinline[mathescape]!$\$$!
@@ -897,8 +902,9 @@ If an explicit feature was specified, the entry in the list is a tuple \lstinlin
 first feature being the feature and second feature being the value. All this
 will become much clearer with the following examples.
 
-Here is the AST corresponding to the record definition \lstinline!rec(f1:v1 f2:v2)!. We see that the label (rec) is an atom located in an \lstinline!fAtom! tuple. The pairs of features and their respective values are wrapped in fColon.
+Figure~\ref{fig:recordsast} displays the AST corresponding to the record \lstinline!rec(f1:v1 f2:v2)!. We see that the label (rec) is an atom located in an \lstinline!fAtom! tuple. The pairs of features and their respective values are wrapped in fColon.
 
+\begin{figure}[h]
 \begin{lstlisting}
    fRecord(
       fAtom(rec pos)
@@ -910,9 +916,14 @@ Here is the AST corresponding to the record definition \lstinline!rec(f1:v1 f2:v
          fAtom(f2 pos)
          fAtom(v2 pos))])
 \end{lstlisting}
+\caption{Record AST}
+\label{fig:recordsast}
+\end{figure}
 
-When the feature is not explicitly given, the item in the list of features and their respective values is simply the value. Here is the AST of this record \lstinline!rec(v1 f2:V2)!. The first item in the list is simply an atom, the value of the first feature. Note that the value of the feature f2 is a variable in this case.
 
+When the feature is not explicitly given, the item in the list of features and their respective values is simply the value. Figure~\ref{fig:astfeature} is the AST of \lstinline!rec(v1 f2:V2)!. The first item in the list is simply an atom, the value of the first feature. Note that the value of the feature f2 is a variable in this case.
+
+\begin{figure}[h]
 \begin{lstlisting}
    fRecord(
       fAtom(rec pos)
@@ -922,6 +933,10 @@ When the feature is not explicitly given, the item in the list of features and t
           fAtom(f2 pos)
           fVar(V2 pos))])
 \end{lstlisting}
+\caption{AST for record with implicit feature}
+\label{fig:astfeature}
+\end{figure}
+
 
 
 \subsection{Wildcards}\label{sec:input:wildcard}
@@ -1087,6 +1102,24 @@ left as well as at the right side of the equal sign. So the pattern
 And also like in unification, the capturing side can be a pattern, it doesn't
 have to be a single variable.
 
+It is possible to capture the value tested bu the \lstinline!case! instruction with the \lstinline!elseof! construct listed in 
+Figure~\ref{fig:input:elseof}. This is particularly useful when the tested value is the result of a call. This construct ends up in the 
+AST as other clauses, the pattern being the capture variable.
+
+\begin{figure}[h]
+\begin{lstlisting}
+   case {GetToken}
+   of unit then
+      skip
+   elseof S then
+      {Handle S}
+   end
+\end{lstlisting}
+\caption{\lstinline!elseof! construct}
+\label{fig:input:elseof}
+\end{figure}
+
+
 
 \subsection{Classes}
 Analysing classes is best illustrated by an example of Oz code:
@@ -1171,25 +1204,18 @@ definition
 \end{lstlisting}
 will have its list of attributes and features looking like this:
 \begin{lstlisting}
-      |(
+      [
          fAttr(
-            |(
-               #(
-                  fAtom(count pos )
+            [ #( fAtom(count pos)
                   fInt(0 pos ))
-               |(
-                  fAtom(state pos )
-                  nil))
+              fAtom(state pos ) ]
             pos)
-         |(
-            fFeat(
-               |(
-                  #(
-                     fAtom(type pos )
-                     fAtom(repeater pos ))
-                  nil)
-               pos)
-            nil))
+         fFeat(
+            [ #(
+                 fAtom(type pos )
+                 fAtom(repeater pos )) ]
+            pos)
+      ]
 \end{lstlisting}
 The \lstinline!count! attribute is placed in a '\#' record, but not
 the \lstinline!state! attribute.
@@ -1260,17 +1286,15 @@ and is found in the AST under a node \lstinline!fAssign(LHS RHS pos)!.
       Body
    end  
 \end{lstlisting}
-At run time, the H variable will give access to the message sent to the object, with the actual arguments list.
+At run time, the \lstinline!H! variable will give access to the message sent to the object, with the actual arguments list.
 \begin{lstlisting}
                fMeth(
                   fEq(
                      fOpenRecord(
                         fAtom(echo pos )
-                        |(
-                           fMethArg(
+                        [ fMethArg(
                               fVar('First' pos )
-                              fNoDefault)
-                           nil))
+                              fNoDefault)])
                      fVar('H' pos )
                      pos)
                   BodyAST
@@ -1283,20 +1307,23 @@ Method can also be defined as private by using a variable name as their label:
       Body
    end
 \end{lstlisting}
-resulting in the AST
+resulting in the AST in Figure~\ref{fig:privatemeth}.
 
+\begin{figure}[h]
 \begin{lstlisting}
    fMeth(
       fRecord(
          fVar('A' pos )
-         |(
-            fMethArg(
-               fVar('V' pos )
-               fNoDefault)
-            nil))
+         [ fMethArg(
+              fVar('V' pos )
+              fNoDefault)]
       BodyAST
       pos)
 \end{lstlisting}
+\caption{Private method AST}
+\label{fig:privatemeth}
+\end{figure}
+
 The method \lstinline!A! will be bound to a new name, only visible in the class
 definition's scope (see Section \ref{sec:arch:namer:classes} for details).
 
@@ -1307,18 +1334,16 @@ the label to use:
      Body
   end
 \end{lstlisting}
-which results in the AST:
+The AST for a dynamic label assigned to a method is:
 \begin{lstlisting}
     fMeth(
        fRecord(
           fEscape(
              fVar('A' pos)
              pos)
-          |(
-             fMethArg(
+          [ fMethArg(
                 fVar('V' pos)
-                fNoDefault)
-             nil))
+                fNoDefault) ]
        BodyAST
        pos)
 
@@ -1343,7 +1368,8 @@ but note that the iteration goes over the two zipped lists , and the loop ends o
 end of one of the list is reached. The number of time the body of the loop is
 called is thus the number of elements of the smallest list.
 
-The AST of the first \lstinline!for! example is:
+The AST of the first \lstinline!for! example is displayed in Figure~\ref{fig:forlist}.
+\begin{figure}[h]
 \begin{lstlisting}
    fFOR(
       [forPattern(
@@ -1356,6 +1382,10 @@ The AST of the first \lstinline!for! example is:
          pos)
       pos)
 \end{lstlisting}
+\caption{For loop iterating over list \lstinline!L!}
+\label{fig:forlist}
+\end{figure}
+
 
 The first value in the \lstinline!fFor! tuple is the list of patterns, one
 for each list. Each item of this list is a \lstinline!forPattern! tuple, with
@@ -1405,40 +1435,34 @@ It takes a generator comprised of 3 expressions: \lstinline!E1;E2;E3! where
 \lstinline!E1! is the start value, \lstinline!E2! is the test condition, the
 looping continuing as long at it evaluates to true, and \lstinline!E3! is the
 next value's expression.
-It is found in the AST as:
+It is found in the AST illustrated in Figure~\ref{fig:forc}.
+\begin{figure}[h]
 \begin{lstlisting}
-fFOR(
-      |(
-         forPattern(
-            fVar('I' pos )
-            forGeneratorC(
-               fInt(1 pos )
-               fOpApply(
-                  '<'
-                  |(
-                     fVar('I' pos )
-                     |(
-                        fInt(4 pos )
-                        nil))
-                  pos)
-               fOpApply(
-                  '+'
-                  |(
-                     fVar('I' pos )
-                     |(
-                        fInt(1 pos )
-                        nil))
-                  pos)))
-         nil)
+   fFOR(
+      [ forPattern(
+           fVar('I' pos )
+           forGeneratorC(
+              fInt(1 pos )
+              fOpApply(
+                 '<'
+                 [ fVar('I' pos )
+                   fInt(4 pos ) ]
+                 pos)
+              fOpApply(
+                 '+'
+                 [ fVar('I' pos )
+                   fInt(1 pos ) ]
+                 pos))) ]
       fApply(
          fVar('Show' pos )
-         |(
-            fVar('I' pos )
-            nil)
+         [ fVar('I' pos ) ]
          pos)
       pos)
-  
 \end{lstlisting}
+\caption{C-like loop}
+\label{fig:forc}
+\end{figure}
+
 
 The notable difference is the generator tuple now being
 \lstinline!forGeneratorC! holding the three expressions.
@@ -1450,7 +1474,8 @@ A raise instruction is represented in the AST by a tuple \lstinline!fRaise(E pos
 \ref{sec:arch:desugar:exceptions}).}
 
 Code possibly raising exceptions can be wrapped in a try-catch-finally
-instruction of this form:
+instruction of the form illustrated in figure \ref{fig:trycatchfinally}.
+\begin{figure}[h]
 \begin{lstlisting}
    try Code
    catch
@@ -1462,6 +1487,10 @@ instruction of this form:
       FinalCode
    end
 \end{lstlisting}
+\caption{Try-cat-finally structure}
+\label{fig:trycatchfinally}
+\end{figure}
+
 
 We can see that the catch part specifies multiple clauses each with a pattern
 against which the exception raised will be tested, and code which will be
@@ -1469,24 +1498,26 @@ executed if the pattern effectively matched. \lstinline!finally! introduces code
 that will be executed in all cases after \lstinline!Code! and the possible
 matching catch clause.
 
-It results in this AST:
+It results in the AST of Figure~\ref{fig:tryast}.
+\begin{figure}[h]
 \begin{lstlisting}
    fTry(
       Body
       fCatch(
-         |(
-            fCaseClause(
-               Pat1
-               Code1)
-            |(
-               fCaseClause(
-                  Pat2
-                  Code2)
-               nil))
+         [ fCaseClause(
+              Pat1
+              Code1)
+           fCaseClause(
+              Pat2
+              Code2) ]
          pos)
       FinalCode
       pos)
 \end{lstlisting}
+\caption{Try-catch-finally AST}
+\label{fig:tryast}
+\end{figure}
+
 
 which exactly mirrors the Oz code: \lstinline!fTry! holds the AST of the body,
 which is code possibly throwing an exception, the \lstinline!fCatch! tuple containing the list of
@@ -1898,29 +1929,29 @@ declaring variables \lstinline!Var1!,\lstinline!Var2!,\ldots, and let's use the 
 
 The transformation of the AST corresponding this Oz code:
 \begin{lstlisting}
-case Val
-of Pattern1(A,B) andthen Guards1(A) then
-   Code1(A,B)
-[] Pattern2(B,C) andthen Guards2(C) then
-   Code2(B,C)
-else
-   ElseCode
-end
-\end{lstlisting}
-results in an AST corresponding to this Oz code:
-\begin{lstlisting}
-local
-  A1 B1 B2 C2
-in
    case Val
-   of Pattern1(A1,B1) andthen Guards1(A1) then
-      Code1(A1,B1)
-   [] Pattern2(B2,C2) andthen Guards2(C2) then
-      Code2(B2,C2)
+   of Pattern1(A,B) andthen Guards1(A) then
+      Code1(A,B)
+   [] Pattern2(B,C) andthen Guards2(C) then
+      Code2(B,C)
    else
       ElseCode
    end
-end
+\end{lstlisting}
+results in an AST corresponding to this Oz code:
+\begin{lstlisting}
+   local
+     A1 B1 B2 C2
+   in
+      case Val
+      of Pattern1(A1,B1) andthen Guards1(A1) then
+         Code1(A1,B1)
+      [] Pattern2(B2,C2) andthen Guards2(C2) then
+         Code2(B2,C2)
+      else
+         ElseCode
+      end
+   end
 \end{lstlisting}
 
 Here is the way how it is achieved. The compiler traverses each clause in turn,
@@ -1990,7 +2021,9 @@ destructures the argument and can shorten significantly the code:
   Name={GetName person(name:'Turing' firstname:'Alan')}}
 \end{lstlisting}
 
-This AST of this function's definition is actually transformed in an AST corresponding to the following code:
+The AST of this function's definition is actually transformed in an AST corresponding to the  code
+listed in Figure~\ref{fig:getname2}.
+\begin{figure}[h]
 \begin{lstlisting}
   fun {GetName Arg }
      case Arg
@@ -1999,6 +2032,10 @@ This AST of this function's definition is actually transformed in an AST corresp
      end
   end
 \end{lstlisting}
+\caption{Pattern argument transformation result}
+\label{fig:getname2}
+\end{figure}
+
 
 The namer thus replaces pattern variables by a synthetic symbol, and wraps the body of the function in case instructions (one level of case nesting for each pattern argument). 
 
@@ -2072,7 +2109,8 @@ variables are available inside the class, overriding the mapping to the class
 We can now look at the situation when the method head is captured (see
 Section~\ref{compilerinput:classes:headcapture} page
 \pageref{compilerinput:classes:headcapture} for the AST form).
-Here is code illustrating the specific points requiring attention:
+Figure~\ref{fig:attentionpoints} lists code illustrating the specific points requiring attention.
+\begin{figure}[h]
 \begin{lstlisting}
    class C
       meth init skip end
@@ -2087,6 +2125,10 @@ Here is code illustrating the specific points requiring attention:
       end
    end
 \end{lstlisting}
+\caption{Class definition}
+\label{fig:attentionpoints}
+\end{figure}
+
 These attention points are:
 \begin{itemize}
   \item the same variable name can be used by multiple methods to store their
@@ -2285,6 +2327,7 @@ to apply the described transformation of functions and procedures with patterns
 arguments. 
 
 Handling \lstinline!fCase! nodes also requires more work as it needs to 
+\nopagebreak[4]
 \begin{itemize}
   \item declare new capture variables
   \item handle guards by, amongst other things, introducing a new symbol
@@ -2304,60 +2347,7 @@ only the method labels.
 name the arguments and the body.
 
 Once these functions are defined, the namer's code for classes is quite simple,
-and listed in Figure~\ref{fig:namer:classesexample} to illustrate the different steps.
-
-\begin{figure}[H]
-\begin{lstlisting}
-   % Name class, then switch to a new environment when inside the class
-   NamedClass={NamerForBody Var Params}
-   {NewParams.env backup()}
-
-   % Name method first, so the private methods are available in the 
-   %methods bodies
-   NamedLabelsMethods={List.map Methods 
-                                fun {$ I} 
-                                   {NameMethodLabel I NewParams} 
-                                end }
-
-   % Name methods arguments and bodies. Remember each method creates
-   % its own environment
-   NewMethods={List.map NamedLabelsMethods 
-                        fun {$ I} 
-                           {NameMethod I NewParams} 
-                        end }
-
-   % Name attributes, features,..
-   NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
-
-   % Add initialisation code if needed
-   if @(NewParams.init)\=nil then
-      ClassWithInit={WrapInFAnd 
-                        {List.append 
-                           [fClass(NamedClass NewSpecs NewMethods Pos)] 
-                           @(NewParams.init)}}
-   else
-      ClassWithInit=fClass( NamedClass NewSpecs NewMethods Pos)
-   end
-
-   % Add declaration code if needed
-   if @(NewParams.decls)\=nil then
-      ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} 
-                            ClassWithInit 
-                            Pos)
-   else
-      ClassWithDecls=ClassWithInit
-   end
-
-   % Restore previous environment
-   {NewParams.env restore()}
-
-   % Return new AST for class
-   ClassWithDecls
-  
-\end{lstlisting}
-\caption{Namer code for classes}
-\label{fig:namer:classesexample}
-\end{figure}
+and listed in Appendix~\ref{appendix:classnamer} to illustrate the different steps.
 
 
 The code traversing \lstinline!catch! patterns makes use of the same
@@ -2505,8 +2495,7 @@ The operators are parsed as \lstinline!fOpApply! tuples as described in section 
          '+'
          [ fInt(5 pos)
            fInt(2 pos) ]
-         pos
-      )
+         pos)
 \end{verbatim}
 will be transformed in:
 \begin{verbatim}
@@ -2537,7 +2526,9 @@ will have its AST transformed such that it corresponds to this Oz code:
 A new symbol, denoted \lstinline!R! for convenience, is added to the arguments list of the procedure, and this new symbol is then unified with the body of the original function. This unification will in turn be handled by the unnester, which is the next pass of the compiler.
 
 
-The function definition is parsed as:
+The function definition is parsed in the AST of Figure~\ref{fig:fundef} 
+and transformed by the desugar pass into the AST in Figure~\ref{fig:fundesugar}.
+\begin{figure}[h]
 \begin{verbatim}
       fFun(
          fSym(F pos)
@@ -2550,7 +2541,8 @@ The function definition is parsed as:
             pos)
          pos)
 \end{verbatim}
-and transformed by the desugar pass to become:
+\caption{Function definition}
+\label{fig:fundef}
 \begin{verbatim}
      fProc(     
          fSym(F)
@@ -2567,6 +2559,10 @@ and transformed by the desugar pass to become:
             pos)
          pos)
 \end{verbatim}
+\caption{Desugared function definition}
+\label{fig:fundesugar}
+\end{figure}
+
 
 
 Lazy functions have in their flags a lazy atom: \lstinline!fAtom(lazy pos)!.
@@ -2644,7 +2640,7 @@ is transformed in
 
 
 Records with non constant labels and/or features are replaced by a call to
-\lstinline!Boot_Record.makeDynamic!. The goal of this transformation is to leave
+\lstinline!Boot_Record.makeDynamic!, \lstinline!Boot_Record! being a builtin module (a module implemented in C++ and made available to the Oz code as if it was a functor). The goal of this transformation is to leave
 in the AST only records with constant label and features.
 \lstinline!MakeDynamic! takes two arguments. First the label of the record to construct. And second, a tuple with label '\#' and which values are alternately the features and their respective value. As a result, we replace \lstinline!Rec(F1:V1 F2:V2)! by 
 \begin{lstlisting}
@@ -2750,7 +2746,10 @@ A \lstinline!fNoElse! tuple is left as is and will only be useful for the opcode
 \subsubsection{Case}
 The case instruction is very similar to \lstinline!if..then..else..end!.
 The condition tested is always an expression.
-The \lstinline!case! instruction can be a statement as in 
+The \lstinline!case! instruction can be a statement as in Figure~\ref{fig:casestat}
+, in which case clauses are desugared as statement or an expression as in Figure~\ref{fig:caseexpr}
+in which case each clause is desugared as an expression.
+\begin{figure}[h]
 \begin{lstlisting}
    case Rec
    of action(A) then
@@ -2762,10 +2761,12 @@ The \lstinline!case! instruction can be a statement as in
       skip
    end
 \end{lstlisting}
-, in which case clauses are desugared as statement
-or an expression as in
+\caption{Case statement}
+\label{fig:casestat}
+\end{figure}
+
+\begin{figure}[h]
 \begin{lstlisting}
-  
    PersonId= case Rec
              of create(Name) then
                 Person = {Create Name}
@@ -2783,12 +2784,16 @@ or an expression as in
                 unit
              end
 \end{lstlisting}
-in which case each clause is desugared as an expression.
+\caption{Case expression}
+\label{fig:caseexpr}
+\end{figure}
 
+\pagebreak[4]
 As for the \lstinline!if..then..else! instruction, the absence of an else clause
 is indicated by a tuple \lstinline!fNoElse! in the AST. If no else clause was
 present, the desugar step introduces one which raises an error, transforming
 
+\nopagebreak[4]
 \begin{lstlisting}
    case Rec
    of action(A) then
@@ -2876,13 +2881,14 @@ corresponding to the call. It is the message that contains all argument values.
 It is important to note that the symbols used inside the body of the method
 don't correspond to the arguments of the procedure implementing the method.
 This mismatch is corrected by unifying symbols in the method body with values
-found in the message. Here is an illustration:
+found in the message. Figure~\ref{fig:methimpl} shows a methods and its implementing procedure.
+\begin{figure}[h]
 \begin{lstlisting}
   meth foo(X Y)
      {Show X+Y}
   end 
 \end{lstlisting}
-will be implemented by this method:
+\caption{Example method}
 \begin{lstlisting}
   proc {Foo Self M}
      X Y
@@ -2892,6 +2898,10 @@ will be implemented by this method:
      {Show X+Y}
   end  
 \end{lstlisting}
+\caption{Procedure implementing example method}
+\label{fig:methimpl}
+\end{figure}
+
 Of course, the compiler handles keyed arguments, where the features of the
 message \lstinline!M! are not only numeric.
 
@@ -3004,8 +3014,9 @@ in
           [ {DesugarExpr E Params} ] 
           pos)
 \end{lstlisting}
-
+\pagebreak[4]
 As a reminder, here is the AST of a try instruction:
+\nopagebreak[4]
 \begin{lstlisting}
    fTry(
       Body
@@ -3055,7 +3066,9 @@ Note that an \lstinline!else! clause is introduced in the \lstinline!case!
 instruction. This is simply to re-raise the exception if no pattern matched,
 meaning that the exception was not caught at this level.
 In the transformed code, note also that a new symbol, \lstinline!X! is
-introduced. This results in the new AST transformation for a try expression from
+introduced. 
+\pagebreak[4]
+This results in the new AST transformation for a try expression from
 \begin{lstlisting}
    fTry(Body fCatch(Clauses CatchPos) fNoFinally Pos)
 \end{lstlisting}
@@ -3474,6 +3487,7 @@ this particular form executes successfully:
 \begin{lstlisting}
   3+4 = {Show}
 \end{lstlisting}
+\pagebreak[4]
 It is transformed due to both sides being non-elementary, in this form in a first step:
 \begin{lstlisting}
   local
@@ -3743,7 +3757,10 @@ end
    
 
 \subsubsection{Records}\label{sec:arch:unnester:records}
-The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
+The values in a record can be of non-elementary form, for example a function call. This has to be extracted from the record definition and replaced by a new symbol which has been unified with the initial value. 
+
+The work happening on the records is very similar to the work done on (function and procedure) calls. Rather than working on the procedure arguments, we work on the pairs feature-value and only handle the value. 
+
 There is a catch however: records in tail positions of a procedure need to be unnested
 differently. To understand why, let's first look at how records are unnested
 when they are not in tail position.
@@ -3752,7 +3769,8 @@ Here is an example where the value of a feature is an if expression.
 \begin{lstlisting}
    R=rec(a:if B then 2 else V end b:2)
 \end{lstlisting}
-Supposing the record is not in tail position, it will be transformed in
+Supposing the record is not in tail position, it will be transformed in two steps.
+First non-elementary value will be extracted from the record, resulting in 
 \begin{lstlisting}
   local
     NewVar
@@ -3761,7 +3779,9 @@ Supposing the record is not in tail position, it will be transformed in
     R=rec(a:NewVar b:2)
   end
 \end{lstlisting}
-And this requires a new unnesting step (see the unnesting of unifications Section \ref{sec:arch:unnester:unification}) resulting in 
+And this requires a new unnesting step because the right side of the unification is an \lstinline!if! expression (see the unnesting of unifications Section \ref{sec:arch:unnester:unification}).
+\pagebreak[4]
+This second transformation results in 
 \begin{lstlisting}
   local
     NewVar
@@ -3831,7 +3851,7 @@ The solution is to unnest it like this:
 In that case, the consumer will be able to start working as soon as
 \lstinline!V1! is bound, i.e. as soon as \lstinline!V1=V+1! is executed.
 
-Another illustration is given in Figure~\ref{fig:unnester:mymap}. Figure~\ref{fig:unnester:wrongmymap} shows
+Another illustration is given by the Oz code in Figure~\ref{fig:unnester:mymap}. Figure~\ref{fig:unnester:wrongmymap} shows
 the situation if the unnesting is done incorrectly: the return value
 will be available only after \lstinline!V2! is available, i.e. only after
 \lstinline!MyMap! has
@@ -3935,7 +3955,7 @@ The globals of a procedure are:
   \item minus the variables it declares itself
 \end{itemize}
 
-
+\begin{figure}[h]
 \begin{lstlisting}
 A=1
 proc {P1}                 % A is global to P1
@@ -3957,24 +3977,24 @@ in
    {P2}
 end
 \end{lstlisting}
+\caption{Example of nested procedures}
+\label{fig:nestedex}
+\end{figure}
 
-
-In the example we see that \lstinline!P3! uses 2 variables declared by another procedure: \lstinline!A! and \lstinline!B!. 
+In the example of Figure~\ref{fig:nestedex} we see that \lstinline!P3! uses 2 variables declared by another procedure: \lstinline!A! and \lstinline!B!. 
 \lstinline!P2! does not directly use any variable, but it defines \lstinline!P3! which itself has 2 global variables. Those two variables are thus also globals to \lstinline!P2!.
 \lstinline!P1! also does not use any variable directly, but it gets 2 globals from \lstinline!P2!, of which it declares one: \lstinline!B!. \lstinline!P1! indeed only has one global: \lstinline!A!.
 
-In the abstract syntax tree, we replace symbols corresponding to a global
-variables by a new local symbol of type \lstinline!localised! referencing the
+In the AST, we replace symbols corresponding to a global
+variable by a new local symbol of type \lstinline!localised! referencing the
 symbol for this variables in the parent proc which might itself be a
 \lstinline!localised! symbol, and so on until we reach the level where the variables is declared.
-
-
-In the abstract syntax tree, \lstinline!fProc! is replaced by
+\lstinline!fProc! is also replaced by
 \lstinline!fDefineProc! taking 1 additional argument: the newly created local
 variables referencing a variable in the surrounding procedure. This additional
 information will enable the code generator to handle global variables.
 
-Handling globals correctly requires to handle numerous cases, and determining the algorithm to use requires some care, as illustrated by these examples:
+Handling globals correctly requires to handle numerous cases, as illustrated by these examples:
 
 \begin{lstlisting}
 local
@@ -3986,9 +4006,7 @@ in
       proc {P2}
          P3
       in
-         proc {P3}
-            {Show A}
-         end
+         proc {P3} {Show A} end
          {P3}
       end
    end
@@ -4420,21 +4438,16 @@ The clause'body opcodes are immediately followed by an unconditional jump to
 the label indicating the end of opcodes for the case instruction. This ensures
 that no following clause' body is executed.
 
-This is all there is for clauses with no guards. 
-
-Guards, however, add some complexity to the generation of opcodes.
-The augmented complexity comes first from the fact that a clauses with guards cannot
+Guards, however, add some complexity to the generation of opcodes because clauses with guards cannot
 be grouped with other clauses. For each clause with guards, there will be a
-test instruction generated. In addition, the code for the guards needs access
+test instruction generated. The code for the guards also needs access
 to the value of the captures in the pattern, meaning it must come after the
-test instruction. A consequence of this is that the test instruction may not jump to the start
+test instruction. As a consequence the test instruction may not jump to the start
 of the clause'body, but must jump to the guards'code. Additionally, when a match
 is unsuccessful, execution has to jump to the next test.
 
 Here is an example of a case instruction having clauses with guards:
 \begin{lstlisting}
-   R=2
-   ...
    case R
    of 2 andthen false then
       {Show match}
@@ -4653,8 +4666,7 @@ in Figure~\ref{fig:caseloop}.
    if {IsNewSequence {Label Pattern} @SequenceType} then
       % close previous sequence
       % Ensures Code respects the invariant at the end of this iteration
-      % --- code not included ---
-
+      --- code not included ---
       % Reset sequence variables, 
       % This ensures that SequenceType, ThisTestLabel, NextTestLabel 
       % respect the invariant at the end of this iteration
@@ -4677,8 +4689,7 @@ in Figure~\ref{fig:caseloop}.
                           '#'(PatternIndex:PatternForRecord#@ThisLabel)}
 
    % Update CodeBuffer to respect invariant
-   % --- code not included ---
-
+    --- code not included ---
    % Restore invariant
    SeqLen:=@SeqLen+1
    LastPattern:=Pattern
@@ -5779,9 +5790,56 @@ ratio&1.24& 5.08  & \\
 
 
 
+\chapter{Structure of code naming classes}\label{appendix:classnamer}
+\begin{figure}[H]
+\begin{lstlisting}
+   % Name class, then switch to a new environment when inside the class
+   NamedClass={NamerForBody Var Params}
+   {NewParams.env backup()}
 
+   % Name method first, so the private methods are available in the 
+   %methods bodies
+   NamedLabelsMethods={List.map Methods 
+                                fun {$ I} 
+                                   {NameMethodLabel I NewParams} 
+                                end }
+   % Name methods arguments and bodies. Remember each method creates
+   % its own environment
+   NewMethods={List.map NamedLabelsMethods 
+                        fun {$ I} 
+                           {NameMethod I NewParams} 
+                        end }
+   % Name attributes, features,..
+   NewSpecs={List.map Specs fun {$ I} {NamerForBody I NewParams} end }
 
+   % Add initialisation code if needed
+   if @(NewParams.init)\=nil then
+      ClassWithInit={WrapInFAnd 
+                        {List.append 
+                           [fClass(NamedClass NewSpecs NewMethods Pos)] 
+                           @(NewParams.init)}}
+   else
+      ClassWithInit=fClass( NamedClass NewSpecs NewMethods Pos)
+   end
 
+   % Add declaration code if needed
+   if @(NewParams.decls)\=nil then
+      ClassWithDecls=fLocal({WrapInFAnd @(NewParams.decls)} 
+                            ClassWithInit 
+                            Pos)
+   else
+      ClassWithDecls=ClassWithInit
+   end
+
+   % Restore previous environment
+   {NewParams.env restore()}
+
+   % Return new AST for class
+   ClassWithDecls
+\end{lstlisting}
+%\caption{Namer code for classes}
+%\label{fig:namer:classesexample}
+\end{figure}
 
 
 
@@ -5790,6 +5848,7 @@ ratio&1.24& 5.08  & \\
 
 
 \end{appendices}
+
 \end{document}
 
 %&& vim: textwidth=80& \\& \\
